@@ -46,7 +46,7 @@
         button:active { transform: scale(0.95); }
         button:disabled { background: #555 !important; cursor: not-allowed; transform: none; box-shadow: none; }
         
-        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2b2d42; padding: 30px; border-radius: 20px; text-align: center; color: white; z-index: 60; width: 85%; max-width: 500px; max-height: 80%; overflow-y: auto; box-shadow: 0 10px 30px rgba(0,0,0,0.8); pointer-events: auto; }
+        .modal { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: #2b2d42; padding: 30px; border-radius: 20px; text-align: center; color: white; z-index: 60; width: 85%; max-width: 500px; max-height: 80%; overflow-y: auto; overflow-x: hidden; touch-action: pan-y; box-shadow: 0 10px 30px rgba(0,0,0,0.8); pointer-events: auto; }
         .modal::-webkit-scrollbar { width: 8px; } .modal::-webkit-scrollbar-thumb { background: #888; border-radius: 4px; }
         .modal-header { position: sticky; top: -30px; margin: -30px -30px 15px -30px; padding: 18px 30px; background: #2b2d42; display: flex; justify-content: space-between; align-items: center; z-index: 10; border-radius: 20px 20px 0 0; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         .modal-header h2 { margin-bottom: 0; }
@@ -87,14 +87,19 @@
         .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 10px; }
         .shop-tab { background: #6c7a89; border: none; padding: 8px 20px; border-radius: 20px; color: white; cursor: pointer; font-weight: bold; transition: 0.2s; }
         .shop-tab.active { background: var(--accent); transform: scale(1.05); }
-        .gacha-container { text-align: center; padding: 10px; }
-        .gacha-machine { width: 150px; height: 180px; margin: 0 auto 20px; border-radius: 20px; border: 5px solid #555; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #333 0%, #111 100%); box-shadow: inset 0 0 20px #000; }
+        .gacha-container { position: relative; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; }
+        .gacha-machine { width: 300px; max-width: 100%; height: 240px; margin: 0 auto 10px; border-radius: 12px; border: 4px solid #34495e; position: relative; overflow: hidden; display: block; background: #111318; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
         .gacha-machine.shaking { animation: gachaShake 0.4s infinite; border-color: #ffcf33; }
-        .gacha-orb { width: 80px; height: 80px; border-radius: 50%; position: absolute; box-shadow: inset -10px -10px 20px rgba(0,0,0,0.5); display: none; z-index: 2; border: 2px solid rgba(255,255,255,0.5); }
-        .gacha-btn { font-size: 1.2rem; padding: 15px 30px; background: #ffcf33; color: #000; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 15px; width: 80%; max-width: 300px; }
+        .gacha-btn { font-size: 1.2rem; padding: 15px 30px; background: #ffcf33; color: #000; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 6px; width: 80%; max-width: 300px; }
         .gacha-btn:active { transform: translateY(5px); box-shadow: none; }
         .gacha-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; cursor: not-allowed; }
-        .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 50px; text-shadow: 0 2px 5px #000; }
+        .shop-coin-bag { margin: 4px auto 0 auto; padding: 6px 18px; background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #f1c40f; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; color: #f1c40f; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+        #gacha-reveal-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none; z-index: 20; background: rgba(8, 10, 18, 0.72); border-radius: 12px; }
+        #gacha-reveal-overlay.show { display: flex; }
+        .reveal-visual { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }
+        .sun-rays { position: absolute; top: 50%; left: 50%; width: 320px; height: 320px; transform: translate(-50%, -50%); background: repeating-conic-gradient(from 0deg, rgba(241,196,15,0.28) 0deg 15deg, transparent 15deg 30deg); z-index: 1; animation: gacha-spin 12s linear infinite; border-radius: 50%; pointer-events: none; }
+        #gacha-reveal-canvas { position: relative; z-index: 2; }
+        .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 30px; text-shadow: 0 2px 5px #000; }
         .gacha-result span.duplicate { color: #ffcf33; font-size: 0.9rem; display: block; margin-top: 5px; }
 
         .inventory-container { display: none; }
@@ -110,6 +115,7 @@
         .inv-name { font-size: 0.75rem; font-weight: bold; word-wrap: break-word; line-height: 1.2; }
         .inv-count { position: absolute; top: -5px; right: -5px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; }
 
+        @keyframes gacha-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
         @keyframes gachaShake { 0% { transform: translate(2px, 2px) rotate(0deg); } 25% { transform: translate(-2px, -2px) rotate(-2deg); } 50% { transform: translate(-4px, 0px) rotate(2deg); } 75% { transform: translate(4px, 2px) rotate(0deg); } 100% { transform: translate(2px, -2px) rotate(-2deg); } }
         @keyframes gachaPop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         .anim-pop { animation: gachaPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
@@ -155,7 +161,6 @@
             <h2>Skin Shop</h2>
             <button class="close-modal-btn">Close</button>
         </div>
-        <p>Total Coins: <span id="shop-coin-display">0</span></p>
         <div id="shop-items"></div>
     </div>
 
@@ -191,7 +196,6 @@
         <h2 id="level-title">Level Complete!</h2>
         <button id="level-continue-btn">Continue</button>
     </div>
-
     <script>
 
         // ==========================================
@@ -765,10 +769,15 @@
             updateHUD();
         }
 
-        // ==========================================
         // SECTION 6 - UI & INPUT HANDLING
         // Event listeners, HUD logic, popups, and shops.
         // ==========================================
+        let gachaSlimes = [];
+        let draggedGachaSlime = null;
+        let gachaAnimId = null;
+        let gachaCanvas, gachaCtx;
+        let crane = { state: 'idle', x: 150, y: 20, speed: 5, targetSlime: null, restY: 20 };
+
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
 
@@ -785,10 +794,20 @@
                 
                 <div id="gacha-view" class="gacha-container">
                     <div class="gacha-machine" id="gacha-machine">
-                        <div class="gacha-orb" id="gacha-orb"></div>
+                        <canvas id="gacha-canvas" width="300" height="240" style="display:block;"></canvas>
                     </div>
-                    <button class="gacha-btn" id="btn-pull">Pull (100 🪙)</button>
-                    <div class="gacha-result" id="gacha-result"></div>
+                    <button class="gacha-btn" id="btn-pull" style="margin-top:8px;">Pull (100 🪙)</button>
+                    <div class="shop-coin-bag">
+                        🪙 <span id="shop-coin-display">0</span>
+                    </div>
+
+                    <div id="gacha-reveal-overlay">
+                        <div class="reveal-visual">
+                            <div class="sun-rays" id="gacha-rays"></div>
+                            <canvas id="gacha-reveal-canvas" width="160" height="160"></canvas>
+                        </div>
+                        <div class="gacha-result" id="gacha-result"></div>
+                    </div>
                 </div>
 
                 <div id="skins-view" class="inventory-container" style="display: none;">
@@ -806,7 +825,206 @@
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
             document.getElementById('btn-remove-hat').addEventListener('click', () => equipItem('hat', null));
+            
+            setupGachaPhysics();
             updateShopButtons();
+        }
+
+        function setupGachaPhysics() {
+            gachaCanvas = document.getElementById('gacha-canvas');
+            if (!gachaCanvas) return;
+            gachaCtx = gachaCanvas.getContext('2d');
+            
+            gachaSlimes = [];
+            crane.state = 'idle';
+            crane.x = 150;
+            crane.y = crane.restY;
+            crane.targetSlime = null;
+
+            // Each slot rolls its own category so the odds of any single pull match the
+            // advertised rates (5% legendary, 20% accessory, 75% basic) no matter which
+            // slime the crane happens to grab.
+            const GACHA_POOL_SIZE = 28;
+            const RARE_CHANCE = 0.05;
+            const HAT_CHANCE = 0.20;
+            for (let i = 0; i < GACHA_POOL_SIZE; i++) {
+                let roll = Math.random();
+                let category, itemData, radius;
+                if (roll < RARE_CHANCE) {
+                    category = 'rare'; itemData = rareSkins[Math.floor(Math.random() * rareSkins.length)]; radius = 16;
+                } else if (roll < RARE_CHANCE + HAT_CHANCE) {
+                    category = 'hat'; itemData = hats[Math.floor(Math.random() * hats.length)]; radius = 14;
+                } else {
+                    category = 'basic'; itemData = basicSkins[Math.floor(Math.random() * basicSkins.length)]; radius = 16;
+                }
+                gachaSlimes.push({
+                    x: 40 + Math.random() * 220,
+                    y: 100 + Math.random() * 100,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    radius: radius,
+                    color: itemData.color || '#3498db',
+                    isAnimated: itemData.isAnimated,
+                    preview: itemData.preview,
+                    category: category,
+                    skinData: itemData
+                });
+            }
+
+            function getCanvasMousePos(e) {
+                let rect = gachaCanvas.getBoundingClientRect();
+                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+                return { x: clientX - rect.left, y: clientY - rect.top };
+            }
+
+            gachaCanvas.onmousedown = gachaCanvas.ontouchstart = (e) => {
+                if (crane.state !== 'idle') return;
+                let pos = getCanvasMousePos(e);
+                for (let slime of gachaSlimes) {
+                    let dx = slime.x - pos.x;
+                    let dy = slime.y - pos.y;
+                    if (Math.sqrt(dx*dx + dy*dy) < slime.radius + 5) {
+                        draggedGachaSlime = slime;
+                        break;
+                    }
+                }
+            };
+
+            window.addEventListener('mousemove', handleGachaMove);
+            window.addEventListener('touchmove', handleGachaMove, { passive: false });
+            function handleGachaMove(e) {
+                if (!draggedGachaSlime || crane.state !== 'idle') return;
+                let pos = getCanvasMousePos(e);
+                draggedGachaSlime.vx = (pos.x - draggedGachaSlime.x) * 0.4;
+                draggedGachaSlime.vy = (pos.y - draggedGachaSlime.y) * 0.4;
+                draggedGachaSlime.x = Math.max(draggedGachaSlime.radius, Math.min(300 - draggedGachaSlime.radius, pos.x));
+                draggedGachaSlime.y = Math.max(draggedGachaSlime.radius, Math.min(240 - draggedGachaSlime.radius, pos.y));
+            }
+
+            window.addEventListener('mouseup', handleGachaUp);
+            window.addEventListener('touchend', handleGachaUp);
+            function handleGachaUp() { draggedGachaSlime = null; }
+        }
+
+        function loopGachaPhysics() {
+            if (!gachaCtx) return;
+            gachaCtx.clearRect(0, 0, 300, 240);
+
+            // 1. Update Slime Physics & Collisions
+            for (let i = 0; i < gachaSlimes.length; i++) {
+                let s = gachaSlimes[i];
+                if (s !== draggedGachaSlime && (!crane.targetSlime || s !== crane.targetSlime || crane.state !== 'ascending')) {
+                    s.vy += 0.25; // Gravity
+                    s.vx *= 0.98; s.vy *= 0.98; // Friction
+                    s.x += s.vx; s.y += s.vy;
+
+                    // Wall Collisions
+                    if (s.x < s.radius) { s.x = s.radius; s.vx *= -0.4; }
+                    if (s.x > 300 - s.radius) { s.x = 300 - s.radius; s.vx *= -0.4; }
+                    if (s.y > 240 - s.radius) { s.y = 240 - s.radius; s.vy *= -0.3; s.vx *= 0.9; }
+                    if (s.y < s.radius) { s.y = s.radius; s.vy *= -0.4; }
+                }
+
+                // Slime vs Slime Collisions (Jostling & Stacking - resolved on both axes so slimes pile up)
+                for (let j = i + 1; j < gachaSlimes.length; j++) {
+                    let s2 = gachaSlimes[j];
+                    let dx = s2.x - s.x; let dy = s2.y - s.y;
+                    let dist = Math.sqrt(dx*dx + dy*dy);
+                    let minDist = s.radius + s2.radius;
+                    if (dist < minDist) {
+                        let overlap = minDist - dist;
+                        let nx = dx / (dist || 1); let ny = dy / (dist || 1);
+                        if (s !== draggedGachaSlime) { s.x -= nx * overlap * 0.5; s.y -= ny * overlap * 0.5; s.vx -= nx * overlap * 0.1; s.vy -= ny * overlap * 0.1; }
+                        if (s2 !== draggedGachaSlime) { s2.x += nx * overlap * 0.5; s2.y += ny * overlap * 0.5; s2.vx += nx * overlap * 0.1; s2.vy += ny * overlap * 0.1; }
+                    }
+                }
+
+                // Render Slime as a proper mini version of the main character, or a little
+                // bubble with the accessory icon inside if this slot holds a hat prize
+                if (s.category === 'hat') {
+                    gachaCtx.save();
+                    gachaCtx.translate(s.x, s.y);
+                    let bubbleGrad = gachaCtx.createRadialGradient(-s.radius * 0.3, -s.radius * 0.3, 1, 0, 0, s.radius);
+                    bubbleGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
+                    bubbleGrad.addColorStop(0.4, 'rgba(200,230,255,0.5)');
+                    bubbleGrad.addColorStop(1, 'rgba(120,180,255,0.35)');
+                    gachaCtx.fillStyle = bubbleGrad;
+                    gachaCtx.beginPath(); gachaCtx.arc(0, 0, s.radius, 0, Math.PI * 2); gachaCtx.fill();
+                    gachaCtx.strokeStyle = 'rgba(255,255,255,0.85)'; gachaCtx.lineWidth = 1.5;
+                    gachaCtx.beginPath(); gachaCtx.arc(0, 0, s.radius, 0, Math.PI * 2); gachaCtx.stroke();
+                    gachaCtx.globalAlpha = 0.85; gachaCtx.fillStyle = '#fff';
+                    gachaCtx.beginPath(); gachaCtx.arc(-s.radius * 0.35, -s.radius * 0.35, s.radius * 0.22, 0, Math.PI * 2); gachaCtx.fill();
+                    gachaCtx.globalAlpha = 1;
+                    gachaCtx.font = `${Math.round(s.radius * 1.1)}px sans-serif`;
+                    gachaCtx.textAlign = 'center'; gachaCtx.textBaseline = 'middle';
+                    gachaCtx.fillText(s.skinData.icon, 0, 1);
+                    gachaCtx.restore();
+                } else {
+                    drawCharacterModel(s.x, s.y, s.vx, s.vy, s.radius, s.skinData.id, false, null, gachaCtx);
+                }
+            }
+
+            // 2. Update Crane Mechanics
+            if (crane.state === 'descending') {
+                crane.y += crane.speed;
+                let targetY = crane.targetSlime.y - crane.targetSlime.radius;
+                if (crane.y >= targetY) {
+                    crane.state = 'ascending';
+                    playSFX('click');
+                }
+            } else if (crane.state === 'ascending') {
+                crane.y -= crane.speed;
+                crane.targetSlime.x = crane.x;
+                crane.targetSlime.y = crane.y + crane.targetSlime.radius;
+                if (crane.y <= crane.restY) {
+                    crane.state = 'idle';
+                    let won = crane.targetSlime;
+                    gachaSlimes = gachaSlimes.filter(s => s !== won); // Remove item
+                    crane.targetSlime = null;
+                    crane.x = 150; crane.y = crane.restY;
+                    revealGachaReward(won.skinData, won.category);
+                }
+            }
+
+            // Render Crane Claw - always visible, resting at top center between pulls
+            gachaCtx.save();
+            // Overhead rail/housing the cable feeds from
+            gachaCtx.fillStyle = '#232b33'; gachaCtx.fillRect(crane.x - 22, 0, 44, 9);
+            gachaCtx.fillStyle = '#4a5661'; gachaCtx.fillRect(crane.x - 22, 0, 44, 3);
+            gachaCtx.fillStyle = '#12171c'; gachaCtx.fillRect(crane.x - 22, 7, 44, 2);
+            // Cable with a metallic sheen
+            let cableGrad = gachaCtx.createLinearGradient(crane.x - 2, 0, crane.x + 2, 0);
+            cableGrad.addColorStop(0, '#5d6d7e'); cableGrad.addColorStop(0.5, '#d5dbe0'); cableGrad.addColorStop(1, '#5d6d7e');
+            gachaCtx.strokeStyle = cableGrad; gachaCtx.lineWidth = 3; gachaCtx.lineCap = 'round';
+            gachaCtx.beginPath(); gachaCtx.moveTo(crane.x, 9); gachaCtx.lineTo(crane.x, crane.y - 6); gachaCtx.stroke();
+            // Claw housing block (pivot point for the prongs)
+            let housingGrad = gachaCtx.createLinearGradient(crane.x - 10, crane.y - 6, crane.x + 10, crane.y + 6);
+            housingGrad.addColorStop(0, '#95a5a6'); housingGrad.addColorStop(1, '#5f6a6a');
+            gachaCtx.fillStyle = housingGrad;
+            gachaCtx.beginPath(); gachaCtx.roundRect(crane.x - 10, crane.y - 6, 20, 13, 3); gachaCtx.fill();
+            gachaCtx.strokeStyle = '#333'; gachaCtx.lineWidth = 1; gachaCtx.stroke();
+            gachaCtx.fillStyle = '#2c3540'; gachaCtx.beginPath(); gachaCtx.arc(crane.x - 6, crane.y, 1.5, 0, Math.PI*2); gachaCtx.arc(crane.x + 6, crane.y, 1.5, 0, Math.PI*2); gachaCtx.fill();
+            // Claw prongs - open while idle/descending, clamp shut once it grabs a prize on the way up
+            let clawShut = crane.state === 'ascending';
+            let spread = clawShut ? 5 : 15;
+            let dip = clawShut ? 16 : 12;
+            gachaCtx.strokeStyle = '#b6bfc2'; gachaCtx.lineWidth = 4.5; gachaCtx.lineCap = 'round'; gachaCtx.lineJoin = 'round';
+            gachaCtx.beginPath();
+            gachaCtx.moveTo(crane.x - spread, crane.y + dip); gachaCtx.quadraticCurveTo(crane.x - 5, crane.y + 5, crane.x, crane.y + 4);
+            gachaCtx.quadraticCurveTo(crane.x + 5, crane.y + 5, crane.x + spread, crane.y + dip);
+            gachaCtx.stroke();
+            gachaCtx.strokeStyle = '#7f8c8d'; gachaCtx.lineWidth = 2.5;
+            gachaCtx.beginPath();
+            gachaCtx.moveTo(crane.x - spread*0.55, crane.y + dip*0.6); gachaCtx.lineTo(crane.x - spread, crane.y + dip);
+            gachaCtx.moveTo(crane.x + spread*0.55, crane.y + dip*0.6); gachaCtx.lineTo(crane.x + spread, crane.y + dip);
+            gachaCtx.stroke();
+            // Prong tips
+            gachaCtx.fillStyle = '#dfe4e6';
+            gachaCtx.beginPath(); gachaCtx.arc(crane.x - spread, crane.y + dip, 2, 0, Math.PI*2); gachaCtx.arc(crane.x + spread, crane.y + dip, 2, 0, Math.PI*2); gachaCtx.fill();
+            gachaCtx.restore();
+
+            gachaAnimId = requestAnimationFrame(loopGachaPhysics);
         }
 
         function switchShopTab(tab) {
@@ -817,87 +1035,96 @@
             document.getElementById('gacha-view').style.display = tab === 'gacha' ? 'block' : 'none';
             document.getElementById('skins-view').style.display = tab === 'skins' ? 'block' : 'none';
             document.getElementById('hats-view').style.display = tab === 'hats' ? 'block' : 'none';
+
+            let revealOverlay = document.getElementById('gacha-reveal-overlay');
+            if (revealOverlay) revealOverlay.classList.remove('show');
+
+            let shopModal = document.getElementById('shop-modal');
+            if (shopModal) shopModal.style.overflowY = tab === 'gacha' ? 'hidden' : 'auto';
             
-            if (tab === 'skins' || tab === 'hats') populateInventory();
+            if (gachaAnimId) { cancelAnimationFrame(gachaAnimId); gachaAnimId = null; }
+            if (tab === 'gacha') {
+                gachaAnimId = requestAnimationFrame(loopGachaPhysics);
+            } else {
+                populateInventory();
+            }
         }
 
         function updateShopButtons() {
             let pullBtn = document.getElementById('btn-pull');
-            if (pullBtn) pullBtn.disabled = totalCoins < 100;
-            document.getElementById('shop-coin-display').innerText = totalCoins;
+            if (pullBtn) pullBtn.disabled = totalCoins < 100 || (crane && crane.state !== 'idle');
+            let coinDisplay = document.getElementById('shop-coin-display');
+            if (coinDisplay) coinDisplay.innerText = totalCoins;
         }
 
         function pullGacha() {
-            if (totalCoins < 100) return;
+            if (totalCoins < 100 || crane.state !== 'idle' || gachaSlimes.length === 0) return;
             totalCoins -= 100; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
-            
-            let machine = document.getElementById('gacha-machine');
-            let orb = document.getElementById('gacha-orb');
+
+            let revealOverlay = document.getElementById('gacha-reveal-overlay');
+            if (revealOverlay) revealOverlay.classList.remove('show');
             let resultText = document.getElementById('gacha-result');
-            let pullBtn = document.getElementById('btn-pull');
+            if (resultText) resultText.innerHTML = '';
+            playSFX('chest');
 
-            pullBtn.disabled = true;
-            resultText.innerHTML = "Rolling...";
-            machine.classList.add('shaking');
-            orb.style.display = 'none';
-            orb.classList.remove('anim-pop');
-            playSFX('chest'); // Reuse chest sound for gacha roll
+            // Select random slime to target - claw slides over from its resting spot and drops down
+            crane.targetSlime = gachaSlimes[Math.floor(Math.random() * gachaSlimes.length)];
+            crane.x = crane.targetSlime.x;
+            crane.state = 'descending';
+        }
 
-            setTimeout(() => {
-                machine.classList.remove('shaking');
-                playSFX('powerup_pickup');
+        function revealGachaReward(chosenItem, itemCategory) {
+            let revealOverlay = document.getElementById('gacha-reveal-overlay');
+            let revealCanvas = document.getElementById('gacha-reveal-canvas');
+            let resultText = document.getElementById('gacha-result');
+            
+            playSFX('powerup_pickup');
 
-                // RNG Logic: 5% Rare, 20% Hat, 75% Basic
-                let roll = Math.random() * 100;
-                let itemCategory, itemObj, orbColor, isNew;
+            // Whatever slot the crane grabbed is exactly what's awarded - no re-roll
+            let itemObj = chosenItem;
 
-                if (roll < 5) {
-                    itemCategory = 'rare';
-                    itemObj = rareSkins[Math.floor(Math.random() * rareSkins.length)];
-                    orbColor = itemObj.preview;
-                } else if (roll < 25) {
-                    itemCategory = 'hat';
-                    itemObj = hats[Math.floor(Math.random() * hats.length)];
-                    orbColor = '#9b59b6'; // Purple orb for hats
+            let invKey = 'inv_' + itemObj.id;
+            let count = parseInt(storage.get(invKey) || 0);
+            let isNew = count === 0;
+            storage.set(invKey, count + 1);
+
+            // Draw the actual slime character as the reward - centered inside the spinning rays
+            if (revealCanvas) {
+                let rctx = revealCanvas.getContext('2d');
+                rctx.clearRect(0, 0, revealCanvas.width, revealCanvas.height);
+                let cx = revealCanvas.width / 2, cy = revealCanvas.height / 2 + 10;
+                if (itemCategory === 'hat') {
+                    drawCharacterModel(cx, cy, 0, 0, 46, player.color, false, itemObj.id, rctx);
                 } else {
-                    itemCategory = 'basic';
-                    itemObj = basicSkins[Math.floor(Math.random() * basicSkins.length)];
-                    orbColor = itemObj.color;
+                    drawCharacterModel(cx, cy, 0, 0, 46, itemObj.id, false, null, rctx);
                 }
+            }
 
-                // Add to inventory
-                let invKey = 'inv_' + itemObj.id;
-                let count = parseInt(storage.get(invKey) || 0);
-                isNew = count === 0;
-                storage.set(invKey, count + 1);
+            let revealVisual = document.querySelector('#gacha-reveal-overlay .reveal-visual');
+            if (revealOverlay) {
+                revealOverlay.classList.remove('show');
+                if (revealVisual) revealVisual.classList.remove('anim-pop');
+                void revealOverlay.offsetWidth; // restart pop animation
+                revealOverlay.classList.add('show');
+                if (revealVisual) revealVisual.classList.add('anim-pop');
+            }
 
-                // UI Reveal
-                orb.style.background = orbColor;
-                orb.style.boxShadow = "inset -10px -10px 20px rgba(0,0,0,0.5)"; // Reset box shadow
-                if (itemCategory === 'hat') orb.innerHTML = `<div style="font-size:2.5rem; text-align:center; line-height:80px;">${itemObj.icon}</div>`;
-                else orb.innerHTML = '';
-                
-                orb.style.display = 'block';
-                orb.classList.add('anim-pop');
+            let title = isNew ? "🎉 NEW UNLOCK! 🎉<br>" : "";
+            
+            if (itemCategory === 'rare' && isNew) {
+                title = "<div style='animation: pulse 0.5s infinite; font-size: 1.5rem; color: #ff00ff; text-shadow: 0 0 15px #fff; margin-bottom: 3px;'>✨ LEGENDARY UNLOCK! ✨</div>";
+                playSFX('chest');
+                setTimeout(() => playSFX('powerup_pickup'), 150);
+                setTimeout(() => playSFX('coin', 1.5), 300);
+            }
 
-                let title = isNew ? "🎉 NEW UNLOCK! 🎉<br>" : "";
-                
-                // Extra Celebration for New Rare Skins
-                if (itemCategory === 'rare' && isNew) {
-                    title = "<div style='animation: pulse 0.5s infinite; font-size: 1.6rem; color: #ff00ff; text-shadow: 0 0 15px #fff; margin-bottom: 5px;'>✨ LEGENDARY UNLOCK! ✨</div>";
-                    orb.style.boxShadow = "0 0 30px 10px #ffd700, inset -10px -10px 20px rgba(0,0,0,0.5)";
-                    playSFX('chest');
-                    setTimeout(() => playSFX('powerup_pickup'), 150);
-                    setTimeout(() => playSFX('coin', 1.5), 300);
-                }
-
-                let name = itemCategory === 'rare' ? `⭐ ${itemObj.name} ⭐` : itemObj.name;
-                let duplicateTag = isNew ? "" : `<span class="duplicate">Duplicate (You have ${count + 1})</span>`;
-                
-                resultText.innerHTML = `${title}<span style="color:${itemCategory === 'rare' ? '#ffd700' : '#fff'};">${name}</span>${duplicateTag}`;
-                
-                updateShopButtons(); // Re-evaluate if they can afford another pull
-            }, 1000);
+            let name = itemCategory === 'rare' ? `⭐ ${itemObj.name} ⭐` : itemObj.name;
+            let duplicateTag = isNew ? "" : `<span class="duplicate" style="font-size:0.85rem; display:block; color:#bdc3c7;">Duplicate (You have ${count + 1})</span>`;
+            
+            if (resultText) resultText.innerHTML = `${title}<span style="color:${itemCategory === 'rare' ? '#ffd700' : '#fff'};">${name}</span>${duplicateTag}`;
+            
+            // Re-render matching replacement slime inside background pool
+            setTimeout(() => { setupGachaPhysics(); updateShopButtons(); }, 400);
         }
 
         function populateInventory() {
@@ -907,7 +1134,6 @@
             if (skinsContainer) skinsContainer.innerHTML = ''; 
             if (hatsContainer) hatsContainer.innerHTML = '';
 
-            // Render Hats
             if (hatsContainer) {
                 hats.forEach(h => {
                     let count = parseInt(storage.get('inv_' + h.id) || 0);
@@ -923,14 +1149,11 @@
                 });
             }
 
-            // Render Skins
             if (skinsContainer) {
                 let allSkins = [...basicSkins, ...rareSkins];
                 allSkins.forEach(s => {
                     let count = parseInt(storage.get('inv_' + s.id) || 0);
                     let isRare = rareSkins.some(r => r.id === s.id);
-                    
-                    // Display ??? for locked rare skins
                     let displayName = (count === 0 && isRare) ? "???" : s.name;
                     
                     let div = document.createElement('div');
@@ -954,7 +1177,7 @@
             } else if (type === 'hat') {
                 player.hat = id; 
                 if (id) storage.set('landSlidersHat', id);
-                else storage.set('landSlidersHat', ''); // Clear it
+                else storage.set('landSlidersHat', '');
             }
             playSFX('click');
             populateInventory();
@@ -1027,7 +1250,11 @@
         document.getElementById('title-settings-btn').addEventListener('click', toggleSettings);
         document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
-            btn.addEventListener('click', (e) => { e.target.closest('.modal').style.display = 'none'; if (gameState === 'paused') gameState = previousState; });
+            btn.addEventListener('click', (e) => { 
+                e.target.closest('.modal').style.display = 'none'; 
+                if (gachaAnimId) { cancelAnimationFrame(gachaAnimId); gachaAnimId = null; }
+                if (gameState === 'paused') gameState = previousState; 
+            });
         });
         document.getElementById('go-play-again').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; resetGame(); startGame(); });
         document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; });
@@ -1037,7 +1264,10 @@
         syncSettingsUI();
 
         function handleStart(e) {
-            initAudio(); if (gameState !== 'playing') return;
+            initAudio();
+            let unlockPopup = document.getElementById('unlock-popup');
+            if (unlockPopup.classList.contains('pop-anim')) { unlockPopup.classList.remove('pop-anim'); return; }
+            if (gameState !== 'playing') return;
             isDragging = true;
             const touch = e.touches ? e.touches[0] : e; lastX = touch.clientX; lastY = touch.clientY;
             pointerScreenX = touch.clientX; pointerScreenY = touch.clientY;
@@ -1054,6 +1284,7 @@
         function handleEnd() { isDragging = false; }
         window.addEventListener('mousedown', handleStart); window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleEnd);
         window.addEventListener('touchstart', handleStart, {passive: false}); window.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
+
 
 
 
@@ -1343,7 +1574,8 @@
             } ctx.restore();
         }
 
-        function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId) {
+        function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId, targetCtx) {
+            let c = targetCtx || ctx;
             let renderY = y; let speed = Math.sqrt(vx * vx + vy * vy);
             let wobble = Math.sin(Date.now() / 60) * speed * 0.04;
             let stretchX = Math.max(0.5, Math.min(1 + Math.abs(vx) * 0.06 + wobble, 2.0));
@@ -1358,109 +1590,200 @@
             
             let basicMatch = basicSkins.find(s => s.id === colorId);
             if (basicMatch) fillColor = basicMatch.color;
-            else if (colorId === 'rainbow') fillColor = `hsl(${(t / 5) % 360}, 100%, 50%)`;
+            else if (colorId === 'rainbow') { fillColor = `hsl(${(t / 5) % 360}, 100%, 50%)`; drawSpecial = 'rainbow'; }
             else if (colorId === 'gold') {
-                let grad = ctx.createLinearGradient(-radius, -radius, radius, radius);
+                let grad = c.createLinearGradient(-radius, -radius, radius, radius);
                 grad.addColorStop(0, '#bf953f'); grad.addColorStop(0.5, '#fcf6ba'); grad.addColorStop(1, '#b38728');
                 fillColor = grad; drawSpecial = 'gold';
             }
-            else if (colorId === 'lava') { fillColor = `rgb(${180 + Math.sin(t/150)*75}, ${40 + Math.sin(t/200)*20}, 0)`; }
+            else if (colorId === 'lava') { fillColor = `rgb(${180 + Math.sin(t/150)*75}, ${40 + Math.sin(t/200)*20}, 0)`; drawSpecial = 'lava'; }
             else if (colorId === 'galaxy') {
-                let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius*1.5);
+                let grad = c.createRadialGradient(0, 0, 0, 0, 0, radius*1.5);
                 grad.addColorStop(0, '#2b1055'); grad.addColorStop(1, '#7597de');
                 fillColor = grad; drawSpecial = 'galaxy';
             }
-            else if (colorId === 'ice') { fillColor = `rgba(165, 242, 243, ${0.8 + Math.sin(t/300)*0.2})`; }
-            else if (colorId === 'toxic') { fillColor = `rgb(${50 + Math.sin(t/100)*50}, 255, 50)`; }
+            else if (colorId === 'ice') { fillColor = `rgba(165, 242, 243, ${0.8 + Math.sin(t/300)*0.2})`; drawSpecial = 'ice'; }
+            else if (colorId === 'toxic') { fillColor = `rgb(${50 + Math.sin(t/100)*50}, 255, 50)`; drawSpecial = 'toxic'; }
             else if (colorId === 'void') { fillColor = '#050505'; drawSpecial = 'void'; }
             else if (colorId === 'sparkle') { fillColor = '#ffb6c1'; drawSpecial = 'sparkle'; }
-            else if (colorId === 'glitch') { fillColor = Math.random() > 0.8 ? '#0ff' : (Math.random() > 0.5 ? '#f0f' : '#fff'); }
-            else if (colorId === 'neon') { fillColor = `hsl(${(t / 2) % 360}, 100%, 70%)`; }
+            else if (colorId === 'glitch') { fillColor = Math.random() > 0.8 ? '#0ff' : (Math.random() > 0.5 ? '#f0f' : '#fff'); drawSpecial = 'glitch'; }
+            else if (colorId === 'neon') { fillColor = `hsl(${(t / 2) % 360}, 100%, 70%)`; drawSpecial = 'neon'; }
 
-            ctx.save(); ctx.translate(x, renderY); ctx.scale(stretchX / stretchY, stretchY / stretchX);
+            c.save(); c.translate(x, renderY); c.scale(stretchX / stretchY, stretchY / stretchX);
             let r = radius;
+
+            // Soft outer glow behind especially flashy rare skins
+            if (drawSpecial === 'neon' || drawSpecial === 'void' || drawSpecial === 'toxic') {
+                c.save();
+                let glowColor = drawSpecial === 'neon' ? fillColor : (drawSpecial === 'toxic' ? '#39ff14' : '#8e44ad');
+                c.globalAlpha = 0.22 + Math.sin(t/200)*0.08;
+                c.fillStyle = glowColor;
+                c.beginPath(); c.arc(0, 0, r * 1.35, 0, Math.PI*2); c.fill();
+                c.restore();
+            }
             
             // Draw Main Slime Body
-            ctx.globalAlpha = 0.85; ctx.fillStyle = fillColor; ctx.beginPath(); ctx.moveTo(-r, r * 0.5);
-            ctx.bezierCurveTo(-r * 1.05, -r * 0.2, -r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, leanX, -r + leanY);
-            ctx.bezierCurveTo(r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, r * 1.05, -r * 0.2, r, r * 0.5);
-            ctx.bezierCurveTo(r, r * 1.05, r * 0.55, r * 1.15, 0, r * 1.15);
-            ctx.bezierCurveTo(-r * 0.55, r * 1.15, -r, r * 1.05, -r, r * 0.5); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1.0;
+            c.globalAlpha = 0.85; c.fillStyle = fillColor; c.beginPath(); c.moveTo(-r, r * 0.5);
+            c.bezierCurveTo(-r * 1.05, -r * 0.2, -r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, leanX, -r + leanY);
+            c.bezierCurveTo(r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, r * 1.05, -r * 0.2, r, r * 0.5);
+            c.bezierCurveTo(r, r * 1.05, r * 0.55, r * 1.15, 0, r * 1.15);
+            c.bezierCurveTo(-r * 0.55, r * 1.15, -r, r * 1.05, -r, r * 0.5); c.closePath(); c.fill(); c.globalAlpha = 1.0;
             
-            // Draw Special Animated Overlays
+            // Draw Special Animated Overlays (more elaborate detailing per rare skin)
             if (drawSpecial === 'gold' && Math.random() < 0.4) {
-                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*2+1, 0, Math.PI*2); ctx.fill();
+                c.fillStyle = '#fff'; c.beginPath(); c.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*2+1, 0, Math.PI*2); c.fill();
             } else if (drawSpecial === 'galaxy') {
-                ctx.fillStyle = '#fff';
-                for(let i=0; i<4; i++) { ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*1.5, 0, Math.PI*2); ctx.fill(); }
+                c.fillStyle = '#fff';
+                for(let i=0; i<4; i++) { c.beginPath(); c.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*1.5, 0, Math.PI*2); c.fill(); }
             } else if (drawSpecial === 'void') {
-                ctx.strokeStyle = '#444'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0, r*0.8 + Math.sin(t/100)*4, 0, Math.PI*2); ctx.stroke();
+                c.strokeStyle = '#444'; c.lineWidth=2; c.beginPath(); c.arc(0,0, r*0.8 + Math.sin(t/100)*4, 0, Math.PI*2); c.stroke();
+                c.strokeStyle = 'rgba(155,89,182,0.5)'; c.lineWidth=1; c.beginPath(); c.arc(0,0, r*1.05 + Math.sin(t/130)*3, 0, Math.PI*2); c.stroke();
             } else if (drawSpecial === 'sparkle' && Math.random() < 0.6) {
-                ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#ffeb3b';
-                ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, 2, 0, Math.PI*2); ctx.fill();
+                c.fillStyle = Math.random() > 0.5 ? '#fff' : '#ffeb3b';
+                c.beginPath(); c.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, 2, 0, Math.PI*2); c.fill();
+            } else if (drawSpecial === 'lava') {
+                c.strokeStyle = `rgba(255, ${180 + Math.sin(t/120)*60}, 40, 0.9)`; c.lineWidth = 1.5;
+                for (let i=0; i<3; i++) {
+                    let ang = i * 2.1 + Math.sin(t/500 + i)*0.3;
+                    c.beginPath(); c.moveTo(Math.cos(ang)*r*0.2, Math.sin(ang)*r*0.2);
+                    c.lineTo(Math.cos(ang)*r*0.9, Math.sin(ang)*r*0.9); c.stroke();
+                }
+                if (Math.random() < 0.3) { c.fillStyle = '#ffd54f'; c.beginPath(); c.arc((Math.random()-0.5)*r*1.4, r*0.8 + Math.random()*4, 1.5, 0, Math.PI*2); c.fill(); }
+            } else if (drawSpecial === 'ice') {
+                c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1;
+                for (let i=0; i<3; i++) {
+                    let cx = (Math.sin(i*2.3) + (i-1)*0.5) * r*0.5, cy = Math.cos(i*1.7) * r*0.5;
+                    c.beginPath(); c.moveTo(cx-4, cy); c.lineTo(cx+4, cy); c.moveTo(cx, cy-4); c.lineTo(cx, cy+4);
+                    c.moveTo(cx-3, cy-3); c.lineTo(cx+3, cy+3); c.moveTo(cx-3, cy+3); c.lineTo(cx+3, cy-3); c.stroke();
+                }
+            } else if (drawSpecial === 'toxic' && Math.random() < 0.4) {
+                c.fillStyle = 'rgba(57,255,20,0.6)'; c.beginPath(); c.arc((Math.random()-0.5)*r*1.2, r*0.6 + Math.random()*r*0.4, 2 + Math.random()*2, 0, Math.PI*2); c.fill();
+            } else if (drawSpecial === 'glitch') {
+                c.save(); c.globalAlpha = 0.5; c.fillStyle = Math.random() > 0.5 ? '#0ff' : '#f0f';
+                c.translate((Math.random()-0.5)*6, (Math.random()-0.5)*6);
+                c.beginPath(); c.moveTo(-r, r * 0.5); c.lineTo(r, r*0.5); c.lineTo(0, -r); c.closePath(); c.fill(); c.restore();
+            } else if (drawSpecial === 'rainbow') {
+                c.globalAlpha = 0.3; c.fillStyle = '#fff';
+                c.beginPath(); c.ellipse(0, 0, r*0.9, r*0.3, Math.sin(t/400)*0.5, 0, Math.PI*2); c.fill(); c.globalAlpha = 1;
             }
 
             // Top highlight
-            ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(-r*0.35 + leanX*0.3, -r*0.45 + leanY*0.3, r*0.4, r*0.22, -0.3, 0, Math.PI*2); ctx.fill();
-            ctx.globalAlpha = 1.0;
+            c.globalAlpha = 0.35; c.fillStyle = '#ffffff'; c.beginPath(); c.ellipse(-r*0.35 + leanX*0.3, -r*0.45 + leanY*0.3, r*0.4, r*0.22, -0.3, 0, Math.PI*2); c.fill();
+            c.globalAlpha = 1.0;
             
             // Eyes & Face
             let eyeOffsetX = Math.max(-8, Math.min(8, (vx / 10) * 4 + leanX * 0.15)) * (radius/22);
             let eyeOffsetY = Math.max(-8, Math.min(8, (vy / 10) * 4 + leanY * 0.15)) * (radius/22);
-            let eyeColor = (colorId === 'black' || colorId === 'void' || colorId === 'galaxy') ? '#fff' : '#1a1a2e'; ctx.fillStyle = eyeColor;
-            ctx.beginPath(); ctx.arc(-8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); ctx.fill(); 
-            ctx.beginPath(); ctx.arc(8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); ctx.fill();
+            let eyeColor = (colorId === 'black' || colorId === 'void' || colorId === 'galaxy') ? '#fff' : '#1a1a2e'; c.fillStyle = eyeColor;
+            c.beginPath(); c.arc(-8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.fill(); 
+            c.beginPath(); c.arc(8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.fill();
             
             let gaspAmount = Math.min(1, speed / 14); let mouthY = (4 + eyeOffsetY * 0.4) * (radius/22); let mouthX = (eyeOffsetX * 0.4) * (radius/22); 
-            ctx.strokeStyle = eyeColor; ctx.lineWidth = 2 * (radius/22);
-            if (gaspAmount < 0.15) { ctx.beginPath(); ctx.arc(mouthX, mouthY - 2*(radius/22), 5*(radius/22), 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); } 
-            else { let mw = (3 + gaspAmount * 6)*(radius/22); let mh = (2 + gaspAmount * 9)*(radius/22); ctx.fillStyle = '#7a2035'; ctx.beginPath(); ctx.ellipse(mouthX, mouthY, mw, mh, 0, 0, Math.PI*2); ctx.fill(); }
+            c.strokeStyle = eyeColor; c.lineWidth = 2 * (radius/22);
+            if (gaspAmount < 0.15) { c.beginPath(); c.arc(mouthX, mouthY - 2*(radius/22), 5*(radius/22), 0.15 * Math.PI, 0.85 * Math.PI); c.stroke(); } 
+            else { let mw = (3 + gaspAmount * 6)*(radius/22); let mh = (2 + gaspAmount * 9)*(radius/22); c.fillStyle = '#7a2035'; c.beginPath(); c.ellipse(mouthX, mouthY, mw, mh, 0, 0, Math.PI*2); c.fill(); }
             
-            // Draw Hat Accessories
+            // Draw Hat Accessories (detailed with shading/gradients/trim)
             if (hatId) {
-                ctx.translate(leanX * 0.3, -r * 0.9 + leanY * 0.3); // Move to top of head and factor jiggle
-                ctx.rotate(leanX * 0.04); // Tilt hat slightly based on movement
+                c.translate(leanX * 0.3, -r * 0.9 + leanY * 0.3); // Move to top of head and factor jiggle
+                c.rotate(leanX * 0.04); // Tilt hat slightly based on movement
                 
                 if (hatId === 'cowboy') {
-                    ctx.fillStyle = '#8b4513'; ctx.beginPath(); ctx.ellipse(0, 5, r*1.3, r*0.35, 0, 0, Math.PI*2); ctx.fill();
-                    ctx.fillStyle = '#a0522d'; ctx.beginPath(); ctx.roundRect(-r*0.6, -r*0.7, r*1.2, r*0.8, 5); ctx.fill();
+                    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(0, 6, r*1.32, r*0.36, 0, 0, Math.PI*2); c.fill();
+                    let brimGrad = c.createLinearGradient(0, -r*0.1, 0, r*0.15);
+                    brimGrad.addColorStop(0, '#a0672c'); brimGrad.addColorStop(1, '#6e4419');
+                    c.fillStyle = brimGrad; c.beginPath(); c.ellipse(0, 5, r*1.3, r*0.35, 0, 0, Math.PI*2); c.fill();
+                    c.strokeStyle = '#5a3714'; c.lineWidth = 1.5; c.beginPath(); c.ellipse(0, 5, r*1.3, r*0.35, 0, 0, Math.PI*2); c.stroke();
+                    let domeGrad = c.createLinearGradient(-r*0.6, -r*0.7, r*0.6, 0);
+                    domeGrad.addColorStop(0, '#c17f3e'); domeGrad.addColorStop(1, '#8b5a2b');
+                    c.fillStyle = domeGrad; c.beginPath(); c.roundRect(-r*0.6, -r*0.7, r*1.2, r*0.8, 5); c.fill();
+                    c.fillStyle = '#5a3714'; c.fillRect(-r*0.6, -r*0.22, r*1.2, r*0.14);
                 } else if (hatId === 'tophat') {
-                    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(0, 5, r*1.1, r*0.25, 0, 0, Math.PI*2); ctx.fill();
-                    ctx.fillRect(-r*0.65, -r, r*1.3, r);
-                    ctx.fillStyle = '#e74c3c'; ctx.fillRect(-r*0.65, -r*0.3, r*1.3, r*0.3);
+                    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(0, 6, r*1.12, r*0.27, 0, 0, Math.PI*2); c.fill();
+                    c.fillStyle = '#111'; c.beginPath(); c.ellipse(0, 5, r*1.1, r*0.25, 0, 0, Math.PI*2); c.fill();
+                    let topGrad = c.createLinearGradient(-r*0.65, -r, r*0.65, 0);
+                    topGrad.addColorStop(0, '#2b2b2b'); topGrad.addColorStop(0.5, '#111'); topGrad.addColorStop(1, '#000');
+                    c.fillStyle = topGrad; c.fillRect(-r*0.65, -r, r*1.3, r);
+                    c.fillStyle = '#e74c3c'; c.fillRect(-r*0.65, -r*0.3, r*1.3, r*0.3);
+                    c.strokeStyle = '#000'; c.lineWidth = 1; c.strokeRect(-r*0.65, -r*0.3, r*1.3, r*0.3);
+                    c.fillStyle = 'rgba(255,255,255,0.15)'; c.fillRect(-r*0.5, -r*0.95, r*0.18, r*0.65);
                 } else if (hatId === 'crown') {
-                    ctx.fillStyle = '#f1c40f';
-                    ctx.beginPath(); ctx.moveTo(-r*0.7, 5); ctx.lineTo(r*0.7, 5); ctx.lineTo(r*0.9, -r*0.8); ctx.lineTo(r*0.3, -r*0.3); ctx.lineTo(0, -r); ctx.lineTo(-r*0.3, -r*0.3); ctx.lineTo(-r*0.9, -r*0.8); ctx.closePath(); ctx.fill();
-                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, -r, 3, 0, Math.PI*2); ctx.arc(-r*0.9, -r*0.8, 3, 0, Math.PI*2); ctx.arc(r*0.9, -r*0.8, 3, 0, Math.PI*2); ctx.fill();
+                    let crownGrad = c.createLinearGradient(-r*0.9, -r, r*0.9, 5);
+                    crownGrad.addColorStop(0, '#fff2a8'); crownGrad.addColorStop(0.5, '#f1c40f'); crownGrad.addColorStop(1, '#c9960b');
+                    c.fillStyle = crownGrad;
+                    c.beginPath(); c.moveTo(-r*0.7, 5); c.lineTo(r*0.7, 5); c.lineTo(r*0.9, -r*0.8); c.lineTo(r*0.3, -r*0.3); c.lineTo(0, -r); c.lineTo(-r*0.3, -r*0.3); c.lineTo(-r*0.9, -r*0.8); c.closePath(); c.fill();
+                    c.strokeStyle = '#a5730a'; c.lineWidth = 1.5; c.stroke();
+                    c.fillStyle = '#b8860b'; c.fillRect(-r*0.7, 2, r*1.4, 4);
+                    c.fillStyle = '#e74c3c'; c.beginPath(); c.arc(0, -r, 3, 0, Math.PI*2); c.arc(-r*0.9, -r*0.8, 3, 0, Math.PI*2); c.arc(r*0.9, -r*0.8, 3, 0, Math.PI*2); c.fill();
+                    c.fillStyle = '#3498db'; c.beginPath(); c.arc(-r*0.35, -r*0.15, 2, 0, Math.PI*2); c.arc(r*0.35, -r*0.15, 2, 0, Math.PI*2); c.fill();
+                    c.fillStyle = 'rgba(255,255,255,0.6)'; c.beginPath(); c.arc(-r*0.15, -r*0.6, 1.5, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'beanie') {
-                    ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(0, 5, r*0.8, Math.PI, 0); ctx.fill();
-                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, -r*0.8+5, r*0.25, 0, Math.PI*2); ctx.fill();
+                    let beanieGrad = c.createLinearGradient(0, -r*0.8, 0, r*0.2);
+                    beanieGrad.addColorStop(0, '#5dade2'); beanieGrad.addColorStop(1, '#2e86c1');
+                    c.fillStyle = beanieGrad; c.beginPath(); c.arc(0, 5, r*0.8, Math.PI, 0); c.fill();
+                    c.strokeStyle = 'rgba(255,255,255,0.3)'; c.lineWidth = 1.5;
+                    for (let i=-2; i<=2; i++) { c.beginPath(); c.moveTo(i*r*0.15, 4); c.lineTo(i*r*0.18, -r*0.7); c.stroke(); }
+                    c.fillStyle = '#2874a6'; c.beginPath(); c.ellipse(0, 3, r*0.85, r*0.18, 0, 0, Math.PI*2); c.fill();
+                    c.fillStyle = '#e74c3c'; c.beginPath(); c.arc(0, -r*0.8+5, r*0.25, 0, Math.PI*2); c.fill();
+                    c.fillStyle = 'rgba(255,255,255,0.4)'; c.beginPath(); c.arc(-r*0.08, -r*0.85+5, r*0.08, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'bow') {
-                    ctx.fillStyle = '#e74c3c';
-                    ctx.beginPath(); ctx.moveTo(0,-r*0.2); ctx.lineTo(-r*0.7, -r*0.7); ctx.lineTo(-r*0.7, r*0.3); ctx.closePath(); ctx.fill();
-                    ctx.beginPath(); ctx.moveTo(0,-r*0.2); ctx.lineTo(r*0.7, -r*0.7); ctx.lineTo(r*0.7, r*0.3); ctx.closePath(); ctx.fill();
-                    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(0, -r*0.2, r*0.25, 0, Math.PI*2); ctx.fill();
+                    c.fillStyle = 'rgba(0,0,0,0.2)'; c.beginPath(); c.ellipse(0, 0, r*0.75, r*0.5, 0, 0, Math.PI*2); c.fill();
+                    let bowGrad = c.createLinearGradient(-r*0.7, 0, r*0.7, 0);
+                    bowGrad.addColorStop(0, '#ff6b81'); bowGrad.addColorStop(1, '#e74c3c');
+                    c.fillStyle = bowGrad;
+                    c.beginPath(); c.moveTo(0,-r*0.2); c.lineTo(-r*0.7, -r*0.7); c.lineTo(-r*0.7, r*0.3); c.closePath(); c.fill();
+                    c.beginPath(); c.moveTo(0,-r*0.2); c.lineTo(r*0.7, -r*0.7); c.lineTo(r*0.7, r*0.3); c.closePath(); c.fill();
+                    c.strokeStyle = '#c0392b'; c.lineWidth = 1; c.stroke();
+                    c.fillStyle = '#c0392b'; c.beginPath(); c.arc(0, -r*0.2, r*0.25, 0, Math.PI*2); c.fill();
+                    c.fillStyle = 'rgba(255,255,255,0.5)'; c.beginPath(); c.arc(-r*0.08, -r*0.3, r*0.08, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'halo') {
-                    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, -r*0.6, r*0.9, r*0.25, 0, 0, Math.PI*2); ctx.stroke();
+                    c.save(); c.globalAlpha = 0.35; c.strokeStyle = '#fff9c4'; c.lineWidth = 10; c.beginPath(); c.ellipse(0, -r*0.6, r*0.9, r*0.25, 0, 0, Math.PI*2); c.stroke(); c.restore();
+                    c.strokeStyle = '#f1c40f'; c.lineWidth = 4; c.beginPath(); c.ellipse(0, -r*0.6, r*0.9, r*0.25, 0, 0, Math.PI*2); c.stroke();
+                    c.strokeStyle = '#fff9c4'; c.lineWidth = 1.5; c.beginPath(); c.ellipse(0, -r*0.65, r*0.85, r*0.2, 0, 0, Math.PI*2); c.stroke();
                 } else if (hatId === 'party') {
-                    ctx.fillStyle = '#9b59b6'; ctx.beginPath(); ctx.moveTo(-r*0.6, 5); ctx.lineTo(r*0.6, 5); ctx.lineTo(0, -r*1.2); ctx.closePath(); ctx.fill();
-                    ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(0, -r*1.2, r*0.25, 0, Math.PI*2); ctx.fill();
-                    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(0, -r*0.5, 4, 0, Math.PI*2); ctx.fill();
+                    let partyGrad = c.createLinearGradient(0, 5, 0, -r*1.2);
+                    partyGrad.addColorStop(0, '#a569bd'); partyGrad.addColorStop(1, '#7d3c98');
+                    c.fillStyle = partyGrad; c.beginPath(); c.moveTo(-r*0.6, 5); c.lineTo(r*0.6, 5); c.lineTo(0, -r*1.2); c.closePath(); c.fill();
+                    c.strokeStyle = '#5b2c6f'; c.lineWidth = 1; c.stroke();
+                    c.fillStyle = '#f1c40f'; c.beginPath(); c.moveTo(-r*0.3, -r*0.3); c.lineTo(0.2, -r*0.1); c.lineTo(-r*0.1, -r*0.5); c.fill();
+                    c.fillStyle = '#2ecc71'; c.beginPath(); c.moveTo(r*0.1, r*0.1); c.lineTo(r*0.35, -r*0.15); c.lineTo(r*0.05, -r*0.25); c.fill();
+                    c.fillStyle = '#f1c40f'; c.beginPath(); c.arc(0, -r*1.2, r*0.25, 0, Math.PI*2); c.fill();
+                    c.fillStyle = '#2ecc71'; c.beginPath(); c.arc(0, -r*0.5, 4, 0, Math.PI*2); c.fill();
+                    c.fillStyle = '#e74c3c'; c.beginPath(); c.arc(-r*0.25, -r*0.05, 3, 0, Math.PI*2); c.arc(r*0.25, -r*0.85, 3, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'pirate') {
-                    ctx.fillStyle = '#222';
-                    ctx.beginPath(); ctx.moveTo(-r*1.2, 5); ctx.lineTo(r*1.2, 5); ctx.lineTo(r*0.7, -r*0.8); ctx.lineTo(-r*0.7, -r*0.8); ctx.closePath(); ctx.fill();
-                    ctx.fillStyle = '#fff'; ctx.font = `bold ${r*0.5}px sans-serif`; ctx.textAlign='center'; ctx.fillText('☠', 0, -2);
+                    c.fillStyle = 'rgba(0,0,0,0.25)'; c.beginPath(); c.ellipse(0, 6, r*1.22, r*0.3, 0, 0, Math.PI*2); c.fill();
+                    let pirateGrad = c.createLinearGradient(0, -r*0.8, 0, 5);
+                    pirateGrad.addColorStop(0, '#333'); pirateGrad.addColorStop(1, '#111');
+                    c.fillStyle = pirateGrad;
+                    c.beginPath(); c.moveTo(-r*1.2, 5); c.lineTo(r*1.2, 5); c.lineTo(r*0.7, -r*0.8); c.lineTo(-r*0.7, -r*0.8); c.closePath(); c.fill();
+                    c.strokeStyle = '#f1c40f'; c.lineWidth = 1.5; c.beginPath(); c.moveTo(-r*1.15, 3); c.lineTo(r*1.15, 3); c.stroke();
+                    c.fillStyle = '#fff'; c.font = `bold ${r*0.5}px sans-serif`; c.textAlign='center'; c.fillText('☠', 0, -2);
+                    c.fillStyle = '#f1c40f'; c.beginPath(); c.arc(-r*0.9, 0, 3, 0, Math.PI*2); c.arc(r*0.9, 0, 3, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'cap') {
-                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, 5, r*0.7, Math.PI, 0); ctx.fill();
-                    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.roundRect(0, 0, r*1.2, 5, 2); ctx.fill(); // Bill
+                    let capGrad = c.createLinearGradient(0, -r*0.6, 0, 5);
+                    capGrad.addColorStop(0, '#ff6b6b'); capGrad.addColorStop(1, '#c0392b');
+                    c.fillStyle = capGrad; c.beginPath(); c.arc(0, 5, r*0.7, Math.PI, 0); c.fill();
+                    c.strokeStyle = 'rgba(255,255,255,0.25)'; c.lineWidth = 1;
+                    c.beginPath(); c.moveTo(-r*0.5, 4); c.quadraticCurveTo(0, -r*0.65, r*0.5, 4); c.stroke();
+                    c.fillStyle = '#c0392b'; c.beginPath(); c.roundRect(0, 0, r*1.2, 5, 2); c.fill(); // Bill
+                    c.fillStyle = 'rgba(0,0,0,0.15)'; c.fillRect(0, 3, r*1.2, 2);
+                    c.fillStyle = '#fff'; c.beginPath(); c.arc(0, -r*0.55, 2, 0, Math.PI*2); c.fill();
                 } else if (hatId === 'horns') {
-                    ctx.fillStyle = '#c0392b';
-                    ctx.beginPath(); ctx.moveTo(-r*0.3, 5); ctx.quadraticCurveTo(-r*0.7, -r*0.6, -r*0.9, -r*0.8); ctx.quadraticCurveTo(-r*0.5, -r*0.3, -r*0.1, 5); ctx.fill();
-                    ctx.beginPath(); ctx.moveTo(r*0.3, 5); ctx.quadraticCurveTo(r*0.7, -r*0.6, r*0.9, -r*0.8); ctx.quadraticCurveTo(r*0.5, -r*0.3, r*0.1, 5); ctx.fill();
+                    let hornGrad = c.createLinearGradient(-r*0.9, -r*0.8, -r*0.1, 5);
+                    hornGrad.addColorStop(0, '#e74c3c'); hornGrad.addColorStop(1, '#8b1a1a');
+                    c.fillStyle = hornGrad;
+                    c.beginPath(); c.moveTo(-r*0.3, 5); c.quadraticCurveTo(-r*0.7, -r*0.6, -r*0.9, -r*0.8); c.quadraticCurveTo(-r*0.5, -r*0.3, -r*0.1, 5); c.fill();
+                    let hornGrad2 = c.createLinearGradient(r*0.1, -r*0.8, r*0.9, 5);
+                    hornGrad2.addColorStop(0, '#8b1a1a'); hornGrad2.addColorStop(1, '#e74c3c');
+                    c.fillStyle = hornGrad2;
+                    c.beginPath(); c.moveTo(r*0.3, 5); c.quadraticCurveTo(r*0.7, -r*0.6, r*0.9, -r*0.8); c.quadraticCurveTo(r*0.5, -r*0.3, r*0.1, 5); c.fill();
+                    c.strokeStyle = 'rgba(0,0,0,0.3)'; c.lineWidth = 1;
+                    c.beginPath(); c.moveTo(-r*0.6, -r*0.15); c.lineTo(-r*0.45, -r*0.1); c.moveTo(-r*0.75, -r*0.45); c.lineTo(-r*0.6, -r*0.4); c.stroke();
+                    c.beginPath(); c.moveTo(r*0.6, -r*0.15); c.lineTo(r*0.45, -r*0.1); c.moveTo(r*0.75, -r*0.45); c.lineTo(r*0.6, -r*0.4); c.stroke();
                 }
             }
             
-            ctx.restore();
+            c.restore();
         }
 
         function draw() {

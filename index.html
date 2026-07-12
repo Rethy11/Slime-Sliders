@@ -94,18 +94,54 @@
         .shop-tab { background: #6c7a89; border: none; padding: 8px 20px; border-radius: 20px; color: white; cursor: pointer; font-weight: bold; transition: 0.2s; }
         .shop-tab.active { background: var(--accent); transform: scale(1.05); }
         .gacha-container { position: relative; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; }
-        .gacha-machine { width: 300px; max-width: 100%; height: 240px; margin: 0 auto 10px; border-radius: 12px; border: 4px solid #34495e; position: relative; overflow: hidden; display: block; background: #111318; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+        
+        .gacha-machine { 
+            width: 300px; 
+            max-width: 100%; 
+            height: 240px; 
+            margin: 0 auto 10px; 
+            border-radius: 12px; 
+            border: 4px solid #34495e; 
+            position: relative; 
+            overflow: hidden; 
+            display: block; 
+            background: #111318; 
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8); 
+            box-sizing: border-box;
+        }
         .gacha-machine.shaking { animation: gachaShake 0.4s infinite; border-color: #ffcf33; }
+        
+        #gacha-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
         .gacha-btn { font-size: 1.2rem; padding: 15px 30px; background: #ffcf33; color: #000; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 6px; width: 80%; max-width: 300px; }
         .gacha-btn:active { transform: translateY(5px); box-shadow: none; }
         .gacha-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; cursor: not-allowed; }
+        
         .shop-coin-bag { margin: 4px auto 0 auto; padding: 6px 18px; background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #f1c40f; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; color: #f1c40f; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-        #gacha-reveal-overlay { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none; z-index: 20; background: rgba(8, 10, 18, 0.72); border-radius: 12px; }
-        #gacha-reveal-overlay.show { display: flex; }
+        
+        #gacha-reveal-overlay { 
+            display: none; 
+            position: fixed; 
+            top: 0; left: 0; 
+            width: 100vw; height: 100vh; 
+            flex-direction: column; 
+            align-items: center; 
+            justify-content: center; 
+            gap: 8px; 
+            pointer-events: auto; 
+            z-index: 1000; 
+            background: rgba(8, 10, 18, 0.9); 
+            cursor: pointer;
+        }
+        
         .reveal-visual { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }
         .sun-rays { position: absolute; top: 50%; left: 50%; width: 320px; height: 320px; transform: translate(-50%, -50%); background: repeating-conic-gradient(from 0deg, rgba(241,196,15,0.28) 0deg 15deg, transparent 15deg 30deg); z-index: 1; animation: gacha-spin 12s linear infinite; border-radius: 50%; pointer-events: none; }
-        #gacha-reveal-canvas { position: relative; z-index: 2; }
-        .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 30px; text-shadow: 0 2px 5px #000; }
+        #gacha-reveal-canvas { position: relative; z-index: 2; pointer-events: none; }
+        .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 30px; text-shadow: 0 2px 5px #000; pointer-events: none; text-align: center; color: #fff; }
         .gacha-result span.duplicate { color: #ffcf33; font-size: 0.9rem; display: block; margin-top: 5px; }
 
         .inventory-container { display: none; }
@@ -126,6 +162,7 @@
         @keyframes gachaPop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
         .anim-pop { animation: gachaPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     </style>
+
 
 </head>
 <body>
@@ -168,6 +205,14 @@
             <button class="close-modal-btn">Close</button>
         </div>
         <div id="shop-items"></div>
+    </div>
+
+    <div id="gacha-reveal-overlay">
+        <div class="reveal-visual">
+            <div class="sun-rays" id="gacha-rays"></div>
+            <canvas id="gacha-reveal-canvas" width="160" height="160"></canvas>
+        </div>
+        <div class="gacha-result" id="gacha-result"></div>
     </div>
 
     <div id="almanac-modal" class="modal">
@@ -775,6 +820,7 @@
             updateHUD();
         }
 
+        // ==========================================
         // SECTION 6 - UI & INPUT HANDLING
         // Event listeners, HUD logic, popups, and shops.
         // ==========================================
@@ -783,10 +829,8 @@
         let gachaAnimId = null;
         let gachaCanvas, gachaCtx;
         let crane = { state: 'idle', x: 150, y: 20, speed: 5, targetSlime: null, restY: 20 };
-
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
-
         document.querySelectorAll('button').forEach(btn => { btn.addEventListener('mousedown', () => playSFX('click')); });
 
         function buildShopUI() {
@@ -800,19 +844,11 @@
                 
                 <div id="gacha-view" class="gacha-container">
                     <div class="gacha-machine" id="gacha-machine">
-                        <canvas id="gacha-canvas" width="300" height="240" style="display:block;"></canvas>
+                        <canvas id="gacha-canvas" width="300" height="240"></canvas>
                     </div>
                     <button class="gacha-btn" id="btn-pull" style="margin-top:8px;">Pull (100 🪙)</button>
                     <div class="shop-coin-bag">
                         🪙 <span id="shop-coin-display">0</span>
-                    </div>
-
-                    <div id="gacha-reveal-overlay">
-                        <div class="reveal-visual">
-                            <div class="sun-rays" id="gacha-rays"></div>
-                            <canvas id="gacha-reveal-canvas" width="160" height="160"></canvas>
-                        </div>
-                        <div class="gacha-result" id="gacha-result"></div>
                     </div>
                 </div>
 
@@ -832,6 +868,20 @@
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
             document.getElementById('btn-remove-hat').addEventListener('click', () => equipItem('hat', null));
             
+            // Re-bind the full-screen dismiss layout click listener
+            let revealOverlay = document.getElementById('gacha-reveal-overlay');
+            if(revealOverlay) {
+                let newOverlay = revealOverlay.cloneNode(true);
+                revealOverlay.parentNode.replaceChild(newOverlay, revealOverlay);
+                newOverlay.addEventListener('click', (e) => {
+                    if (e.currentTarget.style.display === 'flex') {
+                        e.currentTarget.style.display = 'none'; // Dismiss overlay
+                        setupGachaPhysics();
+                        updateShopButtons();
+                    }
+                });
+            }
+
             setupGachaPhysics();
             updateShopButtons();
         }
@@ -847,9 +897,6 @@
             crane.y = crane.restY;
             crane.targetSlime = null;
 
-            // Each slot rolls its own category so the odds of any single pull match the
-            // advertised rates (5% legendary, 20% accessory, 75% basic) no matter which
-            // slime the crane happens to grab.
             const GACHA_POOL_SIZE = 28;
             const RARE_CHANCE = 0.05;
             const HAT_CHANCE = 0.20;
@@ -857,11 +904,14 @@
                 let roll = Math.random();
                 let category, itemData, radius;
                 if (roll < RARE_CHANCE) {
-                    category = 'rare'; itemData = rareSkins[Math.floor(Math.random() * rareSkins.length)]; radius = 16;
+                    category = 'rare';
+                    itemData = rareSkins[Math.floor(Math.random() * rareSkins.length)]; radius = 16;
                 } else if (roll < RARE_CHANCE + HAT_CHANCE) {
-                    category = 'hat'; itemData = hats[Math.floor(Math.random() * hats.length)]; radius = 14;
+                    category = 'hat';
+                    itemData = hats[Math.floor(Math.random() * hats.length)]; radius = 14;
                 } else {
-                    category = 'basic'; itemData = basicSkins[Math.floor(Math.random() * basicSkins.length)]; radius = 16;
+                    category = 'basic';
+                    itemData = basicSkins[Math.floor(Math.random() * basicSkins.length)]; radius = 16;
                 }
                 gachaSlimes.push({
                     x: 40 + Math.random() * 220,
@@ -881,7 +931,15 @@
                 let rect = gachaCanvas.getBoundingClientRect();
                 let clientX = e.touches ? e.touches[0].clientX : e.clientX;
                 let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                return { x: clientX - rect.left, y: clientY - rect.top };
+                
+                // Track mouse scaled to internal resolution coordinates
+                let scaleX = gachaCanvas.width / rect.width;
+                let scaleY = gachaCanvas.height / rect.height;
+                
+                return { 
+                    x: (clientX - rect.left) * scaleX, 
+                    y: (clientY - rect.top) * scaleY 
+                };
             }
 
             gachaCanvas.onmousedown = gachaCanvas.ontouchstart = (e) => {
@@ -896,7 +954,6 @@
                     }
                 }
             };
-
             window.addEventListener('mousemove', handleGachaMove);
             window.addEventListener('touchmove', handleGachaMove, { passive: false });
             function handleGachaMove(e) {
@@ -917,22 +974,21 @@
             if (!gachaCtx) return;
             gachaCtx.clearRect(0, 0, 300, 240);
 
-            // 1. Update Slime Physics & Collisions
             for (let i = 0; i < gachaSlimes.length; i++) {
                 let s = gachaSlimes[i];
                 if (s !== draggedGachaSlime && (!crane.targetSlime || s !== crane.targetSlime || crane.state !== 'ascending')) {
-                    s.vy += 0.25; // Gravity
-                    s.vx *= 0.98; s.vy *= 0.98; // Friction
-                    s.x += s.vx; s.y += s.vy;
+                    s.vy += 0.25;
+                    s.vx *= 0.98;
+                    s.vy *= 0.98;
+                    s.x += s.vx;
+                    s.y += s.vy;
 
-                    // Wall Collisions
                     if (s.x < s.radius) { s.x = s.radius; s.vx *= -0.4; }
                     if (s.x > 300 - s.radius) { s.x = 300 - s.radius; s.vx *= -0.4; }
                     if (s.y > 240 - s.radius) { s.y = 240 - s.radius; s.vy *= -0.3; s.vx *= 0.9; }
                     if (s.y < s.radius) { s.y = s.radius; s.vy *= -0.4; }
                 }
 
-                // Slime vs Slime Collisions (Jostling & Stacking - resolved on both axes so slimes pile up)
                 for (let j = i + 1; j < gachaSlimes.length; j++) {
                     let s2 = gachaSlimes[j];
                     let dx = s2.x - s.x; let dy = s2.y - s.y;
@@ -946,8 +1002,6 @@
                     }
                 }
 
-                // Render Slime as a proper mini version of the main character, or a little
-                // bubble with the accessory icon inside if this slot holds a hat prize
                 if (s.category === 'hat') {
                     gachaCtx.save();
                     gachaCtx.translate(s.x, s.y);
@@ -960,7 +1014,8 @@
                     gachaCtx.strokeStyle = 'rgba(255,255,255,0.85)'; gachaCtx.lineWidth = 1.5;
                     gachaCtx.beginPath(); gachaCtx.arc(0, 0, s.radius, 0, Math.PI * 2); gachaCtx.stroke();
                     gachaCtx.globalAlpha = 0.85; gachaCtx.fillStyle = '#fff';
-                    gachaCtx.beginPath(); gachaCtx.arc(-s.radius * 0.35, -s.radius * 0.35, s.radius * 0.22, 0, Math.PI * 2); gachaCtx.fill();
+                    gachaCtx.beginPath();
+                    gachaCtx.arc(-s.radius * 0.35, -s.radius * 0.35, s.radius * 0.22, 0, Math.PI * 2); gachaCtx.fill();
                     gachaCtx.globalAlpha = 1;
                     gachaCtx.font = `${Math.round(s.radius * 1.1)}px sans-serif`;
                     gachaCtx.textAlign = 'center'; gachaCtx.textBaseline = 'middle';
@@ -971,7 +1026,6 @@
                 }
             }
 
-            // 2. Update Crane Mechanics
             if (crane.state === 'descending') {
                 crane.y += crane.speed;
                 let targetY = crane.targetSlime.y - crane.targetSlime.radius;
@@ -986,46 +1040,47 @@
                 if (crane.y <= crane.restY) {
                     crane.state = 'idle';
                     let won = crane.targetSlime;
-                    gachaSlimes = gachaSlimes.filter(s => s !== won); // Remove item
+                    gachaSlimes = gachaSlimes.filter(s => s !== won);
                     crane.targetSlime = null;
                     crane.x = 150; crane.y = crane.restY;
                     revealGachaReward(won.skinData, won.category);
                 }
             }
 
-            // Render Crane Claw - always visible, resting at top center between pulls
             gachaCtx.save();
-            // Overhead rail/housing the cable feeds from
-            gachaCtx.fillStyle = '#232b33'; gachaCtx.fillRect(crane.x - 22, 0, 44, 9);
+            gachaCtx.fillStyle = '#232b33';
+            gachaCtx.fillRect(crane.x - 22, 0, 44, 9);
             gachaCtx.fillStyle = '#4a5661'; gachaCtx.fillRect(crane.x - 22, 0, 44, 3);
-            gachaCtx.fillStyle = '#12171c'; gachaCtx.fillRect(crane.x - 22, 7, 44, 2);
-            // Cable with a metallic sheen
+            gachaCtx.fillStyle = '#12171c';
+            gachaCtx.fillRect(crane.x - 22, 7, 44, 2);
             let cableGrad = gachaCtx.createLinearGradient(crane.x - 2, 0, crane.x + 2, 0);
             cableGrad.addColorStop(0, '#5d6d7e'); cableGrad.addColorStop(0.5, '#d5dbe0'); cableGrad.addColorStop(1, '#5d6d7e');
             gachaCtx.strokeStyle = cableGrad; gachaCtx.lineWidth = 3; gachaCtx.lineCap = 'round';
-            gachaCtx.beginPath(); gachaCtx.moveTo(crane.x, 9); gachaCtx.lineTo(crane.x, crane.y - 6); gachaCtx.stroke();
-            // Claw housing block (pivot point for the prongs)
+            gachaCtx.beginPath(); gachaCtx.moveTo(crane.x, 9);
+            gachaCtx.lineTo(crane.x, crane.y - 6); gachaCtx.stroke();
             let housingGrad = gachaCtx.createLinearGradient(crane.x - 10, crane.y - 6, crane.x + 10, crane.y + 6);
             housingGrad.addColorStop(0, '#95a5a6'); housingGrad.addColorStop(1, '#5f6a6a');
             gachaCtx.fillStyle = housingGrad;
             gachaCtx.beginPath(); gachaCtx.roundRect(crane.x - 10, crane.y - 6, 20, 13, 3); gachaCtx.fill();
             gachaCtx.strokeStyle = '#333'; gachaCtx.lineWidth = 1; gachaCtx.stroke();
-            gachaCtx.fillStyle = '#2c3540'; gachaCtx.beginPath(); gachaCtx.arc(crane.x - 6, crane.y, 1.5, 0, Math.PI*2); gachaCtx.arc(crane.x + 6, crane.y, 1.5, 0, Math.PI*2); gachaCtx.fill();
-            // Claw prongs - open while idle/descending, clamp shut once it grabs a prize on the way up
+            gachaCtx.fillStyle = '#2c3540'; gachaCtx.beginPath(); gachaCtx.arc(crane.x - 6, crane.y, 1.5, 0, Math.PI*2);
+            gachaCtx.arc(crane.x + 6, crane.y, 1.5, 0, Math.PI*2); gachaCtx.fill();
             let clawShut = crane.state === 'ascending';
             let spread = clawShut ? 5 : 15;
             let dip = clawShut ? 16 : 12;
-            gachaCtx.strokeStyle = '#b6bfc2'; gachaCtx.lineWidth = 4.5; gachaCtx.lineCap = 'round'; gachaCtx.lineJoin = 'round';
+            gachaCtx.strokeStyle = '#b6bfc2';
+            gachaCtx.lineWidth = 4.5; gachaCtx.lineCap = 'round'; gachaCtx.lineJoin = 'round';
             gachaCtx.beginPath();
-            gachaCtx.moveTo(crane.x - spread, crane.y + dip); gachaCtx.quadraticCurveTo(crane.x - 5, crane.y + 5, crane.x, crane.y + 4);
+            gachaCtx.moveTo(crane.x - spread, crane.y + dip);
+            gachaCtx.quadraticCurveTo(crane.x - 5, crane.y + 5, crane.x, crane.y + 4);
             gachaCtx.quadraticCurveTo(crane.x + 5, crane.y + 5, crane.x + spread, crane.y + dip);
             gachaCtx.stroke();
             gachaCtx.strokeStyle = '#7f8c8d'; gachaCtx.lineWidth = 2.5;
             gachaCtx.beginPath();
             gachaCtx.moveTo(crane.x - spread*0.55, crane.y + dip*0.6); gachaCtx.lineTo(crane.x - spread, crane.y + dip);
-            gachaCtx.moveTo(crane.x + spread*0.55, crane.y + dip*0.6); gachaCtx.lineTo(crane.x + spread, crane.y + dip);
+            gachaCtx.moveTo(crane.x + spread*0.55, crane.y + dip*0.6);
+            gachaCtx.lineTo(crane.x + spread, crane.y + dip);
             gachaCtx.stroke();
-            // Prong tips
             gachaCtx.fillStyle = '#dfe4e6';
             gachaCtx.beginPath(); gachaCtx.arc(crane.x - spread, crane.y + dip, 2, 0, Math.PI*2); gachaCtx.arc(crane.x + spread, crane.y + dip, 2, 0, Math.PI*2); gachaCtx.fill();
             gachaCtx.restore();
@@ -1041,9 +1096,9 @@
             document.getElementById('gacha-view').style.display = tab === 'gacha' ? 'block' : 'none';
             document.getElementById('skins-view').style.display = tab === 'skins' ? 'block' : 'none';
             document.getElementById('hats-view').style.display = tab === 'hats' ? 'block' : 'none';
-
+            
             let revealOverlay = document.getElementById('gacha-reveal-overlay');
-            if (revealOverlay) revealOverlay.classList.remove('show');
+            if (revealOverlay) revealOverlay.style.display = 'none';
 
             let shopModal = document.getElementById('shop-modal');
             if (shopModal) shopModal.style.overflowY = tab === 'gacha' ? 'hidden' : 'auto';
@@ -1068,12 +1123,11 @@
             totalCoins -= 100; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
 
             let revealOverlay = document.getElementById('gacha-reveal-overlay');
-            if (revealOverlay) revealOverlay.classList.remove('show');
+            if (revealOverlay) revealOverlay.style.display = 'none';
             let resultText = document.getElementById('gacha-result');
             if (resultText) resultText.innerHTML = '';
             playSFX('chest');
 
-            // Select random slime to target - claw slides over from its resting spot and drops down
             crane.targetSlime = gachaSlimes[Math.floor(Math.random() * gachaSlimes.length)];
             crane.x = crane.targetSlime.x;
             crane.state = 'descending';
@@ -1086,15 +1140,12 @@
             
             playSFX('powerup_pickup');
 
-            // Whatever slot the crane grabbed is exactly what's awarded - no re-roll
             let itemObj = chosenItem;
-
             let invKey = 'inv_' + itemObj.id;
             let count = parseInt(storage.get(invKey) || 0);
             let isNew = count === 0;
             storage.set(invKey, count + 1);
 
-            // Draw the actual slime character as the reward - centered inside the spinning rays
             if (revealCanvas) {
                 let rctx = revealCanvas.getContext('2d');
                 rctx.clearRect(0, 0, revealCanvas.width, revealCanvas.height);
@@ -1108,14 +1159,14 @@
 
             let revealVisual = document.querySelector('#gacha-reveal-overlay .reveal-visual');
             if (revealOverlay) {
-                revealOverlay.classList.remove('show');
+                revealOverlay.style.display = 'none'; // Clear any inline configurations
                 if (revealVisual) revealVisual.classList.remove('anim-pop');
-                void revealOverlay.offsetWidth; // restart pop animation
-                revealOverlay.classList.add('show');
+                void revealOverlay.offsetWidth; // Clear paint buffer layout queue
+                revealOverlay.style.display = 'flex'; // Expose the fullscreen blocker via inline layout properties
                 if (revealVisual) revealVisual.classList.add('anim-pop');
             }
 
-            let title = isNew ? "🎉 NEW UNLOCK! 🎉<br>" : "";
+            let title = isNew ? "<span style='color:#ffcf33;'>🎉 NEW UNLOCK! 🎉</span><br>" : "";
             
             if (itemCategory === 'rare' && isNew) {
                 title = "<div style='animation: pulse 0.5s infinite; font-size: 1.5rem; color: #ff00ff; text-shadow: 0 0 15px #fff; margin-bottom: 3px;'>✨ LEGENDARY UNLOCK! ✨</div>";
@@ -1126,11 +1177,7 @@
 
             let name = itemCategory === 'rare' ? `⭐ ${itemObj.name} ⭐` : itemObj.name;
             let duplicateTag = isNew ? "" : `<span class="duplicate" style="font-size:0.85rem; display:block; color:#bdc3c7;">Duplicate (You have ${count + 1})</span>`;
-            
             if (resultText) resultText.innerHTML = `${title}<span style="color:${itemCategory === 'rare' ? '#ffd700' : '#fff'};">${name}</span>${duplicateTag}`;
-            
-            // Re-render matching replacement slime inside background pool
-            setTimeout(() => { setupGachaPhysics(); updateShopButtons(); }, 400);
         }
 
         function populateInventory() {
@@ -1139,7 +1186,6 @@
             
             if (skinsContainer) skinsContainer.innerHTML = ''; 
             if (hatsContainer) hatsContainer.innerHTML = '';
-
             if (hatsContainer) {
                 hats.forEach(h => {
                     let count = parseInt(storage.get('inv_' + h.id) || 0);
@@ -1161,11 +1207,9 @@
                     let count = parseInt(storage.get('inv_' + s.id) || 0);
                     let isRare = rareSkins.some(r => r.id === s.id);
                     let displayName = (count === 0 && isRare) ? "???" : s.name;
-                    
                     let div = document.createElement('div');
                     let isEquipped = player.color === s.id;
                     let bgStyle = s.isAnimated ? s.preview : s.color;
-                    
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
                     div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name">${displayName}</div>`;
                     if (count > 0) {
@@ -1179,9 +1223,10 @@
 
         function equipItem(type, id) {
             if (type === 'skin') {
-                player.color = id; storage.set('landSlidersSkin', id);
+                player.color = id;
+                storage.set('landSlidersSkin', id);
             } else if (type === 'hat') {
-                player.hat = id; 
+                player.hat = id;
                 if (id) storage.set('landSlidersHat', id);
                 else storage.set('landSlidersHat', '');
             }
@@ -1190,7 +1235,8 @@
         }
 
         function toggleShop() {
-            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
+            if (gameState === 'playing') { previousState = gameState;
+            gameState = 'paused'; }
             document.getElementById('shop-modal').style.display = 'block';
             buildShopUI();
             switchShopTab('gacha');
@@ -1198,7 +1244,8 @@
         }
 
         function populateAlmanac() {
-            const container = document.getElementById('almanac-items'); container.innerHTML = '';
+            const container = document.getElementById('almanac-items');
+            container.innerHTML = '';
             Object.keys(enemyDB).forEach(key => {
                 let isUnlocked = storage.get('almanac_' + key) === 'true'; let data = enemyDB[key];
                 const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
@@ -1208,19 +1255,24 @@
         }
 
         function toggleAlmanac() {
-            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
-            else if (gameState !== 'paused') { previousState = gameState; gameState = 'paused'; }
+            if (gameState === 'playing') { previousState = gameState;
+            gameState = 'paused'; }
+            else if (gameState !== 'paused') { previousState = gameState;
+            gameState = 'paused'; }
             document.getElementById('almanac-modal').style.display = 'block'; populateAlmanac(); initAudio();
         }
 
         function toggleSettings() {
-            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
-            else if (gameState !== 'paused') { previousState = gameState; gameState = 'paused'; }
+            if (gameState === 'playing') { previousState = gameState;
+            gameState = 'paused'; }
+            else if (gameState !== 'paused') { previousState = gameState;
+            gameState = 'paused'; }
             document.getElementById('settings-modal').style.display = 'block'; syncSettingsUI(); initAudio();
         }
 
         function nextLevel() {
-            level++; document.getElementById('level-modal').style.display = 'none';
+            level++;
+            document.getElementById('level-modal').style.display = 'none';
             gameState = 'playing'; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; generateLevel();
         }
 
@@ -1243,8 +1295,10 @@
             document.getElementById('music-slider').value = userSettings.musicVol;
             document.getElementById('sfx-slider').value = userSettings.sfxVol;
             let btn = document.getElementById('controls-toggle');
-            if(userSettings.invert) { btn.classList.add('active'); btn.innerText = "Inverted (Classic)"; } 
-            else { btn.classList.remove('active'); btn.innerText = "Regular"; }
+            if(userSettings.invert) { btn.classList.add('active'); btn.innerText = "Inverted (Classic)";
+            } 
+            else { btn.classList.remove('active'); btn.innerText = "Regular";
+            }
         }
 
         // Setup Event Listeners
@@ -1268,7 +1322,6 @@
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
         syncSettingsUI();
-
         function handleStart(e) {
             initAudio();
             let unlockPopup = document.getElementById('unlock-popup');
@@ -1276,21 +1329,35 @@
             if (gameState !== 'playing') return;
             isDragging = true;
             const touch = e.touches ? e.touches[0] : e; lastX = touch.clientX; lastY = touch.clientY;
-            pointerScreenX = touch.clientX; pointerScreenY = touch.clientY;
+            pointerScreenX = touch.clientX;
+            pointerScreenY = touch.clientY;
         }
         function handleMove(e) {
             if (!isDragging || gameState !== 'playing') return;
             const touch = e.touches ? e.touches[0] : e;
             let dx = touch.clientX - lastX; let dy = touch.clientY - lastY;
             let dir = userSettings.invert ? -1 : 1;
-            player.vx += dx * sensitivity * dir; player.vy += dy * sensitivity * dir;
-            player.jiggleForceX = dx * sensitivity * dir; player.jiggleForceY = dy * sensitivity * dir;
+            player.vx += dx * sensitivity * dir;
+            player.vy += dy * sensitivity * dir;
+            player.jiggleForceX = dx * sensitivity * dir;
+            player.jiggleForceY = dy * sensitivity * dir;
             lastX = touch.clientX; lastY = touch.clientY; pointerScreenX = touch.clientX; pointerScreenY = touch.clientY;
         }
-        function handleEnd() { isDragging = false; }
+        function handleEnd() { isDragging = false;
+        }
         window.addEventListener('mousedown', handleStart); window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleEnd);
-        window.addEventListener('touchstart', handleStart, {passive: false}); window.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
+        window.addEventListener('touchstart', handleStart, {passive: false});
+        window.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
 
+        // Prevent double-tap-to-zoom (mobile browsers can trigger this on rapid taps over text/UI)
+        let lastTapTime = 0;
+        document.addEventListener('touchend', function(e) {
+            const now = Date.now();
+            if (now - lastTapTime <= 350) {
+                e.preventDefault();
+            }
+            lastTapTime = now;
+        }, { passive: false, capture: true });
 
 
 
@@ -2126,19 +2193,24 @@
                 }
             }
             
-            if (gameState === 'playing' && player.activePowerup === 'lightning') {
-                ctx.fillStyle = 'rgba(249, 233, 78, 0.5)';
-                ctx.beginPath(); ctx.arc(pointerScreenX, pointerScreenY, 15 + Math.sin(Date.now()/40)*5, 0, Math.PI*2); ctx.fill();
-                ctx.strokeStyle = '#fffbe0'; ctx.lineWidth = 2; ctx.beginPath();
-                ctx.moveTo(pointerScreenX - 25, pointerScreenY); ctx.lineTo(pointerScreenX + 25, pointerScreenY);
-                ctx.moveTo(pointerScreenX, pointerScreenY - 25); ctx.lineTo(pointerScreenX, pointerScreenY + 25); ctx.stroke();
-            }
 
-            if (gameState === 'title' || gameState === 'game_over') {
-                document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
-            }
-            requestAnimationFrame(draw);
-        }
+                    if (gameState === 'playing' && player.activePowerup === 'lightning') {
+                        ctx.fillStyle = 'rgba(249, 233, 78, 0.5)';
+                        ctx.beginPath(); ctx.arc(pointerScreenX, pointerScreenY, 15 + Math.sin(Date.now()/40)*5, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#fffbe0'; ctx.lineWidth = 2; ctx.beginPath();
+                        ctx.moveTo(pointerScreenX - 25, pointerScreenY);
+                        ctx.lineTo(pointerScreenX + 25, pointerScreenY);
+                        ctx.moveTo(pointerScreenX, pointerScreenY - 25); ctx.lineTo(pointerScreenX, pointerScreenY + 25); ctx.stroke();
+                    }
+        
+                    if (gameState === 'title' || gameState === 'game_over') {
+                        document.getElementById('ui-layer').style.display = 'none';
+                        document.getElementById('hazard-warning').style.display = 'none';
+                    }
+                    
+                    // requestAnimationFrame(draw) removed! It is now handled centrally in Section 9.
+                }
+
 
 
         // ==========================================
@@ -2149,14 +2221,17 @@
             document.getElementById('title-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
             document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'flex');
-            gameState = 'playing'; camera.x = player.worldX - canvas.width / 2; camera.y = player.worldY - canvas.height / 2;
+            gameState = 'playing'; camera.x = player.worldX - canvas.width / 2;
+            camera.y = player.worldY - canvas.height / 2;
             generateLevel();
         }
 
         function resetGame() {
-            level = 1; score = 0; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; player.hazardTimer = 0;
+            level = 1;
+            score = 0; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; player.hazardTimer = 0;
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0;
-            projectiles = []; icicles = []; flameParticles = []; splashes = []; leaves = []; screenShake = 0; hives = [];
+            projectiles = []; icicles = []; flameParticles = [];
+            splashes = []; leaves = []; screenShake = 0; hives = [];
             document.getElementById('hazard-warning').style.display = 'none';
         }
 
@@ -2166,10 +2241,12 @@
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
             document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
             document.getElementById('game-over-screen').style.display = 'flex';
-            if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); }
+            if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
+            }
             document.getElementById('go-level').innerText = level; document.getElementById('go-best').innerText = highestLevel;
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
-            else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!"; }
+            else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
+            }
             else { 
                 document.getElementById('death-reason').innerText = `Killed by: ${enemyDB[reason].name}`;
                 unlockAlmanacEntry(reason);
@@ -2185,9 +2262,34 @@
             }
         }
 
-        // Initialize Main Loops
-        setInterval(update, 1000 / 60);
-        draw();
+        // Initialize Main Loops with Fixed Timestep
+        let lastTime = performance.now();
+        let accumulator = 0;
+        const timeStep = 1000 / 60; // Target 60 updates per second
+
+        function gameLoop(currentTime) {
+            // Calculate delta time
+            accumulator += currentTime - lastTime;
+            lastTime = currentTime;
+            
+            // Prevent spiral of death if tab is inactive for a long time
+            if (accumulator > 100) accumulator = 100;
+            
+            // Run physics update as many times as needed to catch up to real time
+            while (accumulator >= timeStep) {
+                update();
+                accumulator -= timeStep;
+            }
+            
+            // Draw once per frame
+            draw();
+            
+            // Requeue loop
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the loop
+        requestAnimationFrame(gameLoop);
 
     </script>
 </body>

@@ -48,7 +48,7 @@
         #pu-desc { font-size: 0.82rem; font-weight: 600; line-height: 1.15; }
         @keyframes spinIcon { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-        button { pointer-events: auto; background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: transform 0.1s; }
+        button { pointer-events: auto; background: var(--accent); color: white; border: none; padding: 10px 20px; border-radius: 20px; font-weight: bold; cursor: pointer; text-transform: uppercase; letter-spacing: 1px; transition: transform 0.1s; touch-action: manipulation; }
         button:active { transform: scale(0.95); }
         button:disabled { background: #555 !important; cursor: not-allowed; transform: none; box-shadow: none; }
         
@@ -149,7 +149,7 @@
         .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 350px; overflow-y: auto; padding: 5px; }
         .inventory-grid::-webkit-scrollbar { width: 6px; }
         .inventory-grid::-webkit-scrollbar-thumb { background: #ffcf33; border-radius: 3px; }
-        .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; }
+        .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; touch-action: manipulation; }
         .inv-item:hover { background: rgba(255,255,255,0.2); }
         .inv-item.equipped { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
         .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; }
@@ -829,6 +829,27 @@
         let gachaAnimId = null;
         let gachaCanvas, gachaCtx;
         let crane = { state: 'idle', x: 150, y: 20, speed: 5, targetSlime: null, restY: 20 };
+        let gachaGravityX = 0, gachaGravityY = 0.25;
+        let gachaHatBubbleGradCache = null, gachaHatBubbleGradRadius = null;
+        let tiltPermissionRequested = false;
+        function handleDeviceTilt(e) {
+            if (e.gamma === null || e.beta === null) return;
+            let gamma = Math.max(-45, Math.min(45, e.gamma)); // left/right lean
+            let beta = Math.max(-45, Math.min(45, e.beta));   // forward/back lean
+            gachaGravityX = (gamma / 45) * 0.35;
+            gachaGravityY = 0.25 + (beta / 45) * 0.15;
+        }
+        function requestTiltPermission() {
+            if (tiltPermissionRequested) return;
+            tiltPermissionRequested = true;
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission().then(state => {
+                    if (state === 'granted') window.addEventListener('deviceorientation', handleDeviceTilt);
+                }).catch(() => {});
+            } else if (typeof DeviceOrientationEvent !== 'undefined') {
+                window.addEventListener('deviceorientation', handleDeviceTilt);
+            }
+        }
         function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
         window.addEventListener('resize', resize); resize();
         document.querySelectorAll('button').forEach(btn => { btn.addEventListener('mousedown', () => playSFX('click')); });
@@ -886,6 +907,38 @@
             updateShopButtons();
         }
 
+        // These live at module scope (rather than being redeclared inside setupGachaPhysics)
+        // so the window-level listeners below can be attached exactly once. Previously they
+        // were recreated as fresh closures on every setupGachaPhysics() call (shop open AND
+        // every gacha reveal dismissal), which meant a new, undeletable set of mousemove/
+        // touchmove/mouseup/touchend listeners piled up on window each time - a growing stack
+        // that kept firing (and costing CPU) for the rest of the session, including during
+        // normal gameplay dragging. That accumulation was the source of the "sometimes" lag.
+        let gachaListenersAttached = false;
+        function getGachaCanvasMousePos(e) {
+            let rect = gachaCanvas.getBoundingClientRect();
+            let clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let clientY = e.touches ? e.touches[0].clientY : e.clientY;
+
+            // Track mouse scaled to internal resolution coordinates
+            let scaleX = gachaCanvas.width / rect.width;
+            let scaleY = gachaCanvas.height / rect.height;
+
+            return {
+                x: (clientX - rect.left) * scaleX,
+                y: (clientY - rect.top) * scaleY
+            };
+        }
+        function handleGachaMove(e) {
+            if (!draggedGachaSlime || crane.state !== 'idle') return;
+            let pos = getGachaCanvasMousePos(e);
+            draggedGachaSlime.vx = (pos.x - draggedGachaSlime.x) * 0.4;
+            draggedGachaSlime.vy = (pos.y - draggedGachaSlime.y) * 0.4;
+            draggedGachaSlime.x = Math.max(draggedGachaSlime.radius, Math.min(300 - draggedGachaSlime.radius, pos.x));
+            draggedGachaSlime.y = Math.max(draggedGachaSlime.radius, Math.min(240 - draggedGachaSlime.radius, pos.y));
+        }
+        function handleGachaUp() { draggedGachaSlime = null; }
+
         function setupGachaPhysics() {
             gachaCanvas = document.getElementById('gacha-canvas');
             if (!gachaCanvas) return;
@@ -927,24 +980,9 @@
                 });
             }
 
-            function getCanvasMousePos(e) {
-                let rect = gachaCanvas.getBoundingClientRect();
-                let clientX = e.touches ? e.touches[0].clientX : e.clientX;
-                let clientY = e.touches ? e.touches[0].clientY : e.clientY;
-                
-                // Track mouse scaled to internal resolution coordinates
-                let scaleX = gachaCanvas.width / rect.width;
-                let scaleY = gachaCanvas.height / rect.height;
-                
-                return { 
-                    x: (clientX - rect.left) * scaleX, 
-                    y: (clientY - rect.top) * scaleY 
-                };
-            }
-
             gachaCanvas.onmousedown = gachaCanvas.ontouchstart = (e) => {
                 if (crane.state !== 'idle') return;
-                let pos = getCanvasMousePos(e);
+                let pos = getGachaCanvasMousePos(e);
                 for (let slime of gachaSlimes) {
                     let dx = slime.x - pos.x;
                     let dy = slime.y - pos.y;
@@ -954,20 +992,14 @@
                     }
                 }
             };
-            window.addEventListener('mousemove', handleGachaMove);
-            window.addEventListener('touchmove', handleGachaMove, { passive: false });
-            function handleGachaMove(e) {
-                if (!draggedGachaSlime || crane.state !== 'idle') return;
-                let pos = getCanvasMousePos(e);
-                draggedGachaSlime.vx = (pos.x - draggedGachaSlime.x) * 0.4;
-                draggedGachaSlime.vy = (pos.y - draggedGachaSlime.y) * 0.4;
-                draggedGachaSlime.x = Math.max(draggedGachaSlime.radius, Math.min(300 - draggedGachaSlime.radius, pos.x));
-                draggedGachaSlime.y = Math.max(draggedGachaSlime.radius, Math.min(240 - draggedGachaSlime.radius, pos.y));
-            }
 
-            window.addEventListener('mouseup', handleGachaUp);
-            window.addEventListener('touchend', handleGachaUp);
-            function handleGachaUp() { draggedGachaSlime = null; }
+            if (!gachaListenersAttached) {
+                gachaListenersAttached = true;
+                window.addEventListener('mousemove', handleGachaMove);
+                window.addEventListener('touchmove', handleGachaMove, { passive: false });
+                window.addEventListener('mouseup', handleGachaUp);
+                window.addEventListener('touchend', handleGachaUp);
+            }
         }
 
         function loopGachaPhysics() {
@@ -977,9 +1009,18 @@
             for (let i = 0; i < gachaSlimes.length; i++) {
                 let s = gachaSlimes[i];
                 if (s !== draggedGachaSlime && (!crane.targetSlime || s !== crane.targetSlime || crane.state !== 'ascending')) {
-                    s.vy += 0.25;
+                    s.vx += gachaGravityX;
+                    s.vy += gachaGravityY;
                     s.vx *= 0.98;
                     s.vy *= 0.98;
+                    // Small chance each frame for a living slime to hop/scoot on its own; with ~28
+                    // slimes in the pool this keeps activity commonplace without every slime moving
+                    // at once. Hat bubbles are accessories, not living slimes, so they never self-hop -
+                    // they only move when knocked around by a slime or dragged by the player.
+                    if (s.category !== 'hat' && Math.random() < 0.0015) {
+                        s.vx += (Math.random() - 0.5) * 7;
+                        s.vy -= 5 + Math.random() * 4;
+                    }
                     s.x += s.vx;
                     s.y += s.vy;
 
@@ -997,19 +1038,28 @@
                     if (dist < minDist) {
                         let overlap = minDist - dist;
                         let nx = dx / (dist || 1); let ny = dy / (dist || 1);
-                        if (s !== draggedGachaSlime) { s.x -= nx * overlap * 0.5; s.y -= ny * overlap * 0.5; s.vx -= nx * overlap * 0.1; s.vy -= ny * overlap * 0.1; }
-                        if (s2 !== draggedGachaSlime) { s2.x += nx * overlap * 0.5; s2.y += ny * overlap * 0.5; s2.vx += nx * overlap * 0.1; s2.vy += ny * overlap * 0.1; }
+                        // Push impulse scales with how fast the two are approaching each other, so a
+                        // slime landing from a big hop (or being dragged fast) shoves its neighbors
+                        // aside with real force instead of barely nudging them.
+                        let closingSpeed = Math.max(0, -( (s2.vx - s.vx) * nx + (s2.vy - s.vy) * ny ));
+                        let impulse = overlap * 0.4 + closingSpeed * 0.5;
+                        if (s !== draggedGachaSlime) { s.x -= nx * overlap * 0.5; s.y -= ny * overlap * 0.5; s.vx -= nx * impulse; s.vy -= ny * impulse; }
+                        if (s2 !== draggedGachaSlime) { s2.x += nx * overlap * 0.5; s2.y += ny * overlap * 0.5; s2.vx += nx * impulse; s2.vy += ny * impulse; }
                     }
                 }
 
                 if (s.category === 'hat') {
                     gachaCtx.save();
                     gachaCtx.translate(s.x, s.y);
-                    let bubbleGrad = gachaCtx.createRadialGradient(-s.radius * 0.3, -s.radius * 0.3, 1, 0, 0, s.radius);
-                    bubbleGrad.addColorStop(0, 'rgba(255,255,255,0.9)');
-                    bubbleGrad.addColorStop(0.4, 'rgba(200,230,255,0.5)');
-                    bubbleGrad.addColorStop(1, 'rgba(120,180,255,0.35)');
-                    gachaCtx.fillStyle = bubbleGrad;
+                    if (!gachaHatBubbleGradCache || gachaHatBubbleGradRadius !== s.radius) {
+                        let bg = gachaCtx.createRadialGradient(-s.radius * 0.3, -s.radius * 0.3, 1, 0, 0, s.radius);
+                        bg.addColorStop(0, 'rgba(255,255,255,0.9)');
+                        bg.addColorStop(0.4, 'rgba(200,230,255,0.5)');
+                        bg.addColorStop(1, 'rgba(120,180,255,0.35)');
+                        gachaHatBubbleGradCache = bg;
+                        gachaHatBubbleGradRadius = s.radius;
+                    }
+                    gachaCtx.fillStyle = gachaHatBubbleGradCache;
                     gachaCtx.beginPath(); gachaCtx.arc(0, 0, s.radius, 0, Math.PI * 2); gachaCtx.fill();
                     gachaCtx.strokeStyle = 'rgba(255,255,255,0.85)'; gachaCtx.lineWidth = 1.5;
                     gachaCtx.beginPath(); gachaCtx.arc(0, 0, s.radius, 0, Math.PI * 2); gachaCtx.stroke();
@@ -1238,6 +1288,7 @@
             if (gameState === 'playing') { previousState = gameState;
             gameState = 'paused'; }
             document.getElementById('shop-modal').style.display = 'block';
+            requestTiltPermission();
             buildShopUI();
             switchShopTab('gacha');
             initAudio();
@@ -1349,9 +1400,12 @@
         window.addEventListener('touchstart', handleStart, {passive: false});
         window.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
 
-        // Prevent double-tap-to-zoom (mobile browsers can trigger this on rapid taps over text/UI)
+        // Prevent double-tap-to-zoom (mobile browsers can trigger this on rapid taps over text/UI),
+        // but never intercept taps on buttons or clickable controls so fast tapping still works.
         let lastTapTime = 0;
         document.addEventListener('touchend', function(e) {
+            const interactive = e.target.closest('button, .inv-item, .shop-tab, .toggle-btn, [onclick]');
+            if (interactive) { lastTapTime = 0; return; }
             const now = Date.now();
             if (now - lastTapTime <= 350) {
                 e.preventDefault();
@@ -1361,7 +1415,7 @@
 
 
 
-        // ==========================================
+
         // SECTION 7 - GAME LOGIC & PHYSICS
         // Central update loop, physics calculations, AI, and collision.
         // ==========================================
@@ -1527,26 +1581,48 @@
                         }
 
                         if (e.type !== 'hopper' || e.state === 'idle') {
-                            trees.forEach(t => { let d = dist(e.x, e.y, t.x, t.y); if (d < e.radius + t.radius * 0.8) {
-                                    let overlap = (e.radius + t.radius * 0.8) - d; let pushAngle = Math.atan2(e.y - t.y, e.x - t.x);
+                            for (let ti = 0; ti < trees.length; ti++) {
+                                let t = trees[ti];
+                                let dx = e.x - t.x, dy = e.y - t.y;
+                                let threshold = e.radius + t.radius * 0.8;
+                                let distSq = dx*dx + dy*dy;
+                                if (distSq < threshold*threshold) {
+                                    let d = Math.sqrt(distSq);
+                                    let overlap = threshold - d; let pushAngle = Math.atan2(dy, dx);
                                     e.x += Math.cos(pushAngle) * overlap; e.y += Math.sin(pushAngle) * overlap;
-                                    if (e.type === 'wanderer' || e.type === 'dasher') e.angle += (Math.random() * 0.5) + 0.5; } });
+                                    if (e.type === 'wanderer' || e.type === 'dasher') e.angle += (Math.random() * 0.5) + 0.5;
+                                }
+                            }
                         }
                         if (e.type !== 'hopper' || e.state === 'idle') {
-                            if (dist(player.worldX, player.worldY, e.x, e.y) < player.radius + e.radius - 5) triggerGameOver(e.type);
+                            let pdx = player.worldX - e.x, pdy = player.worldY - e.y;
+                            let pth = player.radius + e.radius - 5;
+                            if (pth > 0 && pdx*pdx + pdy*pdy < pth*pth) triggerGameOver(e.type);
                         }
                     }
 
-                    trees.forEach(t => {
-                        let collisionDist = player.radius * 0.4 + t.radius * 0.5; let d = dist(player.worldX, player.worldY, t.x, t.y);
-                        if (d < collisionDist) { let overlap = collisionDist - d; let angle = Math.atan2(player.worldY - t.y, player.worldX - t.x);
-                            player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6; }
-                    });
-                    hives.forEach(h => {
-                        let collisionDist = player.radius * 0.4 + h.radius; let d = dist(player.worldX, player.worldY, h.x, h.y);
-                        if (d < collisionDist) { let overlap = collisionDist - d; let angle = Math.atan2(player.worldY - h.y, player.worldX - h.x);
-                            player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6; }
-                    });
+                    for (let ti = 0; ti < trees.length; ti++) {
+                        let t = trees[ti];
+                        let dx = player.worldX - t.x, dy = player.worldY - t.y;
+                        let collisionDist = player.radius * 0.4 + t.radius * 0.5;
+                        let distSq = dx*dx + dy*dy;
+                        if (distSq < collisionDist*collisionDist) {
+                            let d = Math.sqrt(distSq);
+                            let overlap = collisionDist - d; let angle = Math.atan2(dy, dx);
+                            player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
+                        }
+                    }
+                    for (let hi = 0; hi < hives.length; hi++) {
+                        let h = hives[hi];
+                        let dx = player.worldX - h.x, dy = player.worldY - h.y;
+                        let collisionDist = player.radius * 0.4 + h.radius;
+                        let distSq = dx*dx + dy*dy;
+                        if (distSq < collisionDist*collisionDist) {
+                            let d = Math.sqrt(distSq);
+                            let overlap = collisionDist - d; let angle = Math.atan2(dy, dx);
+                            player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
+                        }
+                    }
                     if (goal.active && goal.collected >= goal.required && dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius - 10) {
                         gameState = 'level_end';
                         if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); }
@@ -1559,7 +1635,12 @@
                 let p = projectiles[i];
                 if (!isNearScreen(p.x, p.y)) { projectiles.splice(i, 1); continue; }
                 p.x += p.vx; p.y += p.vy; let hitObstacle = false;
-                for (let t of trees) { if (dist(p.x, p.y, t.x, t.y) < p.radius + t.radius * 0.8) { hitObstacle = true; break; } }
+                for (let ti = 0; ti < trees.length; ti++) {
+                    let t = trees[ti];
+                    let dx = p.x - t.x, dy = p.y - t.y;
+                    let th = p.radius + t.radius * 0.8;
+                    if (dx*dx + dy*dy < th*th) { hitObstacle = true; break; }
+                }
                 if (hitObstacle) { projectiles.splice(i, 1); continue; }
                 
                 if (gameState === 'playing' && dist(player.worldX, player.worldY, p.x, p.y) < player.radius + p.radius) {
@@ -1904,15 +1985,15 @@
             let renderQueue = [];
             trees.forEach(t => { if(isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) renderQueue.push({type: t.type, obj: t}); });
             hives.forEach(h => { if(isOnScreen(h.x + tiltX, h.y + tiltY, cullBuffer)) renderQueue.push({type: 'hive', obj: h}); });
-            enemies.forEach(e => renderQueue.push({type: 'enemy', obj: e}));
-            items.filter(c => !c.collected).forEach(c => renderQueue.push({type: c.type, obj: c}));
-            projectiles.forEach(p => renderQueue.push({type: 'projectile', obj: p}));
-            icicles.forEach(ic => renderQueue.push({type: 'icicle', obj: ic}));
-            flameParticles.forEach(f => renderQueue.push({type: 'flame', obj: f}));
-            leaves.forEach(l => renderQueue.push({type: 'leaf', obj: l}));
-            splashes.forEach(s => renderQueue.push({type: 'splash', obj: s}));
-            powerups.filter(p => !p.collected).forEach(p => renderQueue.push({type: 'powerup', obj: p}));
-            if (chest) renderQueue.push({type: 'chest', obj: chest});
+            enemies.forEach(e => { if(isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) renderQueue.push({type: 'enemy', obj: e}); });
+            items.filter(c => !c.collected).forEach(c => { if(isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) renderQueue.push({type: c.type, obj: c}); });
+            projectiles.forEach(p => { if(isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) renderQueue.push({type: 'projectile', obj: p}); });
+            icicles.forEach(ic => { if(isOnScreen(ic.x + tiltX, ic.y + tiltY, cullBuffer)) renderQueue.push({type: 'icicle', obj: ic}); });
+            flameParticles.forEach(f => { if(isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) renderQueue.push({type: 'flame', obj: f}); });
+            leaves.forEach(l => { if(isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) renderQueue.push({type: 'leaf', obj: l}); });
+            splashes.forEach(s => { if(isOnScreen(s.x + tiltX, s.y + tiltY, cullBuffer)) renderQueue.push({type: 'splash', obj: s}); });
+            powerups.filter(p => !p.collected).forEach(p => { if(isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) renderQueue.push({type: 'powerup', obj: p}); });
+            if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) renderQueue.push({type: 'chest', obj: chest});
             renderQueue.push({type: 'player', obj: player});
             renderQueue.sort((a, b) => { let baseA = (a.obj.y || a.obj.worldY) + (a.obj.radius || 0); let baseB = (b.obj.y || b.obj.worldY) + (b.obj.radius || 0); return baseA - baseB; });
             

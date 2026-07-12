@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Land Sliders Clone</title>
+    <title>Slime Sliders</title>
+
     <style>
         :root {
             --bg-color: #6cce75;
@@ -81,12 +82,44 @@
         .enemy-name { font-weight: bold; color: #ffcf33; font-size: 1.1rem; }
         .enemy-desc { font-size: 0.85rem; color: #ccc; margin-top: 5px; }
         .locked-entry { filter: grayscale(100%) brightness(0.5); opacity: 0.6; }
+
+        /* Gacha & Inventory UI Styles */
+        .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 10px; }
+        .shop-tab { background: #6c7a89; border: none; padding: 8px 20px; border-radius: 20px; color: white; cursor: pointer; font-weight: bold; transition: 0.2s; }
+        .shop-tab.active { background: var(--accent); transform: scale(1.05); }
+        .gacha-container { text-align: center; padding: 10px; }
+        .gacha-machine { width: 150px; height: 180px; margin: 0 auto 20px; border-radius: 20px; border: 5px solid #555; position: relative; overflow: hidden; display: flex; justify-content: center; align-items: center; background: radial-gradient(circle, #333 0%, #111 100%); box-shadow: inset 0 0 20px #000; }
+        .gacha-machine.shaking { animation: gachaShake 0.4s infinite; border-color: #ffcf33; }
+        .gacha-orb { width: 80px; height: 80px; border-radius: 50%; position: absolute; box-shadow: inset -10px -10px 20px rgba(0,0,0,0.5); display: none; z-index: 2; border: 2px solid rgba(255,255,255,0.5); }
+        .gacha-btn { font-size: 1.2rem; padding: 15px 30px; background: #ffcf33; color: #000; border: none; border-radius: 30px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 15px; width: 80%; max-width: 300px; }
+        .gacha-btn:active { transform: translateY(5px); box-shadow: none; }
+        .gacha-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; cursor: not-allowed; }
+        .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 50px; text-shadow: 0 2px 5px #000; }
+        .gacha-result span.duplicate { color: #ffcf33; font-size: 0.9rem; display: block; margin-top: 5px; }
+
+        .inventory-container { display: none; }
+        .inventory-section-title { text-align: left; margin: 15px 0 10px 5px; font-size: 1.1rem; color: #ffcf33; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
+        .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 350px; overflow-y: auto; padding: 5px; }
+        .inventory-grid::-webkit-scrollbar { width: 6px; }
+        .inventory-grid::-webkit-scrollbar-thumb { background: #ffcf33; border-radius: 3px; }
+        .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; }
+        .inv-item:hover { background: rgba(255,255,255,0.2); }
+        .inv-item.equipped { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
+        .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; }
+        .inv-preview { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 8px; border: 2px solid rgba(255,255,255,0.5); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+        .inv-name { font-size: 0.75rem; font-weight: bold; word-wrap: break-word; line-height: 1.2; }
+        .inv-count { position: absolute; top: -5px; right: -5px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; }
+
+        @keyframes gachaShake { 0% { transform: translate(2px, 2px) rotate(0deg); } 25% { transform: translate(-2px, -2px) rotate(-2deg); } 50% { transform: translate(-4px, 0px) rotate(2deg); } 75% { transform: translate(4px, 2px) rotate(0deg); } 100% { transform: translate(2px, -2px) rotate(-2deg); } }
+        @keyframes gachaPop { 0% { transform: scale(0); opacity: 0; } 60% { transform: scale(1.3); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        .anim-pop { animation: gachaPop 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
     </style>
+
 </head>
 <body>
     <div id="title-screen">
-        <h1>LAND SLIDERS</h1>
-        <p>Drag the world to move. Collect coins to unlock the Goal!</p>
+        <h1>SLIME SLIDERS</h1>
+        <p>Swipe to move. Collect coins to unlock the Goal!</p>
         <button id="play-btn" class="menu-btn" style="background: var(--accent)">Play</button>
         <button id="title-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
         <button id="title-settings-btn" class="menu-btn" style="background: #6c7a89;">Settings</button>
@@ -160,6 +193,7 @@
     </div>
 
     <script>
+
         // ==========================================
         // SECTION 2 - GLOBAL STATE & DATA DEFINITIONS
         // Handles canvas setup, persistent storage, 
@@ -196,10 +230,11 @@
 
         let player = {
             worldX: 0, worldY: 0, vx: 0, vy: 0, radius: 22,
-            color: storage.get('landSlidersSkin') || '#00ffcc',
+            color: storage.get('landSlidersSkin') || 'cyan',
+            hat: storage.get('landSlidersHat') || null,
             jiggleForceX: 0, jiggleForceY: 0, activePowerup: null, powerupDuration: 0,
             powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0
-         };
+        };
 
         let pointerScreenX = window.innerWidth / 2; 
         let pointerScreenY = window.innerHeight / 2;
@@ -239,13 +274,44 @@
             { id: 'rampage',   name: 'Rampage',     desc: 'Invincible',  icon: '💪', color: '#ff477e', duration: 8, radius: 0,   tick: 0,    mode: 'contact',  coinDrop: [3,5] }
         ];
         
-        const skins = [
-            { name: "Cyan", color: "#00ffcc", preview: "#00ffcc", price: 0 },
-            { name: "Pink", color: "#ff8da1", preview: "#ff8da1", price: 500 },
-            { name: "Golden", color: "#ffd700", preview: "#ffd700", price: 1000 },
-            { name: "Ninja", color: "#2b2d42", preview: "#2b2d42", price: 2500 },
-            { name: "Rainbow", color: "rainbow", preview: "linear-gradient(45deg, red, orange, yellow, green, blue, purple)", price: 9999 }
+        // Gacha Loot Tables
+        const basicSkins = [
+            { id: "cyan", name: "Cyan", color: "#00ffcc" }, { id: "pink", name: "Pink", color: "#ff8da1" },
+            { id: "red", name: "Red", color: "#e74c3c" }, { id: "orange", name: "Orange", color: "#e67e22" },
+            { id: "yellow", name: "Yellow", color: "#f1c40f" }, { id: "green", name: "Green", color: "#2ecc71" },
+            { id: "blue", name: "Blue", color: "#3498db" }, { id: "indigo", name: "Indigo", color: "#3f51b5" },
+            { id: "violet", name: "Violet", color: "#9b59b6" }, { id: "pastel_pink", name: "Pastel Pink", color: "#ffb3ba" },
+            { id: "pastel_orange", name: "Pastel Orange", color: "#ffdfba" }, { id: "pastel_yellow", name: "Pastel Yellow", color: "#ffffba" },
+            { id: "pastel_green", name: "Pastel Green", color: "#baffc9" }, { id: "pastel_blue", name: "Pastel Blue", color: "#bae1ff" },
+            { id: "white", name: "White", color: "#ffffff" }, { id: "black", name: "Black", color: "#2b2d42" },
+            { id: "gray", name: "Gray", color: "#8d99ae" }, { id: "brown", name: "Brown", color: "#795548" },
+            { id: "teal", name: "Teal", color: "#009688" }, { id: "lime", name: "Lime", color: "#cddc39" }
         ];
+
+        const rareSkins = [
+            { id: "rainbow", name: "Rainbow", preview: "linear-gradient(45deg, red, orange, yellow, green, blue, purple)", isAnimated: true },
+            { id: "gold", name: "Pure Gold", preview: "linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)", isAnimated: true },
+            { id: "lava", name: "Magma", preview: "radial-gradient(circle, #ff9f1c, #d32f2f)", isAnimated: true },
+            { id: "galaxy", name: "Galaxy", preview: "radial-gradient(circle, #7597de, #2b1055)", isAnimated: true },
+            { id: "ice", name: "Glacier", preview: "linear-gradient(135deg, #a5f2f3, #ffffff)", isAnimated: true },
+            { id: "toxic", name: "Toxic Sludge", preview: "radial-gradient(circle, #39ff14, #003300)", isAnimated: true },
+            { id: "void", name: "The Void", preview: "#050505", isAnimated: true },
+            { id: "sparkle", name: "Fairy Dust", preview: "#ffb6c1", isAnimated: true },
+            { id: "glitch", name: "Glitch", preview: "linear-gradient(90deg, #0ff, #f0f)", isAnimated: true },
+            { id: "neon", name: "Neon Pulse", preview: "linear-gradient(45deg, #ff00ff, #00ffff)", isAnimated: true }
+        ];
+
+        const hats = [
+            { id: "cowboy", name: "Cowboy Hat", icon: "🤠" }, { id: "tophat", name: "Top Hat", icon: "🎩" },
+            { id: "crown", name: "Crown", icon: "👑" }, { id: "beanie", name: "Beanie", icon: "🧢" },
+            { id: "bow", name: "Cute Bow", icon: "🎀" }, { id: "halo", name: "Halo", icon: "👼" },
+            { id: "horns", name: "Demon Horns", icon: "😈" }, { id: "party", name: "Party Hat", icon: "🎉" },
+            { id: "pirate", name: "Pirate Hat", icon: "🏴‍☠️" }, { id: "cap", name: "Baseball Cap", icon: "🧢" }
+        ];
+
+        // Ensure default basic skin is unlocked
+        if (!storage.get('inv_cyan')) storage.set('inv_cyan', 1);
+
 
         // ==========================================
         // SECTION 3 - AUDIO ENGINE
@@ -708,19 +774,198 @@
 
         document.querySelectorAll('button').forEach(btn => { btn.addEventListener('mousedown', () => playSFX('click')); });
 
-        function populateShop() {
-            const container = document.getElementById('shop-items'); container.innerHTML = '';
-            skins.forEach(skin => {
-                const div = document.createElement('div'); div.className = 'shop-item';
-                const isUnlocked = storage.get('unlocked_' + skin.color) === 'true' || skin.price === 0;
-                const canAfford = totalCoins >= skin.price; const isEquipped = skin.color === player.color;
-                const btn = document.createElement('button');
-                if (isEquipped) { btn.style.background = '#4caf50'; btn.innerText = 'EQUIPPED'; btn.disabled = true; } 
-                else if (isUnlocked) { btn.style.background = 'var(--accent)'; btn.innerText = 'SELECT'; btn.onclick = () => buySkin(skin.color, 0); } 
-                else { btn.style.background = canAfford ? 'var(--accent)' : '#555'; btn.innerText = '🪙 ' + skin.price; btn.disabled = !canAfford; btn.onclick = () => buySkin(skin.color, skin.price); }
-                div.innerHTML = `<div style="display:flex; align-items:center; gap:10px;"><div class="skin-preview" style="background:${skin.preview}; border: 2px solid rgba(255,255,255,0.2);"></div><span style="font-weight:bold;">${skin.name}</span></div>`;
-                div.appendChild(btn); container.appendChild(div);
-            });
+        function buildShopUI() {
+            const container = document.getElementById('shop-items');
+            container.innerHTML = `
+                <div class="shop-tabs">
+                    <button class="shop-tab active" id="tab-gacha">Gacha</button>
+                    <button class="shop-tab" id="tab-skins">Skins</button>
+                    <button class="shop-tab" id="tab-hats">Hats</button>
+                </div>
+                
+                <div id="gacha-view" class="gacha-container">
+                    <div class="gacha-machine" id="gacha-machine">
+                        <div class="gacha-orb" id="gacha-orb"></div>
+                    </div>
+                    <button class="gacha-btn" id="btn-pull">Pull (100 🪙)</button>
+                    <div class="gacha-result" id="gacha-result"></div>
+                </div>
+
+                <div id="skins-view" class="inventory-container" style="display: none;">
+                    <div class="inventory-grid" id="inv-skins"></div>
+                </div>
+
+                <div id="hats-view" class="inventory-container" style="display: none;">
+                    <button id="btn-remove-hat" class="menu-btn" style="background:#e74c3c; padding:8px 15px; font-size:0.9rem; margin-bottom:10px;">Remove Hat</button>
+                    <div class="inventory-grid" id="inv-hats"></div>
+                </div>
+            `;
+
+            document.getElementById('tab-gacha').addEventListener('click', () => switchShopTab('gacha'));
+            document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
+            document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
+            document.getElementById('btn-pull').addEventListener('click', pullGacha);
+            document.getElementById('btn-remove-hat').addEventListener('click', () => equipItem('hat', null));
+            updateShopButtons();
+        }
+
+        function switchShopTab(tab) {
+            document.getElementById('tab-gacha').classList.toggle('active', tab === 'gacha');
+            document.getElementById('tab-skins').classList.toggle('active', tab === 'skins');
+            document.getElementById('tab-hats').classList.toggle('active', tab === 'hats');
+            
+            document.getElementById('gacha-view').style.display = tab === 'gacha' ? 'block' : 'none';
+            document.getElementById('skins-view').style.display = tab === 'skins' ? 'block' : 'none';
+            document.getElementById('hats-view').style.display = tab === 'hats' ? 'block' : 'none';
+            
+            if (tab === 'skins' || tab === 'hats') populateInventory();
+        }
+
+        function updateShopButtons() {
+            let pullBtn = document.getElementById('btn-pull');
+            if (pullBtn) pullBtn.disabled = totalCoins < 100;
+            document.getElementById('shop-coin-display').innerText = totalCoins;
+        }
+
+        function pullGacha() {
+            if (totalCoins < 100) return;
+            totalCoins -= 100; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
+            
+            let machine = document.getElementById('gacha-machine');
+            let orb = document.getElementById('gacha-orb');
+            let resultText = document.getElementById('gacha-result');
+            let pullBtn = document.getElementById('btn-pull');
+
+            pullBtn.disabled = true;
+            resultText.innerHTML = "Rolling...";
+            machine.classList.add('shaking');
+            orb.style.display = 'none';
+            orb.classList.remove('anim-pop');
+            playSFX('chest'); // Reuse chest sound for gacha roll
+
+            setTimeout(() => {
+                machine.classList.remove('shaking');
+                playSFX('powerup_pickup');
+
+                // RNG Logic: 5% Rare, 20% Hat, 75% Basic
+                let roll = Math.random() * 100;
+                let itemCategory, itemObj, orbColor, isNew;
+
+                if (roll < 5) {
+                    itemCategory = 'rare';
+                    itemObj = rareSkins[Math.floor(Math.random() * rareSkins.length)];
+                    orbColor = itemObj.preview;
+                } else if (roll < 25) {
+                    itemCategory = 'hat';
+                    itemObj = hats[Math.floor(Math.random() * hats.length)];
+                    orbColor = '#9b59b6'; // Purple orb for hats
+                } else {
+                    itemCategory = 'basic';
+                    itemObj = basicSkins[Math.floor(Math.random() * basicSkins.length)];
+                    orbColor = itemObj.color;
+                }
+
+                // Add to inventory
+                let invKey = 'inv_' + itemObj.id;
+                let count = parseInt(storage.get(invKey) || 0);
+                isNew = count === 0;
+                storage.set(invKey, count + 1);
+
+                // UI Reveal
+                orb.style.background = orbColor;
+                orb.style.boxShadow = "inset -10px -10px 20px rgba(0,0,0,0.5)"; // Reset box shadow
+                if (itemCategory === 'hat') orb.innerHTML = `<div style="font-size:2.5rem; text-align:center; line-height:80px;">${itemObj.icon}</div>`;
+                else orb.innerHTML = '';
+                
+                orb.style.display = 'block';
+                orb.classList.add('anim-pop');
+
+                let title = isNew ? "🎉 NEW UNLOCK! 🎉<br>" : "";
+                
+                // Extra Celebration for New Rare Skins
+                if (itemCategory === 'rare' && isNew) {
+                    title = "<div style='animation: pulse 0.5s infinite; font-size: 1.6rem; color: #ff00ff; text-shadow: 0 0 15px #fff; margin-bottom: 5px;'>✨ LEGENDARY UNLOCK! ✨</div>";
+                    orb.style.boxShadow = "0 0 30px 10px #ffd700, inset -10px -10px 20px rgba(0,0,0,0.5)";
+                    playSFX('chest');
+                    setTimeout(() => playSFX('powerup_pickup'), 150);
+                    setTimeout(() => playSFX('coin', 1.5), 300);
+                }
+
+                let name = itemCategory === 'rare' ? `⭐ ${itemObj.name} ⭐` : itemObj.name;
+                let duplicateTag = isNew ? "" : `<span class="duplicate">Duplicate (You have ${count + 1})</span>`;
+                
+                resultText.innerHTML = `${title}<span style="color:${itemCategory === 'rare' ? '#ffd700' : '#fff'};">${name}</span>${duplicateTag}`;
+                
+                updateShopButtons(); // Re-evaluate if they can afford another pull
+            }, 1000);
+        }
+
+        function populateInventory() {
+            const skinsContainer = document.getElementById('inv-skins');
+            const hatsContainer = document.getElementById('inv-hats');
+            
+            if (skinsContainer) skinsContainer.innerHTML = ''; 
+            if (hatsContainer) hatsContainer.innerHTML = '';
+
+            // Render Hats
+            if (hatsContainer) {
+                hats.forEach(h => {
+                    let count = parseInt(storage.get('inv_' + h.id) || 0);
+                    let div = document.createElement('div');
+                    let isEquipped = player.hat === h.id;
+                    div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
+                    div.innerHTML = `<div class="inv-preview" style="background:#2b2d42; display:flex; justify-content:center; align-items:center; font-size:1.5rem;">${h.icon}</div><div class="inv-name">${h.name}</div>`;
+                    if (count > 0) {
+                        div.innerHTML += `<div class="inv-count">${count}</div>`;
+                        div.onclick = () => equipItem('hat', h.id);
+                    }
+                    hatsContainer.appendChild(div);
+                });
+            }
+
+            // Render Skins
+            if (skinsContainer) {
+                let allSkins = [...basicSkins, ...rareSkins];
+                allSkins.forEach(s => {
+                    let count = parseInt(storage.get('inv_' + s.id) || 0);
+                    let isRare = rareSkins.some(r => r.id === s.id);
+                    
+                    // Display ??? for locked rare skins
+                    let displayName = (count === 0 && isRare) ? "???" : s.name;
+                    
+                    let div = document.createElement('div');
+                    let isEquipped = player.color === s.id;
+                    let bgStyle = s.isAnimated ? s.preview : s.color;
+                    
+                    div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
+                    div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name">${displayName}</div>`;
+                    if (count > 0) {
+                        div.innerHTML += `<div class="inv-count">${count}</div>`;
+                        div.onclick = () => equipItem('skin', s.id);
+                    }
+                    skinsContainer.appendChild(div);
+                });
+            }
+        }
+
+        function equipItem(type, id) {
+            if (type === 'skin') {
+                player.color = id; storage.set('landSlidersSkin', id);
+            } else if (type === 'hat') {
+                player.hat = id; 
+                if (id) storage.set('landSlidersHat', id);
+                else storage.set('landSlidersHat', ''); // Clear it
+            }
+            playSFX('click');
+            populateInventory();
+        }
+
+        function toggleShop() {
+            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
+            document.getElementById('shop-modal').style.display = 'block';
+            buildShopUI();
+            switchShopTab('gacha');
+            initAudio();
         }
 
         function populateAlmanac() {
@@ -731,19 +976,6 @@
                 div.innerHTML = `<div class="enemy-pic">${isUnlocked ? data.icon : '❓'}</div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? data.name : 'Unknown Entity'}</div><div class="enemy-desc">${isUnlocked ? data.desc : 'Encounter this creature to unlock its details.'}</div></div>`;
                 container.appendChild(div);
             });
-        }
-
-        function buySkin(color, price) {
-            if (price > 0) { totalCoins -= price; storage.set('unlocked_' + color, 'true'); }
-            player.color = color; storage.set('landSlidersSkin', color); storage.set('landSlidersCoins', totalCoins);
-            populateShop(); updateHUD(); playSFX('coin');
-        }
-
-        function toggleShop() {
-            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
-            document.getElementById('shop-modal').style.display = 'block';
-            document.getElementById('shop-coin-display').innerText = totalCoins;
-            populateShop(); initAudio();
         }
 
         function toggleAlmanac() {
@@ -822,6 +1054,8 @@
         function handleEnd() { isDragging = false; }
         window.addEventListener('mousedown', handleStart); window.addEventListener('mousemove', handleMove); window.addEventListener('mouseup', handleEnd);
         window.addEventListener('touchstart', handleStart, {passive: false}); window.addEventListener('touchmove', handleMove, {passive: false}); window.addEventListener('touchend', handleEnd);
+
+
 
         // ==========================================
         // SECTION 7 - GAME LOGIC & PHYSICS
@@ -1109,36 +1343,123 @@
             } ctx.restore();
         }
 
-        function drawCharacterModel(x, y, vx, vy, radius, color, isJiggling) {
+        function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId) {
             let renderY = y; let speed = Math.sqrt(vx * vx + vy * vy);
             let wobble = Math.sin(Date.now() / 60) * speed * 0.04;
             let stretchX = Math.max(0.5, Math.min(1 + Math.abs(vx) * 0.06 + wobble, 2.0));
             let stretchY = Math.max(0.5, Math.min(1 + Math.abs(vy) * 0.06 - wobble, 2.0));
             let leanX = Math.max(-18, Math.min(18, -vx * 1.4));
             let leanY = Math.max(-18, Math.min(18, -vy * 1.4));
+            let t = Date.now();
             
+            // Resolve Color / Animations
+            let fillColor = '#00ffcc'; // Fallback
+            let drawSpecial = null;
+            
+            let basicMatch = basicSkins.find(s => s.id === colorId);
+            if (basicMatch) fillColor = basicMatch.color;
+            else if (colorId === 'rainbow') fillColor = `hsl(${(t / 5) % 360}, 100%, 50%)`;
+            else if (colorId === 'gold') {
+                let grad = ctx.createLinearGradient(-radius, -radius, radius, radius);
+                grad.addColorStop(0, '#bf953f'); grad.addColorStop(0.5, '#fcf6ba'); grad.addColorStop(1, '#b38728');
+                fillColor = grad; drawSpecial = 'gold';
+            }
+            else if (colorId === 'lava') { fillColor = `rgb(${180 + Math.sin(t/150)*75}, ${40 + Math.sin(t/200)*20}, 0)`; }
+            else if (colorId === 'galaxy') {
+                let grad = ctx.createRadialGradient(0, 0, 0, 0, 0, radius*1.5);
+                grad.addColorStop(0, '#2b1055'); grad.addColorStop(1, '#7597de');
+                fillColor = grad; drawSpecial = 'galaxy';
+            }
+            else if (colorId === 'ice') { fillColor = `rgba(165, 242, 243, ${0.8 + Math.sin(t/300)*0.2})`; }
+            else if (colorId === 'toxic') { fillColor = `rgb(${50 + Math.sin(t/100)*50}, 255, 50)`; }
+            else if (colorId === 'void') { fillColor = '#050505'; drawSpecial = 'void'; }
+            else if (colorId === 'sparkle') { fillColor = '#ffb6c1'; drawSpecial = 'sparkle'; }
+            else if (colorId === 'glitch') { fillColor = Math.random() > 0.8 ? '#0ff' : (Math.random() > 0.5 ? '#f0f' : '#fff'); }
+            else if (colorId === 'neon') { fillColor = `hsl(${(t / 2) % 360}, 100%, 70%)`; }
+
             ctx.save(); ctx.translate(x, renderY); ctx.scale(stretchX / stretchY, stretchY / stretchX);
-            let r = radius; let fillColor = (color === 'rainbow') ? `hsl(${(Date.now() / 5) % 360}, 100%, 50%)` : color;
+            let r = radius;
+            
+            // Draw Main Slime Body
             ctx.globalAlpha = 0.85; ctx.fillStyle = fillColor; ctx.beginPath(); ctx.moveTo(-r, r * 0.5);
             ctx.bezierCurveTo(-r * 1.05, -r * 0.2, -r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, leanX, -r + leanY);
             ctx.bezierCurveTo(r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, r * 1.05, -r * 0.2, r, r * 0.5);
             ctx.bezierCurveTo(r, r * 1.05, r * 0.55, r * 1.15, 0, r * 1.15);
             ctx.bezierCurveTo(-r * 0.55, r * 1.15, -r, r * 1.05, -r, r * 0.5); ctx.closePath(); ctx.fill(); ctx.globalAlpha = 1.0;
+            
+            // Draw Special Animated Overlays
+            if (drawSpecial === 'gold' && Math.random() < 0.4) {
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*2+1, 0, Math.PI*2); ctx.fill();
+            } else if (drawSpecial === 'galaxy') {
+                ctx.fillStyle = '#fff';
+                for(let i=0; i<4; i++) { ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, Math.random()*1.5, 0, Math.PI*2); ctx.fill(); }
+            } else if (drawSpecial === 'void') {
+                ctx.strokeStyle = '#444'; ctx.lineWidth=2; ctx.beginPath(); ctx.arc(0,0, r*0.8 + Math.sin(t/100)*4, 0, Math.PI*2); ctx.stroke();
+            } else if (drawSpecial === 'sparkle' && Math.random() < 0.6) {
+                ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#ffeb3b';
+                ctx.beginPath(); ctx.arc((Math.random()-0.5)*r*1.5, (Math.random()-0.5)*r*1.5, 2, 0, Math.PI*2); ctx.fill();
+            }
+
+            // Top highlight
             ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.ellipse(-r*0.35 + leanX*0.3, -r*0.45 + leanY*0.3, r*0.4, r*0.22, -0.3, 0, Math.PI*2); ctx.fill();
             ctx.globalAlpha = 1.0;
             
+            // Eyes & Face
             let eyeOffsetX = Math.max(-8, Math.min(8, (vx / 10) * 4 + leanX * 0.15)) * (radius/22);
             let eyeOffsetY = Math.max(-8, Math.min(8, (vy / 10) * 4 + leanY * 0.15)) * (radius/22);
-            let eyeColor = (color === '#2b2d42') ? '#fff' : '#1a1a2e'; ctx.fillStyle = eyeColor;
+            let eyeColor = (colorId === 'black' || colorId === 'void' || colorId === 'galaxy') ? '#fff' : '#1a1a2e'; ctx.fillStyle = eyeColor;
             ctx.beginPath(); ctx.arc(-8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); ctx.fill(); 
             ctx.beginPath(); ctx.arc(8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); ctx.fill();
             
-            let gaspAmount = Math.min(1, speed / 14); let mouthY = (4 + eyeOffsetY * 0.4) * (radius/22);
-            let mouthX = (eyeOffsetX * 0.4) * (radius/22); 
+            let gaspAmount = Math.min(1, speed / 14); let mouthY = (4 + eyeOffsetY * 0.4) * (radius/22); let mouthX = (eyeOffsetX * 0.4) * (radius/22); 
             ctx.strokeStyle = eyeColor; ctx.lineWidth = 2 * (radius/22);
             if (gaspAmount < 0.15) { ctx.beginPath(); ctx.arc(mouthX, mouthY - 2*(radius/22), 5*(radius/22), 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke(); } 
             else { let mw = (3 + gaspAmount * 6)*(radius/22); let mh = (2 + gaspAmount * 9)*(radius/22); ctx.fillStyle = '#7a2035'; ctx.beginPath(); ctx.ellipse(mouthX, mouthY, mw, mh, 0, 0, Math.PI*2); ctx.fill(); }
-            if (Math.random() < 0.01) { ctx.fillStyle = fillColor; ctx.fillRect(-12*(radius/22), -8*(radius/22) + eyeOffsetY, 24*(radius/22), 8*(radius/22)); } 
+            
+            // Draw Hat Accessories
+            if (hatId) {
+                ctx.translate(leanX * 0.3, -r * 0.9 + leanY * 0.3); // Move to top of head and factor jiggle
+                ctx.rotate(leanX * 0.04); // Tilt hat slightly based on movement
+                
+                if (hatId === 'cowboy') {
+                    ctx.fillStyle = '#8b4513'; ctx.beginPath(); ctx.ellipse(0, 5, r*1.3, r*0.35, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#a0522d'; ctx.beginPath(); ctx.roundRect(-r*0.6, -r*0.7, r*1.2, r*0.8, 5); ctx.fill();
+                } else if (hatId === 'tophat') {
+                    ctx.fillStyle = '#111'; ctx.beginPath(); ctx.ellipse(0, 5, r*1.1, r*0.25, 0, 0, Math.PI*2); ctx.fill();
+                    ctx.fillRect(-r*0.65, -r, r*1.3, r);
+                    ctx.fillStyle = '#e74c3c'; ctx.fillRect(-r*0.65, -r*0.3, r*1.3, r*0.3);
+                } else if (hatId === 'crown') {
+                    ctx.fillStyle = '#f1c40f';
+                    ctx.beginPath(); ctx.moveTo(-r*0.7, 5); ctx.lineTo(r*0.7, 5); ctx.lineTo(r*0.9, -r*0.8); ctx.lineTo(r*0.3, -r*0.3); ctx.lineTo(0, -r); ctx.lineTo(-r*0.3, -r*0.3); ctx.lineTo(-r*0.9, -r*0.8); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, -r, 3, 0, Math.PI*2); ctx.arc(-r*0.9, -r*0.8, 3, 0, Math.PI*2); ctx.arc(r*0.9, -r*0.8, 3, 0, Math.PI*2); ctx.fill();
+                } else if (hatId === 'beanie') {
+                    ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(0, 5, r*0.8, Math.PI, 0); ctx.fill();
+                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, -r*0.8+5, r*0.25, 0, Math.PI*2); ctx.fill();
+                } else if (hatId === 'bow') {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.beginPath(); ctx.moveTo(0,-r*0.2); ctx.lineTo(-r*0.7, -r*0.7); ctx.lineTo(-r*0.7, r*0.3); ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(0,-r*0.2); ctx.lineTo(r*0.7, -r*0.7); ctx.lineTo(r*0.7, r*0.3); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.arc(0, -r*0.2, r*0.25, 0, Math.PI*2); ctx.fill();
+                } else if (hatId === 'halo') {
+                    ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.beginPath(); ctx.ellipse(0, -r*0.6, r*0.9, r*0.25, 0, 0, Math.PI*2); ctx.stroke();
+                } else if (hatId === 'party') {
+                    ctx.fillStyle = '#9b59b6'; ctx.beginPath(); ctx.moveTo(-r*0.6, 5); ctx.lineTo(r*0.6, 5); ctx.lineTo(0, -r*1.2); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(0, -r*1.2, r*0.25, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(0, -r*0.5, 4, 0, Math.PI*2); ctx.fill();
+                } else if (hatId === 'pirate') {
+                    ctx.fillStyle = '#222';
+                    ctx.beginPath(); ctx.moveTo(-r*1.2, 5); ctx.lineTo(r*1.2, 5); ctx.lineTo(r*0.7, -r*0.8); ctx.lineTo(-r*0.7, -r*0.8); ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.font = `bold ${r*0.5}px sans-serif`; ctx.textAlign='center'; ctx.fillText('☠', 0, -2);
+                } else if (hatId === 'cap') {
+                    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(0, 5, r*0.7, Math.PI, 0); ctx.fill();
+                    ctx.fillStyle = '#c0392b'; ctx.beginPath(); ctx.roundRect(0, 0, r*1.2, 5, 2); ctx.fill(); // Bill
+                } else if (hatId === 'horns') {
+                    ctx.fillStyle = '#c0392b';
+                    ctx.beginPath(); ctx.moveTo(-r*0.3, 5); ctx.quadraticCurveTo(-r*0.7, -r*0.6, -r*0.9, -r*0.8); ctx.quadraticCurveTo(-r*0.5, -r*0.3, -r*0.1, 5); ctx.fill();
+                    ctx.beginPath(); ctx.moveTo(r*0.3, 5); ctx.quadraticCurveTo(r*0.7, -r*0.6, r*0.9, -r*0.8); ctx.quadraticCurveTo(r*0.5, -r*0.3, r*0.1, 5); ctx.fill();
+                }
+            }
+            
             ctx.restore();
         }
 
@@ -1455,7 +1776,7 @@
                         let target = getLightningTargetWorld();
                         drawLightningBolt(p.worldX, p.worldY, target.x, target.y);
                     }
-                    drawCharacterModel(p.worldX, p.worldY, p.vx, p.vy, p.radius, p.color, Math.abs(p.jiggleForceX) + Math.abs(p.jiggleForceY) > 0);
+                    drawCharacterModel(p.worldX, p.worldY, p.vx, p.vy, p.radius, p.color, Math.abs(p.jiggleForceX) + Math.abs(p.jiggleForceY) > 0, p.hat);
                 }
                 
                 if (isWaterObj) { ctx.restore(); }
@@ -1489,6 +1810,7 @@
             }
             requestAnimationFrame(draw);
         }
+
 
         // ==========================================
         // SECTION 9 - INITIALIZATION & MAIN LOOP

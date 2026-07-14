@@ -276,6 +276,96 @@
             set: (key, val) => { memoryStorage[key] = val; try { localStorage.setItem(key, val); } catch(e) {} }
         };
 
+        // Cached DOM references for the HUD, so the hot game loop never has to call
+        // getElementById repeatedly (that lookup + the layout writes below it were a major
+        // source of frame hitches, especially while a powerup was active).
+        const domRefs = {
+            levelDisplay: document.getElementById('level-display'),
+            coinDisplay: document.getElementById('coin-display'),
+            timerFill: document.getElementById('timer-fill'),
+            timerContainer: document.getElementById('timer-container'),
+            powerupIndicator: document.getElementById('powerup-indicator'),
+            puIcon: document.getElementById('pu-icon'),
+            puDesc: document.getElementById('pu-desc'),
+            puFill: document.getElementById('pu-fill'),
+            hazardWarning: document.getElementById('hazard-warning')
+        };
+
+        // Coin total is only flushed to localStorage periodically instead of on every single
+        // pickup, since localStorage.setItem is synchronous and can stall a frame when several
+        // coins are collected in quick succession (e.g. after destroying an enemy).
+        let coinsDirty = false;
+        let coinFlushTimer = 0;
+        function markCoinsDirty() { coinsDirty = true; }
+        function flushCoinsIfDirty() {
+            if (coinsDirty) { storage.set('landSlidersCoins', totalCoins); coinsDirty = false; }
+        }
+
+        // Memoizes isSafe() results for the fixed grid-dust decoration pass in draw(), since
+        // those world coordinates repeat across many consecutive frames as the camera pans and
+        // isSafe() itself has to scan every land blob. Cleared whenever a new level is generated.
+        let safeGridCache = new Map();
+        function isSafeGridCached(x, y) {
+            let key = x + '_' + y;
+            let cached = safeGridCache.get(key);
+            if (cached !== undefined) return cached;
+            let result = isSafe(x, y);
+            safeGridCache.set(key, result);
+            return result;
+        }
+
+        // Spatial hash grid for trees. Built once per level (after all trees are placed) and
+        // used by the collision checks in update() so they only test trees near the entity in
+        // question instead of scanning the entire trees array every tick. Tree count is set
+        // randomly at level generation and can range from ~100 to 300+, so unculled full scans
+        // (done every physics tick, for the player, every near-screen enemy, and every
+        // projectile) were a major and very level-dependent source of sustained lag.
+        const treeGridSize = 150;
+        let treeGrid = new Map();
+        function buildTreeGrid() {
+            treeGrid = new Map();
+            for (let t of trees) {
+                let key = Math.floor(t.x / treeGridSize) + '_' + Math.floor(t.y / treeGridSize);
+                let bucket = treeGrid.get(key);
+                if (!bucket) { bucket = []; treeGrid.set(key, bucket); }
+                bucket.push(t);
+            }
+        }
+        // Reused scratch array to avoid allocating a new array on every call (this runs very
+        // often - once per entity per tick). Safe because each call's result is consumed
+        // immediately and synchronously before the next call overwrites it.
+        let treeQueryResult = [];
+        function getNearbyTrees(x, y) {
+            treeQueryResult.length = 0;
+            let cx = Math.floor(x / treeGridSize), cy = Math.floor(y / treeGridSize);
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    let bucket = treeGrid.get((cx + dx) + '_' + (cy + dy));
+                    if (bucket) for (let i = 0; i < bucket.length; i++) treeQueryResult.push(bucket[i]);
+                }
+            }
+            return treeQueryResult;
+        }
+
+        // Persistent pool of render-queue entries. Every frame previously allocated a brand new
+        // {type, obj} wrapper object for every single visible tree/enemy/item/particle, plus a
+        // new array from items.filter()/powerups.filter(), plus 10+ new forEach closures, plus a
+        // sort() comparator closure that recomputed each object's y-position on every comparison.
+        // That ran unconditionally every frame regardless of powerups or cosmetics, generating a
+        // constant stream of garbage for the GC to clean up - this pool eliminates virtually all
+        // of that allocation in steady state by reusing the same wrapper objects across frames.
+        const renderQueuePool = [];
+        let renderQueue = [];
+        let rqCount = 0;
+        function pushRQ(type, obj, sortY) {
+            let entry = renderQueuePool[rqCount];
+            if (!entry) { entry = { type: null, obj: null, sortY: 0 }; renderQueuePool[rqCount] = entry; }
+            entry.type = type; entry.obj = obj; entry.sortY = sortY;
+            renderQueue[rqCount] = entry;
+            rqCount++;
+        }
+        function rqSortCompare(a, b) { return a.sortY - b.sortY; }
+
         let gameState = 'title';
         let previousState = 'title';
         let level = 1;
@@ -882,6 +972,7 @@
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
             flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; landBlobs = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0;
+            safeGridCache.clear();
             
             let scaledLevel = Math.min(20, level);
             MAX_TIME = Math.max(20, 45 - (scaledLevel - 1) * (25 / 19));
@@ -932,6 +1023,7 @@
                 let pos = getValidSpawn(200, 25);
                 trees.push({ x: pos.x, y: pos.y, radius: 20 + Math.random() * 15, type: Math.random() > 0.7 ? 'rock' : 'tree', variant: Math.floor(Math.random()*3), seed: Math.random()*1000 });
             }
+            buildTreeGrid();
 
             let chestPos = getValidSpawn(300, 25);
             chest = { x: chestPos.x, y: chestPos.y, radius: 25, collected: false };
@@ -1035,6 +1127,8 @@
             displayCtx.imageSmoothingEnabled = false;
         }
         window.addEventListener('resize', resize); resize();
+        document.addEventListener('visibilitychange', () => { if (document.hidden) flushCoinsIfDirty(); });
+        window.addEventListener('pagehide', flushCoinsIfDirty);
         document.getElementById('hud-coin-icon').src = iconDataURL('coin', 22);
         document.getElementById('unlock-star-l').src = iconDataURL('star', 20);
         document.getElementById('unlock-star-r').src = iconDataURL('star', 20);
@@ -1516,18 +1610,24 @@
         }
 
         function updateHUD() {
-            document.getElementById('level-display').innerText = level;
-            document.getElementById('coin-display').innerText = totalCoins;
-            let fill = document.getElementById('timer-fill'); fill.style.width = Math.max(0, (timeLeft / MAX_TIME) * 100) + "%";
-            let container = document.getElementById('timer-container'); if (timeLeft <= 3) container.classList.add('danger'); else container.classList.remove('danger');
-            let puIndicator = document.getElementById('powerup-indicator');
+            domRefs.levelDisplay.innerText = level;
+            domRefs.coinDisplay.innerText = totalCoins;
+            domRefs.timerFill.style.width = Math.max(0, (timeLeft / MAX_TIME) * 100) + "%";
+            if (timeLeft <= 3) domRefs.timerContainer.classList.add('danger'); else domRefs.timerContainer.classList.remove('danger');
             if (player.activePowerup) {
                 let pu = powerupTypes.find(p => p.id === player.activePowerup);
-                puIndicator.style.display = 'flex';
-                document.getElementById('pu-icon').src = iconDataURL(pu.id, 32); document.getElementById('pu-desc').innerText = pu.desc;
-                document.getElementById('pu-fill').style.width = Math.max(0, (player.powerupTimeLeft / player.powerupDuration) * 100) + '%';
-                document.getElementById('pu-fill').style.background = pu.color;
-            } else { puIndicator.style.display = 'none'; }
+                domRefs.powerupIndicator.style.display = 'flex';
+                domRefs.puIcon.src = iconDataURL(pu.id, 32); domRefs.puDesc.innerText = pu.desc;
+                domRefs.puFill.style.width = Math.max(0, (player.powerupTimeLeft / player.powerupDuration) * 100) + '%';
+                domRefs.puFill.style.background = pu.color;
+            } else { domRefs.powerupIndicator.style.display = 'none'; }
+        }
+
+        // Cheap per-tick update used while a powerup is running: only touches the one element
+        // that actually changes every frame (the fill bar's width). The full updateHUD() above
+        // still runs once whenever the powerup starts, ends, or a value other than time changes.
+        function updatePowerupBarOnly() {
+            domRefs.puFill.style.width = Math.max(0, (player.powerupTimeLeft / player.powerupDuration) * 100) + '%';
         }
 
         function syncSettingsUI() {
@@ -1655,6 +1755,11 @@
             scheduleMusic();
             manageBeeBuzzing();
 
+            // Flush the coin total to localStorage at most twice a second, rather than on
+            // every single pickup (see markCoinsDirty/flushCoinsIfDirty near the storage setup).
+            coinFlushTimer++;
+            if (coinFlushTimer >= 30) { coinFlushTimer = 0; flushCoinsIfDirty(); }
+
             if (gameState === 'playing' || gameState === 'title') {
                 player.worldX += player.vx; player.worldY += player.vy; player.vx *= friction; player.vy *= friction;
                 if (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) player.facing = Math.atan2(player.vy, player.vx);
@@ -1692,13 +1797,13 @@
                     });
                     if (player.activePowerup) {
                         player.powerupTimeLeft -= 1/60;
-                        if (player.powerupTimeLeft <= 0) { player.activePowerup = null; updateHUD(); } else { applyPowerupEffect(); updateHUD(); }
+                        if (player.powerupTimeLeft <= 0) { player.activePowerup = null; updateHUD(); } else { applyPowerupEffect(); updatePowerupBarOnly(); }
                     }
 
                     if (chest && !chest.collected && dist(player.worldX, player.worldY, chest.x, chest.y) < player.radius + chest.radius) {
                         chest.collected = true; screenShake = 30; playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
                         for(let i=0; i<20; i++) spawnLoot(chest.x, chest.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
-                        updateHUD(); storage.set('landSlidersCoins', totalCoins);
+                        updateHUD(); markCoinsDirty();
                     }
 
                     for (let i = items.length - 1; i >= 0; i--) {
@@ -1709,7 +1814,7 @@
                             c.collected = true;
                             let coinVal = coinValue(c.type); let pitch = c.type === 'coin' ? 1 : (c.type === 'ruby' ? 1.2 : (c.type === 'sapphire' ? 1.4 : 1.6));
                             playSFX('coin', pitch); totalCoins += coinVal;
-                            goal.collected = Math.min(goal.required, goal.collected + coinVal); updateHUD(); storage.set('landSlidersCoins', totalCoins);
+                            goal.collected = Math.min(goal.required, goal.collected + coinVal); updateHUD(); markCoinsDirty();
                         }
                     }
 
@@ -1769,8 +1874,9 @@
                         }
 
                         if (e.type !== 'hopper' || e.state === 'idle') {
-                            for (let ti = 0; ti < trees.length; ti++) {
-                                let t = trees[ti];
+                            let nearTrees = getNearbyTrees(e.x, e.y);
+                            for (let ti = 0; ti < nearTrees.length; ti++) {
+                                let t = nearTrees[ti];
                                 let dx = e.x - t.x, dy = e.y - t.y;
                                 let threshold = e.radius + t.radius * 0.8;
                                 let distSq = dx*dx + dy*dy;
@@ -1789,8 +1895,9 @@
                         }
                     }
 
-                    for (let ti = 0; ti < trees.length; ti++) {
-                        let t = trees[ti];
+                    let nearTreesPlayer = getNearbyTrees(player.worldX, player.worldY);
+                    for (let ti = 0; ti < nearTreesPlayer.length; ti++) {
+                        let t = nearTreesPlayer[ti];
                         let dx = player.worldX - t.x, dy = player.worldY - t.y;
                         let collisionDist = player.radius * 0.4 + t.radius * 0.5;
                         let distSq = dx*dx + dy*dy;
@@ -1823,8 +1930,9 @@
                 let p = projectiles[i];
                 if (!isNearScreen(p.x, p.y)) { projectiles.splice(i, 1); continue; }
                 p.x += p.vx; p.y += p.vy; let hitObstacle = false;
-                for (let ti = 0; ti < trees.length; ti++) {
-                    let t = trees[ti];
+                let nearTreesProj = getNearbyTrees(p.x, p.y);
+                for (let ti = 0; ti < nearTreesProj.length; ti++) {
+                    let t = nearTreesProj[ti];
                     let dx = p.x - t.x, dy = p.y - t.y;
                     let th = p.radius + t.radius * 0.8;
                     if (dx*dx + dy*dy < th*th) { hitObstacle = true; break; }
@@ -1906,14 +2014,23 @@
             ctx.fillStyle = hz.color; ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height); 
             ctx.save(); ctx.strokeStyle = hz.edge; ctx.fillStyle = hz.edge;
             let offsetX = camera.x % 100; let offsetY = camera.y % 100;
+            // All cells share the same alpha/lineWidth per hazard type, so build one path for
+            // every cell and issue a single fill()/stroke() at the end instead of one draw call
+            // per cell (previously up to a few hundred separate draw calls per frame here).
+            if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; } 
+            else if (hz.type === 'lava') { ctx.globalAlpha = 0.4; } 
+            else if (hz.type === 'ice') { ctx.globalAlpha = 0.3; ctx.lineWidth = 2; }
+            ctx.beginPath();
             for (let x = camera.x - offsetX - 100; x < camera.x + canvas.width + 100; x += 120) {
                 for (let y = camera.y - offsetY - 100; y < camera.y + canvas.height + 100; y += 120) {
                     let noise = Math.sin(x*0.01 + Date.now()/500) + Math.cos(y*0.01 + Date.now()/400);
-                    if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; ctx.beginPath(); ctx.arc(x + noise*20, y + noise*20, 10 + noise*5, 0, Math.PI*2); ctx.stroke(); } 
-                    else if (hz.type === 'lava') { ctx.globalAlpha = 0.4; ctx.beginPath(); ctx.arc(x + noise*15, y + noise*15, 8 + noise*4, 0, Math.PI*2); ctx.fill(); } 
-                    else if (hz.type === 'ice') { ctx.globalAlpha = 0.3; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 30 + noise*10, y + 20 + noise*10); ctx.stroke(); }
+                    if (hz.type === 'water') { ctx.moveTo(x + noise*20 + (10 + noise*5), y + noise*20); ctx.arc(x + noise*20, y + noise*20, 10 + noise*5, 0, Math.PI*2); } 
+                    else if (hz.type === 'lava') { ctx.moveTo(x + noise*15 + (8 + noise*4), y + noise*15); ctx.arc(x + noise*15, y + noise*15, 8 + noise*4, 0, Math.PI*2); } 
+                    else if (hz.type === 'ice') { ctx.moveTo(x, y); ctx.lineTo(x + 30 + noise*10, y + 20 + noise*10); }
                 }
-            } ctx.restore();
+            }
+            if (hz.type === 'lava') ctx.fill(); else ctx.stroke();
+            ctx.restore();
         }
 
         function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId, targetCtx) {
@@ -2151,16 +2268,21 @@
             ctx.save(); ctx.translate(tiltX, tiltY);
 
             ctx.save(); ctx.lineWidth = 16; ctx.strokeStyle = currentTheme.hazard.edge;
-            landBlobs.forEach(b => { ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); ctx.stroke(); });
+            ctx.beginPath(); landBlobs.forEach(b => { ctx.moveTo(b.x + b.r, b.y); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); }); ctx.stroke();
             ctx.fillStyle = currentTheme.bg; ctx.beginPath(); landBlobs.forEach(b => { ctx.moveTo(b.x + b.r, b.y); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); }); ctx.fill(); ctx.clip();
             ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4;
             const startX = Math.floor((camera.x - tiltX) / gridSize) * gridSize; const startY = Math.floor((camera.y - tiltY) / gridSize) * gridSize;
+            // Build one path for every visible dust mark and stroke it once, instead of a
+            // separate beginPath()/stroke() per grid cell. isSafeGridCached also avoids
+            // re-scanning every land blob for grid coordinates already checked in a recent frame.
+            ctx.beginPath();
             for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
                 for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
-                    if (!isSafe(x, y)) continue;
-                    ctx.beginPath(); ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5); ctx.stroke();
+                    if (!isSafeGridCached(x, y)) continue;
+                    ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5);
                 }
             }
+            ctx.stroke();
             const cullBuffer = 100; let breezeX = player.vx * 0.08; 
             decorations.forEach(d => {
                 if(isOnScreen(d.x + tiltX, d.y + tiltY, cullBuffer)) {
@@ -2172,20 +2294,21 @@
              });
             ctx.restore(); 
 
-            let renderQueue = [];
-            trees.forEach(t => { if(isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) renderQueue.push({type: t.type, obj: t}); });
-            hives.forEach(h => { if(isOnScreen(h.x + tiltX, h.y + tiltY, cullBuffer)) renderQueue.push({type: 'hive', obj: h}); });
-            enemies.forEach(e => { if(isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) renderQueue.push({type: 'enemy', obj: e}); });
-            items.filter(c => !c.collected).forEach(c => { if(isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) renderQueue.push({type: c.type, obj: c}); });
-            projectiles.forEach(p => { if(isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) renderQueue.push({type: 'projectile', obj: p}); });
-            icicles.forEach(ic => { if(isOnScreen(ic.x + tiltX, ic.y + tiltY, cullBuffer)) renderQueue.push({type: 'icicle', obj: ic}); });
-            flameParticles.forEach(f => { if(isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) renderQueue.push({type: 'flame', obj: f}); });
-            leaves.forEach(l => { if(isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) renderQueue.push({type: 'leaf', obj: l}); });
-            splashes.forEach(s => { if(isOnScreen(s.x + tiltX, s.y + tiltY, cullBuffer)) renderQueue.push({type: 'splash', obj: s}); });
-            powerups.filter(p => !p.collected).forEach(p => { if(isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) renderQueue.push({type: 'powerup', obj: p}); });
-            if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) renderQueue.push({type: 'chest', obj: chest});
-            renderQueue.push({type: 'player', obj: player});
-            renderQueue.sort((a, b) => { let baseA = (a.obj.y || a.obj.worldY) + (a.obj.radius || 0); let baseB = (b.obj.y || b.obj.worldY) + (b.obj.radius || 0); return baseA - baseB; });
+            rqCount = 0;
+            for (let i = 0; i < trees.length; i++) { let t = trees[i]; if (isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) pushRQ(t.type, t, t.y + t.radius); }
+            for (let i = 0; i < hives.length; i++) { let h = hives[i]; if (isOnScreen(h.x + tiltX, h.y + tiltY, cullBuffer)) pushRQ('hive', h, h.y + (h.radius || 0)); }
+            for (let i = 0; i < enemies.length; i++) { let e = enemies[i]; if (isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) pushRQ('enemy', e, e.y + (e.radius || 0)); }
+            for (let i = 0; i < items.length; i++) { let c = items[i]; if (!c.collected && isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) pushRQ(c.type, c, c.y + (c.radius || 0)); }
+            for (let i = 0; i < projectiles.length; i++) { let p = projectiles[i]; if (isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('projectile', p, p.y + (p.radius || 0)); }
+            for (let i = 0; i < icicles.length; i++) { let ic = icicles[i]; if (isOnScreen(ic.x + tiltX, ic.y + tiltY, cullBuffer)) pushRQ('icicle', ic, ic.y + (ic.radius || 0)); }
+            for (let i = 0; i < flameParticles.length; i++) { let f = flameParticles[i]; if (isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) pushRQ('flame', f, f.y + (f.radius || 0)); }
+            for (let i = 0; i < leaves.length; i++) { let l = leaves[i]; if (isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) pushRQ('leaf', l, l.y + (l.radius || 0)); }
+            for (let i = 0; i < splashes.length; i++) { let s = splashes[i]; if (isOnScreen(s.x + tiltX, s.y + tiltY, cullBuffer)) pushRQ('splash', s, s.y + (s.radius || 0)); }
+            for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
+            if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
+            pushRQ('player', player, player.worldY + (player.radius || 0));
+            renderQueue.length = rqCount;
+            renderQueue.sort(rqSortCompare);
             
             if (goal.active) {
                 let isLocked = goal.collected < goal.required; let pulse = isLocked ? 0 : Math.sin(Date.now() / 150) * 8;
@@ -2509,6 +2632,7 @@
         function triggerGameOver(reason) {
             if (gameState === 'game_over') return;
             gameState = 'game_over';
+            flushCoinsIfDirty();
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
             document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
             document.getElementById('game-over-screen').style.display = 'flex';

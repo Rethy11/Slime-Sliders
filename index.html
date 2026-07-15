@@ -67,7 +67,15 @@
         h2 { margin-bottom: 20px; }
         
         .setting-item input[type="range"] { width: 120px; cursor: pointer; }
-        .toggle-btn { padding: 8px 15px; border-radius: 15px; background: #8d99ae; transition: 0.3s; }
+
+        .toggle-btn { 
+            padding: 6px 10px; 
+            border-radius: 15px; 
+            background: #8d99ae; 
+            transition: 0.3s; 
+            font-size: 0.5rem; 
+        }
+
         .toggle-btn.active { background: #4caf50; }
         
         #game-over-screen { display: none; z-index: 25; }
@@ -167,7 +175,15 @@
         .inv-item.equipped { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
         .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; }
         .inv-preview { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 8px; border: 2px solid rgba(255,255,255,0.5); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
-        .inv-name { font-size: 0.75rem; font-weight: bold; word-wrap: break-word; line-height: 1.2; }
+
+        .inv-name { 
+            font-size: 0.75rem; 
+            font-weight: bold; 
+            overflow-wrap: normal; 
+            word-break: keep-all; 
+            line-height: 1.2; 
+        }
+
         .inv-count { position: absolute; top: -5px; right: -5px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; }
 
         @keyframes gacha-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
@@ -1663,6 +1679,7 @@
                     let count = parseInt(storage.get('inv_' + h.id) || 0);
                     let div = document.createElement('div');
                     let isEquipped = player.hat === h.id;
+                    let fontSize = h.name.length > 6 ? "0.55rem" : "0.75rem";
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
                     div.innerHTML = `<div class="inv-preview" style="background:#2b2d42; display:flex; justify-content:center; align-items:center;"><img class="icon-img" style="width:26px;height:26px;" src="${iconDataURL(h.id, 40)}" alt=""></div><div class="inv-name">${h.name}</div>`;
                     if (count > 0) {
@@ -1682,6 +1699,7 @@
                     let div = document.createElement('div');
                     let isEquipped = player.color === s.id;
                     let bgStyle = s.isAnimated ? s.preview : s.color;
+                    let fontSize = displayName.length > 6 ? "0.55rem" : "0.75rem";
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
                     div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name">${displayName}</div>`;
                     if (count > 0) {

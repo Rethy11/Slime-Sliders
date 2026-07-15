@@ -1121,6 +1121,19 @@
         let gachaGravityX = 0, gachaGravityY = 0.25;
         let gachaHatBubbleGradCache = null, gachaHatBubbleGradRadius = null;
         let tiltPermissionRequested = false;
+
+        // Fixed-timestep state for the gacha widget's own mini physics sim, mirroring the main
+        // game loop's accumulator/catch-up pattern (see SECTION 9). Slime gravity/friction/hop
+        // and crane movement are all written as fixed per-STEP constants (tuned assuming ~60
+        // steps/sec), so stepGachaSlimes() must run a consistent number of times per real second
+        // regardless of how often loopGachaPhysics() itself gets called by requestAnimationFrame.
+        // This keeps speed correct under Low Power Mode's throttled rAF without the instability
+        // that came from directly multiplying those per-step constants by a jittery, continuously
+        // varying per-frame dt (see loopGachaPhysics below).
+        let gachaAccumulator = 0;
+        const gachaTimeStep = 1000 / 60;
+        const gachaMaxCatchUpSteps = 10;
+
         function handleDeviceTilt(e) {
             if (e.gamma === null || e.beta === null) return;
             let gamma = Math.max(-45, Math.min(45, e.gamma)); // left/right lean
@@ -1190,8 +1203,10 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
-            // Removing a hat also counts toward the hidden perf-overlay toggle: 20 clicks in a
-            // row on this button flips the overlay on/off (see removeHatClickCount below).
+            // Removing a hat also counts toward the hidden perf-overlay toggle: 20 CONSECUTIVE
+            // clicks on this specific button toggles the overlay. The streak is reset by the
+            // document-level click listener declared right below removeHatClickCount - any click
+            // on anything else breaks the streak back to 0.
             document.getElementById('btn-remove-hat').addEventListener('click', () => {
                 equipItem('hat', null);
                 removeHatClickCount++;
@@ -1220,6 +1235,16 @@
         }
         // Counter for the hidden perf-overlay toggle (20 consecutive Remove Hat clicks).
         let removeHatClickCount = 0;
+        // Resets the streak whenever a click lands on anything other than the Remove Hat button
+        // itself - previously nothing ever reset this counter, so it just counted every 20th
+        // click on that button ever, regardless of what else happened in between. This listener
+        // is attached once at module scope (not inside buildShopUI) so it isn't re-added every
+        // time the shop is opened.
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#btn-remove-hat')) {
+                removeHatClickCount = 0;
+            }
+        });
 
         // These live at module scope (rather than being redeclared inside setupGachaPhysics)
         // so the window-level listeners below can be attached exactly once. Previously they
@@ -1264,11 +1289,11 @@
             crane.y = crane.restY;
             crane.targetSlime = null;
 
-            // Reset the delta-time clock used by loopGachaPhysics() for crane movement, so
-            // re-opening the shop (or dismissing a reveal) never sees a huge elapsed-time gap
-            // from being closed/idle - that would otherwise read as a giant dt and cause the
-            // crane to jump.
+            // Reset the gacha loop's clock/accumulator so re-opening the shop (or dismissing a
+            // reveal) never sees a huge elapsed-time gap from being closed/idle - that would
+            // otherwise be read as a large backlog and cause a burst of catch-up steps.
             loopGachaPhysics.lastTime = performance.now();
+            gachaAccumulator = 0;
 
             const GACHA_POOL_SIZE = 28;
             const RARE_CHANCE = 0.05;
@@ -1322,25 +1347,12 @@
             }
         }
 
-        function loopGachaPhysics() {
-            if (!gachaCtx) return;
-
-            // Real-time scale factor, used ONLY for the crane below. The crane needs to reach
-            // its target in a consistent real-world amount of time regardless of how often the
-            // browser calls this loop (this is what was previously running at half speed under
-            // Low Power Mode's rAF throttling). The slime pool's idle bounce/gravity/collision
-            // physics is deliberately NOT scaled by this - it's decorative flavor, tuned as
-            // fixed-per-call values, and multiplying its gravity/friction/impulses by a
-            // frame-to-frame-varying dt introduced feedback instability (normal timing jitter
-            // got amplified through collision response into visibly "hyperactive" jostling).
-            let now = performance.now();
-            let dt = now - (loopGachaPhysics.lastTime || now);
-            loopGachaPhysics.lastTime = now;
-            let dtScale = dt / (1000 / 60);
-            dtScale = Math.max(0, Math.min(dtScale, 3)); // clamp extreme stalls (e.g. tab backgrounded)
-
-            gachaCtx.clearRect(0, 0, 300, 240);
-
+        // One fixed-size physics step: gravity, friction, self-hop chance, position integration,
+        // pairwise collision response, and crane state advance. All constants here are unchanged
+        // from the original per-call values - they are only ever invoked a fixed number of times
+        // per real second by loopGachaPhysics() below, never scaled, so behavior is identical no
+        // matter how often (or unevenly) the browser actually calls the rAF loop.
+        function stepGachaSlimes() {
             for (let i = 0; i < gachaSlimes.length; i++) {
                 let s = gachaSlimes[i];
                 if (s !== draggedGachaSlime && (!crane.targetSlime || s !== crane.targetSlime || crane.state !== 'ascending')) {
@@ -1348,7 +1360,7 @@
                     s.vy += gachaGravityY;
                     s.vx *= 0.98;
                     s.vy *= 0.98;
-                    // Small chance each frame for a living slime to hop/scoot on its own; with ~28
+                    // Small chance each step for a living slime to hop/scoot on its own; with ~28
                     // slimes in the pool this keeps activity commonplace without every slime moving
                     // at once. Hat bubbles are accessories, not living slimes, so they never self-hop -
                     // they only move when knocked around by a slime or dragged by the player.
@@ -1382,7 +1394,56 @@
                         if (s2 !== draggedGachaSlime) { s2.x += nx * overlap * 0.5; s2.y += ny * overlap * 0.5; s2.vx += nx * impulse; s2.vy += ny * impulse; }
                     }
                 }
+            }
 
+            if (crane.state === 'descending') {
+                crane.y += crane.speed;
+                let targetY = crane.targetSlime.y - crane.targetSlime.radius;
+                if (crane.y >= targetY) {
+                    crane.state = 'ascending';
+                    playSFX('click');
+                }
+            } else if (crane.state === 'ascending') {
+                crane.y -= crane.speed;
+                crane.targetSlime.x = crane.x;
+                crane.targetSlime.y = crane.y + crane.targetSlime.radius;
+                if (crane.y <= crane.restY) {
+                    crane.state = 'idle';
+                    let won = crane.targetSlime;
+                    gachaSlimes = gachaSlimes.filter(s => s !== won);
+                    crane.targetSlime = null;
+                    crane.x = 150; crane.y = crane.restY;
+                    revealGachaReward(won.skinData, won.category);
+                }
+            }
+        }
+
+        function loopGachaPhysics() {
+            if (!gachaCtx) return;
+
+            // Fixed-timestep catch-up, mirroring the main game loop's architecture (SECTION 9).
+            // stepGachaSlimes() runs a consistent number of times per real second regardless of
+            // how often this rAF callback actually fires, keeping both slime motion and crane
+            // speed correct under any render frame rate - including throttled conditions like
+            // Low Power Mode - while every individual step still uses the exact same untouched
+            // constants that were stable to begin with.
+            let now = performance.now();
+            let dt = now - (loopGachaPhysics.lastTime || now);
+            loopGachaPhysics.lastTime = now;
+            gachaAccumulator += dt;
+            if (gachaAccumulator > 250) gachaAccumulator = 250; // avoid a huge catch-up burst after a long stall
+
+            let steps = 0;
+            while (gachaAccumulator >= gachaTimeStep && steps < gachaMaxCatchUpSteps) {
+                stepGachaSlimes();
+                gachaAccumulator -= gachaTimeStep;
+                steps++;
+            }
+
+            gachaCtx.clearRect(0, 0, 300, 240);
+
+            for (let i = 0; i < gachaSlimes.length; i++) {
+                let s = gachaSlimes[i];
                 if (s.category === 'hat') {
                     gachaCtx.save();
                     gachaCtx.translate(s.x, s.y);
@@ -1406,27 +1467,6 @@
                     gachaCtx.restore();
                 } else {
                     drawCharacterModel(s.x, s.y, s.vx, s.vy, s.radius, s.skinData.id, false, null, gachaCtx);
-                }
-            }
-
-            if (crane.state === 'descending') {
-                crane.y += crane.speed * dtScale;
-                let targetY = crane.targetSlime.y - crane.targetSlime.radius;
-                if (crane.y >= targetY) {
-                    crane.state = 'ascending';
-                    playSFX('click');
-                }
-            } else if (crane.state === 'ascending') {
-                crane.y -= crane.speed * dtScale;
-                crane.targetSlime.x = crane.x;
-                crane.targetSlime.y = crane.y + crane.targetSlime.radius;
-                if (crane.y <= crane.restY) {
-                    crane.state = 'idle';
-                    let won = crane.targetSlime;
-                    gachaSlimes = gachaSlimes.filter(s => s !== won);
-                    crane.targetSlime = null;
-                    crane.x = 150; crane.y = crane.restY;
-                    revealGachaReward(won.skinData, won.category);
                 }
             }
 
@@ -1489,6 +1529,7 @@
             if (gachaAnimId) { cancelAnimationFrame(gachaAnimId); gachaAnimId = null; }
             if (tab === 'gacha') {
                 loopGachaPhysics.lastTime = performance.now();
+                gachaAccumulator = 0;
                 gachaAnimId = requestAnimationFrame(loopGachaPhysics);
             } else {
                 populateInventory();
@@ -1756,10 +1797,6 @@
             }
             lastTapTime = now;
         }, { passive: false, capture: true });
-
-
-
-
 
         // SECTION 7 - GAME LOGIC & PHYSICS
         // Central update loop, physics calculations, AI, and collision.

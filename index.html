@@ -514,97 +514,38 @@
 
         // ==========================================
         // SECTION 3 - AUDIO ENGINE
-        // Web Audio API logic, procedural music generation,
-        // and Sound Effect synthesis.
+        // Sound effects still use the Web Audio API (procedural synthesis), but the background
+        // music tracks are now real, pre-rendered audio files played back with <audio> elements
+        // instead of being scheduled note-by-note through oscillators.
         // ==========================================
         let actx;
+
+        // Background music: one file per theme/level track, same order as `themes`/level index.
+        const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
         let currentTrack = 0;
-        let nextNoteTime = 0, melodyNoteIndex = 0;
-        let nextBassNoteTime = 0, bassNoteIndex = 0;
-        let nextHarmonyTime = 0, harmonyNoteIndex = 0;
-        let nextDrumTime = 0, drumNoteIndex = 0;
-        let noiseBuffer = null;
-        let beeBuzzOsc = null;
-        let beeBuzzGain = null;
-        
-        const NOTE_NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-        
-        function noteToMidi(note) {
-            let m = note.match(/^([A-G]#?)(\d)$/);
-            if (!m) return 69;
-            return (parseInt(m[2]) + 1) * 12 + NOTE_NAMES.indexOf(m[1]);
-        }
-        function midiToNote(midi) {
-            return NOTE_NAMES[((Math.round(midi) % 12) + 12) % 12] + (Math.floor(Math.round(midi) / 12) - 1);
-        }
-        function nf(note) {
-            let m = note.match(/^([A-G]#?)(\d)$/);
-            if (!m) return 440;
-            return 440 * Math.pow(2, (((parseInt(m[2]) + 1) * 12 + NOTE_NAMES.indexOf(m[1])) - 69) / 12);
-        }
-        function transpose(note, semi) { return midiToNote(noteToMidi(note) + semi); }
+        const musicPlayer = new Audio();
+        musicPlayer.loop = true;
+        musicPlayer.volume = userSettings.musicVol;
+        musicPlayer.preload = 'auto';
 
-        function seq(str, bpm) {
-            const beatSec = 60 / bpm;
-            return str.trim().split(/\s+/).map(tok => {
-                const parts = tok.split(':');
-                return { f: parts[0] === 'R' ? 0 : nf(parts[0]), d: parseFloat(parts[1]) * beatSec };
-            });
-        }
-        function seqDrums(str, bpm) {
-            const beatSec = 60 / bpm;
-            return str.trim().split(/\s+/).map(tok => {
-                const parts = tok.split(':');
-                return { type: parts[0], d: parseFloat(parts[1]) * beatSec };
-            });
-        }
-
-        function gallopBar(root, quality, beatLen) {
-            let third = quality === 'maj' ? 4 : 3;
-            let fifth = transpose(root, 7); let oct = transpose(root, 12); let thirdNote = transpose(root, third);
-            return [root, root, fifth, oct, root, root, fifth, thirdNote].map(n => n + ':' + beatLen).join(' ');
-        }
-        function gallopLine(progression, beatLen) { return progression.map(([r, q]) => gallopBar(r, q, beatLen)).join(' '); }
-        function chordPad(root, quality, totalBeats) {
-            let padRoot = transpose(root, 24); let fifth = transpose(padRoot, 7); let half = totalBeats / 2;
-            return padRoot + ':' + half + ' ' + fifth + ':' + half;
-        }
-        function padLine(progression, beatsPerChord) { return progression.map(([r, q]) => chordPad(r, q, beatsPerChord)).join(' '); }
-
-        function buildSong(bpm, introMel, aMel, bMel, outroMel, introProg, aProg, bProg, outroBassStr, outroHarmStr, drumStr) {
-            const melody = seq([introMel, aMel, bMel, aMel, bMel, outroMel].join(' '), bpm);
-            const bass = seq([gallopLine(introProg, 0.5), gallopLine(aProg, 0.5), gallopLine(bProg, 0.5), gallopLine(aProg, 0.5), gallopLine(bProg, 0.5), outroBassStr].join(' '), bpm);
-            const harmony = seq([padLine(introProg, 4), padLine(aProg, 4), padLine(bProg, 4), padLine(aProg, 4), padLine(bProg, 4), outroHarmStr].join(' '), bpm);
-            const drums = seqDrums(drumStr, bpm);
-            return { melody, bass, harmony, drums };
-        }
-
-        // Music Tracks Data (Condensed for spacing)
-        const forestSong = buildSong(148, "D4:1 F4:1 A4:1 D5:1 C5:1 A4:1 F4:1 D4:1 A#4:1 D5:1 F5:1 A5:1 G5:0.5 F5:0.5 E5:0.5 D5:0.5 C5:1 A4:1", "D5:0.5 F5:0.5 A5:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 D5:0.5 F5:0.5 A5:0.5 D6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 A#5:0.5 D6:0.5 F6:0.5 A#6:0.5 A6:0.5 F6:0.5 D6:0.5 A#5:0.5 C6:0.5 E6:0.5 G6:0.5 A5:0.5 C6:1 A5:1 D5:0.5 F5:0.5 A5:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 E5:0.5 G5:0.5 A#5:0.5 E6:0.5 D6:0.5 A#5:0.5 G5:0.5 E5:0.5 A5:0.5 C6:0.5 E6:0.5 A6:0.5 G6:0.5 E6:0.5 C6:0.5 A5:0.5 F5:1 D5:1 A4:1 D4:1", "F5:0.75 A5:0.25 D6:1 C6:0.5 A#5:0.5 A5:1 G5:0.75 A#5:0.25 D6:1 C6:0.5 A#5:0.5 A5:1 F5:0.75 A5:0.25 D6:1 F6:0.5 E6:0.5 D6:1 C6:0.5 A#5:0.5 A5:0.5 G5:0.5 F5:1 D5:1 F5:0.75 A5:0.25 D6:1 C6:0.5 A#5:0.5 A5:1 G5:0.75 A#5:0.25 D6:1 C6:0.5 A#5:0.5 A5:1 A5:0.5 G5:0.5 F5:0.5 E5:0.5 D5:0.5 C5:0.5 A#4:0.5 A4:0.5 D5:2 R:1 D4:1", "D5:0.5 F5:0.5 A5:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 A#4:1 C5:1 D5:1 R:1 A4:0.5 F4:0.5 D4:1 R:2 D4:3 R:1", [['D2','min'],['D2','min'],['A#1','maj'],['C2','maj']], [['D2','min'],['D2','min'],['A#1','maj'],['C2','maj'],['D2','min'],['D2','min'],['A1','min'],['A1','min']], [['F2','maj'],['G2','maj'],['F2','maj'],['C2','maj'],['F2','maj'],['G2','maj'],['A1','min'],['D2','min']], "D2:2 D2:2 A#1:2 D2:2 A1:2 D1:2 D1:4", "D4:2 A#3:2 D4:2 D4:2 A3:2 D3:2 D3:4", "K:0.5 R:0.5 H:0.5 S:0.5 K:0.5 H:0.5 H:0.5 S:0.5");
-        const desertSong = buildSong(128, "E4:1 G#4:0.5 B4:0.5 E5:1 D5:1 C5:1 B4:0.5 G#4:0.5 F4:1 E4:1 E4:0.5 F4:0.5 G#4:0.5 B4:0.5 C5:1 B4:1 A4:0.5 G#4:0.5 F4:1 E4:2", "E4:0.5 E4:0.5 G#4:0.5 E4:0.5 B4:1 A4:0.5 G#4:0.5 E4:0.5 E4:0.5 F4:0.5 E4:0.5 C5:1 B4:0.5 A4:0.5 G#4:0.5 G#4:0.5 B4:0.5 G#4:0.5 D5:1 C5:0.5 B4:0.5 A4:0.5 G#4:0.5 F4:0.5 E4:0.5 E4:2 E4:0.5 E4:0.5 G#4:0.5 E4:0.5 B4:1 A4:0.5 G#4:0.5 E4:0.5 E4:0.5 F4:0.5 E4:0.5 C5:1 B4:0.5 A4:0.5 B4:0.5 C5:0.5 D5:0.5 E5:0.5 D5:0.5 C5:0.5 B4:0.5 A4:0.5 G#4:1 F4:1 E4:2", "E5:0.75 D5:0.25 C5:1 B4:0.5 A4:0.5 G#4:1 F5:0.75 E5:0.25 D5:1 C5:0.5 B4:0.5 A4:1 E5:0.75 D5:0.25 C5:1 B4:0.5 A4:0.5 G#4:1 G#4:0.5 A4:0.5 B4:0.5 C5:0.5 D5:0.5 E5:0.5 F5:0.5 E5:0.5 E5:0.75 D5:0.25 C5:1 B4:0.5 A4:0.5 G#4:1 F5:0.75 E5:0.25 D5:1 C5:0.5 B4:0.5 A4:1 G#4:0.5 F4:0.5 E4:0.5 D4:0.5 C4:0.5 B3:0.5 A3:0.5 G#3:0.5 E4:2 R:1 E4:1", "E4:0.5 G#4:0.5 B4:0.5 E5:0.5 D5:0.5 C5:0.5 B4:0.5 A4:0.5 G#4:1 F4:1 E4:2 E4:0.5 F4:0.5 E4:1 D4:1 R:1 E4:4", [['E2','maj'],['F2','maj'],['E2','maj'],['E2','maj']], [['E2','maj'],['E2','maj'],['F2','maj'],['E2','maj'],['E2','maj'],['E2','maj'],['B1','maj'],['E2','maj']], [['C2','maj'],['B1','maj'],['C2','maj'],['A1','min'],['C2','maj'],['B1','maj'],['F2','maj'],['E2','maj']], "E2:0.5 E2:0.5 B1:0.5 E2:0.5 D2:0.5 C2:0.5 B1:0.5 A1:0.5 F1:2 E1:2 E2:1 F2:1 E2:1 D2:1 E1:4", "E4:0.5 E4:0.5 B3:0.5 E4:0.5 D4:0.5 C4:0.5 B3:0.5 A3:0.5 F3:2 E3:2 E4:1 F4:1 E4:1 D4:1 E3:4", "K:0.5 H:0.5 K:0.5 H:0.5 S:0.5 H:0.5 K:0.5 H:0.5");
-        const snowSong = buildSong(145, "C5:0.5 E5:0.5 G5:0.5 C6:0.5 B5:0.5 G5:0.5 E5:0.5 C5:0.5 D5:0.5 F5:0.5 A5:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 E5:0.5 G5:0.5 B5:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 F5:1 G5:1 A5:1 B5:1", "C6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 G5:0.5 E5:0.5 C5:0.5 D6:0.5 F6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 E6:0.5 G6:0.5 F6:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 F6:0.5 A6:0.5 G6:1 F6:0.5 D6:0.5 C6:1 C6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 G5:0.5 E5:0.5 C5:0.5 D6:0.5 F6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 F5:0.5 D5:0.5 G5:0.5 A5:0.5 B5:0.5 C6:0.5 D6:0.5 E6:0.5 F6:0.5 G6:0.5 C6:1 G5:1 E5:1 C5:1", "G5:0.75 C6:0.25 E6:1 D6:0.5 C6:0.5 B5:1 A5:0.75 D6:0.25 F6:1 E6:0.5 D6:0.5 C6:1 G5:0.75 C6:0.25 E6:1 D6:0.5 C6:0.5 B5:1 C6:0.5 B5:0.5 A5:0.5 G5:0.5 F5:0.5 E5:0.5 D5:0.5 C5:0.5 G5:0.75 C6:0.25 E6:1 D6:0.5 C6:0.5 B5:1 A5:0.75 D6:0.25 F6:1 E6:0.5 D6:0.5 C6:1 E6:0.5 D6:0.5 C6:0.5 B5:0.5 A5:0.5 G5:0.5 F5:0.5 E5:0.5 C6:2 R:1 C5:1", "C6:0.5 E6:0.5 D6:0.5 C6:0.5 A5:0.5 G5:0.5 E5:0.5 C5:0.5 F5:1 G5:1 E5:1 C5:1 D5:0.5 E5:0.5 F5:1 G5:1 R:1 C5:4", [['C2','maj'],['D2','min'],['E2','min'],['F2','maj']], [['C2','maj'],['D2','min'],['E2','min'],['F2','maj'],['C2','maj'],['D2','min'],['G2','maj'],['C2','maj']], [['G2','maj'],['A2','min'],['G2','maj'],['C2','maj'],['G2','maj'],['A2','min'],['F2','maj'],['G2','maj']], "C2:0.5 D2:0.5 E2:0.5 F2:0.5 C2:0.5 D2:0.5 G2:0.5 C2:0.5 F1:1 G1:1 E1:1 C1:1 D1:0.5 E1:0.5 F1:1 G1:1 R:1 C1:4", "C4:0.5 D4:0.5 E4:0.5 F4:0.5 C4:0.5 D4:0.5 G4:0.5 C4:0.5 F3:1 G3:1 E3:1 C3:1 D3:0.5 E3:0.5 F3:1 G3:1 R:1 C3:4", "K:0.5 H:0.5 H:0.5 K:0.5 H:0.5 S:0.5 H:0.5 H:0.5");
-        const volcanoSong = buildSong(175, "E4:0.5 F4:0.5 F#4:0.5 G4:0.5 G#4:0.5 A4:0.5 A#4:0.5 B4:0.5 E5:1 D#5:0.5 D5:0.5 C5:1 B4:1 E4:0.5 F4:0.5 F#4:0.5 G4:0.5 G#4:0.5 A4:0.5 A#4:0.5 B4:0.5 E5:2 R:1 E5:1", "E5:0.5 G5:0.5 B5:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 F5:0.5 G#5:0.5 C6:0.5 F6:0.5 E6:0.5 C6:0.5 G#5:0.5 F5:0.5 E5:0.5 G5:0.5 B5:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 D5:0.5 D#5:0.5 E5:0.5 F5:0.5 F#5:0.5 G5:0.5 G#5:0.5 A5:0.5 E5:0.5 G5:0.5 B5:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 F5:0.5 G#5:0.5 C6:0.5 F6:0.5 E6:0.5 C6:0.5 G#5:0.5 F5:0.5 B5:0.5 A5:0.5 G5:0.5 F5:0.5 E5:0.5 D5:0.5 C5:0.5 B4:0.5 E5:1 E5:1 E4:2", "E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D6:1 F5:0.75 F5:0.25 G#5:0.5 C6:0.5 F6:1 E6:1 E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D6:1 C6:0.5 B5:0.5 A5:0.5 G5:0.5 F5:0.5 E5:0.5 D5:0.5 C5:0.5 E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D6:1 F5:0.75 F5:0.25 G#5:0.5 C6:0.5 F6:1 E6:1 E6:0.5 D6:0.5 C6:0.5 B5:0.5 A5:0.5 G5:0.5 F5:0.5 E5:0.5 E5:2 R:0.5 E5:0.5 E4:1", "E5:0.5 G5:0.5 B5:0.5 E6:0.5 D6:0.5 B5:0.5 G5:0.5 E5:0.5 D5:0.5 D#5:0.5 E5:1 F5:0.5 F#5:0.5 G5:1 E5:0.5 D5:0.5 C5:0.5 B4:0.5 A4:0.5 G4:0.5 F4:0.5 E4:0.5 E4:4", [['E2','min'],['E2','min'],['E2','min'],['E2','min']], [['E2','min'],['F2','maj'],['E2','min'],['D2','maj'],['E2','min'],['F2','maj'],['B1','maj'],['E2','min']], [['E2','min'],['F2','maj'],['E2','min'],['C2','maj'],['E2','min'],['F2','maj'],['E2','min'],['E2','min']], "E2:0.5 E2:0.5 E2:0.5 E2:0.5 E2:0.5 E2:0.5 E2:0.5 E2:0.5 D2:0.5 D#2:0.5 E2:1 F2:0.5 F#2:0.5 G2:1 E2:0.5 D2:0.5 C2:0.5 B1:0.5 A1:0.5 G1:0.5 F1:0.5 E1:0.5 E1:4", "E4:0.5 E4:0.5 E4:0.5 E4:0.5 E4:0.5 E4:0.5 E4:0.5 E4:0.5 D4:0.5 D#4:0.5 E4:1 F4:0.5 F#4:0.5 G4:1 E4:0.5 D4:0.5 C4:0.5 B3:0.5 A3:0.5 G3:0.5 F3:0.5 E3:0.5 E3:4", "K:0.5 S:0.5 K:0.5 S:0.5 K:0.5 S:0.5 K:0.5 S:0.5");
-        const swampSong = buildSong(88, "A3:1 R:0.5 C4:0.5 R:1 E4:1 R:2 D4:1 R:1 A3:1 R:0.5 C4:0.5 R:1 D#4:1 R:3 A3:1", "A3:1.5 R:0.5 C4:1 R:1 E4:1.5 R:0.5 D4:1 R:1 A3:0.5 R:0.5 C4:0.5 R:0.5 E4:1 R:1 F4:1.5 R:0.5 D#4:1 R:1 A3:1.5 R:0.5 C4:1 R:1 G3:1.5 R:0.5 A#3:1 R:1 F3:1.5 R:0.5 D4:1 R:1 A3:2 R:2", "C4:1 R:0.5 E4:0.5 R:0.5 D4:1 R:0.5 A#3:1 R:0.5 D4:0.5 R:0.5 C4:1 R:0.5 F3:1 R:0.5 A3:0.5 R:0.5 G3:1 R:0.5 E3:2 R:1 E3:1 C4:1 R:0.5 E4:0.5 R:0.5 D4:1 R:0.5 A#3:1 R:0.5 D4:0.5 R:0.5 C4:1 R:0.5 A3:0.5 R:0.5 F3:0.5 R:0.5 D#3:0.5 R:0.5 A3:0.5 R:0.5 A3:3 R:1", "A3:1.5 R:0.5 C4:1 R:1 R:2 E3:1 R:1 A3:1 R:1 R:2 R:4", [['A1','min'],['D1','min'],['A1','min'],['A1','min']], [['A1','min'],['A1','min'],['A1','min'],['F1','maj'],['A1','min'],['G1','maj'],['F1','maj'],['A1','min']], [['C1','maj'],['A#0','maj'],['F1','maj'],['E1','min'],['C1','maj'],['A#0','maj'],['A1','min'],['A1','min']], "A1:4 R:4 A1:2 R:2 R:4", "R:4 R:4 R:4 R:4", "K:2 R:1 S:1");
-        const autumnSong = buildSong(165, "E4:0.25 G4:0.25 A4:0.25 B4:0.25 D5:0.25 E5:0.25 D5:0.25 B4:0.25 A4:0.25 G4:0.25 E4:0.25 D4:0.25 E4:0.25 F#4:0.25 G4:0.25 A4:0.25 B4:0.25 D5:0.25 E5:0.25 F#5:0.25 G5:0.25 F#5:0.25 E5:0.25 D5:0.25 B4:0.25 A4:0.25 G4:0.25 F#4:0.25 E4:0.5 R:0.5 E4:0.25 G4:0.25 A4:0.25 B4:0.25 D5:0.25 E5:0.25 D5:0.25 B4:0.25 A4:0.25 G4:0.25 E4:0.25 D4:0.25 E4:0.25 F#4:0.25 G4:0.25 A4:0.25 E5:0.5 D5:0.5 B4:0.5 G4:0.5 E4:1 R:1", "E4:0.5 G4:0.5 A4:0.5 B4:0.5 D5:0.5 E5:0.5 D5:0.5 B4:0.5 A4:0.5 G4:0.5 E4:0.5 G4:0.5 A4:0.5 B4:0.5 D5:0.5 E5:0.5 F#4:0.5 G#4:0.5 A#4:0.5 C5:0.5 D#5:0.5 F5:0.5 D#5:0.5 C5:0.5 A#4:0.5 G#4:0.5 F#4:0.5 G#4:0.5 A#4:0.5 C5:0.5 D#5:0.5 F5:0.5 E4:0.5 G4:0.5 A4:0.5 B4:0.5 D5:0.5 E5:0.5 D5:0.5 B4:0.5 A4:0.5 G4:0.5 E4:0.5 G4:0.5 A4:0.5 B4:0.5 D5:0.5 E5:0.5 E5:0.5 D5:0.5 B4:0.5 A4:0.5 G4:0.5 F#4:0.5 E4:0.5 D4:0.5 E4:1 E4:1 B3:2", "E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D5:1 A4:0.75 A4:0.25 C5:0.5 E5:0.5 A5:1 G5:1 E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D5:1 B4:0.5 A4:0.5 G4:0.5 F#4:0.5 E4:0.5 D4:0.5 B3:1 E5:0.75 E5:0.25 G5:0.5 B5:0.5 E6:1 D5:1 A4:0.75 A4:0.25 C5:0.5 E5:0.5 A5:1 G5:1 E5:0.5 D5:0.5 B4:0.5 G4:0.5 E4:0.5 D4:0.5 B3:0.5 E4:0.5 E4:2 R:0.5 E4:0.5 E4:1", "E4:0.5 G4:0.5 A4:0.5 B4:0.5 D5:0.5 E5:0.5 D5:0.5 B4:0.5 A4:0.5 G4:0.5 F#4:0.5 E4:0.5 D4:0.5 B3:0.5 A3:0.5 G3:0.5 E4:0.5 D4:0.5 B3:1 R:1 E3:1 E3:4", [['E2','min'],['B1','maj'],['E2','min'],['E2','min']], [['E2','min'],['A1','min'],['F2','maj'],['A#1','maj'],['E2','min'],['A1','min'],['E2','min'],['B1','maj']], [['E2','min'],['A1','min'],['E2','min'],['B1','maj'],['E2','min'],['A1','min'],['E2','min'],['E2','min']], "E2:0.5 G2:0.5 A2:0.5 B2:0.5 D2:0.5 E2:0.5 D2:0.5 B1:0.5 A1:0.5 G1:0.5 F#1:0.5 E1:0.5 D1:0.5 B1:0.5 A1:0.5 G1:0.5 E1:0.5 D1:0.5 B1:1 R:1 E1:1 E1:4", "E4:0.5 G4:0.5 A4:0.5 B4:0.5 D4:0.5 E4:0.5 D4:0.5 B3:0.5 A3:0.5 G3:0.5 F#3:0.5 E3:0.5 D3:0.5 B3:0.5 A3:0.5 G3:0.5 E3:0.5 D3:0.5 B3:1 R:1 E3:1 E3:4", "K:0.5 H:0.5 S:0.5 H:0.5 K:0.5 H:0.5 S:0.5 H:0.5");
-        const tracks = [forestSong, desertSong, snowSong, volcanoSong, swampSong, autumnSong];
-
-        function ensureNoiseBuffer() {
-            if (noiseBuffer || !actx) return;
-            const bufferSize = actx.sampleRate * 1;
-            noiseBuffer = actx.createBuffer(1, bufferSize, actx.sampleRate);
-            const data = noiseBuffer.getChannelData(0);
-            for (let i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+        // Restarts playback of the given track from the beginning (mirrors the old sequencer's
+        // behavior of resyncing all note indices to 0 at the start of every level).
+        function playMusicTrack(idx) {
+            currentTrack = idx;
+            musicPlayer.src = musicFiles[idx];
+            musicPlayer.currentTime = 0;
+            musicPlayer.volume = userSettings.musicVol;
+            musicPlayer.play().catch(() => {});
         }
 
         function initAudio() {
             if (!actx) {
                 actx = new (window.AudioContext || window.webkitAudioContext)();
-                nextNoteTime = actx.currentTime + 0.1; nextBassNoteTime = actx.currentTime + 0.1;
-                nextHarmonyTime = actx.currentTime + 0.1; nextDrumTime = actx.currentTime + 0.1;
-                ensureNoiseBuffer();
-                if (gameState === 'title') currentTrack = Math.floor(Math.random() * tracks.length);
+                if (gameState === 'title') currentTrack = Math.floor(Math.random() * musicFiles.length);
+                playMusicTrack(currentTrack);
             }
             if (actx.state === 'suspended') actx.resume();
+            if (musicPlayer.paused) musicPlayer.play().catch(() => {});
         }
 
         function playSFX(type, pitchMult = 1) {
@@ -654,77 +595,6 @@
             }
         }
 
-        function scheduleDrumHit(type, t) {
-            if (!actx || userSettings.musicVol <= 0) return;
-            if (type === 'K') {
-                let osc = actx.createOscillator(); let gain = actx.createGain();
-                osc.connect(gain); gain.connect(actx.destination); osc.type = 'triangle';
-                osc.frequency.setValueAtTime(150, t); osc.frequency.exponentialRampToValueAtTime(45, t + 0.09);
-                gain.gain.setValueAtTime(userSettings.musicVol * 0.55, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
-                osc.start(t); osc.stop(t + 0.13);
-            } else if (type === 'S') {
-                if (!noiseBuffer) return;
-                let src = actx.createBufferSource(); src.buffer = noiseBuffer;
-                let bp = actx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 1800; bp.Q.value = 0.8;
-                let gain = actx.createGain(); src.connect(bp); bp.connect(gain); gain.connect(actx.destination);
-                gain.gain.setValueAtTime(userSettings.musicVol * 0.4, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.09);
-                src.start(t, Math.random() * 0.9, 0.1);
-            } else if (type === 'H') {
-                if (!noiseBuffer) return;
-                let src = actx.createBufferSource(); src.buffer = noiseBuffer;
-                let hp = actx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 6000;
-                let gain = actx.createGain(); src.connect(hp); hp.connect(gain); gain.connect(actx.destination);
-                gain.gain.setValueAtTime(userSettings.musicVol * 0.2, t); gain.gain.exponentialRampToValueAtTime(0.001, t + 0.035);
-                src.start(t, Math.random() * 0.9, 0.05);
-            }
-        }
-
-        function scheduleMusic() {
-            if (!actx) return;
-            let track = tracks[currentTrack];
-            while (nextNoteTime < actx.currentTime + 0.1) {
-                let note = track.melody[melodyNoteIndex];
-                if (userSettings.musicVol > 0 && note.f > 0) {
-                    let osc = actx.createOscillator(); let gain = actx.createGain();
-                    osc.connect(gain); gain.connect(actx.destination); osc.type = 'square'; osc.frequency.value = note.f;
-                    gain.gain.setValueAtTime(userSettings.musicVol * 0.16, nextNoteTime);
-                    gain.gain.setTargetAtTime(userSettings.musicVol * 0.05, nextNoteTime + 0.05, 0.1);
-                    gain.gain.exponentialRampToValueAtTime(0.001, nextNoteTime + note.d - 0.02);
-                    osc.start(nextNoteTime); osc.stop(nextNoteTime + note.d);
-                }
-                melodyNoteIndex = (melodyNoteIndex + 1) % track.melody.length; nextNoteTime += note.d;
-            }
-            while (nextBassNoteTime < actx.currentTime + 0.1) {
-                let bnote = track.bass[bassNoteIndex];
-                if (userSettings.musicVol > 0 && bnote.f > 0) {
-                    let osc = actx.createOscillator(); let gain = actx.createGain();
-                    osc.connect(gain); gain.connect(actx.destination); osc.type = 'triangle'; osc.frequency.value = bnote.f;
-                    gain.gain.setValueAtTime(userSettings.musicVol * 0.24, nextBassNoteTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, nextBassNoteTime + bnote.d - 0.01);
-                    osc.start(nextBassNoteTime); osc.stop(nextBassNoteTime + bnote.d);
-                }
-                bassNoteIndex = (bassNoteIndex + 1) % track.bass.length; nextBassNoteTime += bnote.d;
-            }
-            while (nextHarmonyTime < actx.currentTime + 0.1) {
-                let hnote = track.harmony[harmonyNoteIndex];
-                
-                // MODIFIED: Removed the currentTrack === 0 check to allow harmony on all songs
-                if (userSettings.musicVol > 0 && hnote.f > 0) {
-                    let osc = actx.createOscillator(); let gain = actx.createGain();
-                    osc.connect(gain); gain.connect(actx.destination); osc.type = 'square'; osc.frequency.value = hnote.f;
-                    gain.gain.setValueAtTime(userSettings.musicVol * 0.07, nextHarmonyTime);
-                    gain.gain.exponentialRampToValueAtTime(0.001, nextHarmonyTime + hnote.d - 0.02);
-                    osc.start(nextHarmonyTime); osc.stop(nextHarmonyTime + hnote.d);
-                }
-                harmonyNoteIndex = (harmonyNoteIndex + 1) % track.harmony.length; nextHarmonyTime += hnote.d;
-            }
-            while (nextDrumTime < actx.currentTime + 0.1) {
-                let dnote = track.drums[drumNoteIndex];
-                if (dnote.type !== 'R') scheduleDrumHit(dnote.type, nextDrumTime);
-                drumNoteIndex = (drumNoteIndex + 1) % track.drums.length; nextDrumTime += dnote.d;
-            }
-        }
-
         function manageBeeBuzzing() {
             if (!actx || userSettings.sfxVol <= 0 || gameState !== 'playing') {
                 if (beeBuzzOsc) { beeBuzzOsc.stop(); beeBuzzOsc = null; }
@@ -751,6 +621,8 @@
                 }
             }
         }
+        let beeBuzzOsc = null;
+        let beeBuzzGain = null;
 
         // ==========================================
         // SECTION 4 - MATH & UTILITIES
@@ -839,7 +711,7 @@
                     tctx.fillStyle = '#ecf0f1';
                     tctx.beginPath(); tctx.moveTo(3*s,-5*s); tctx.lineTo(9*s,-9*s); tctx.lineTo(5*s,-2*s); tctx.fill();
                     tctx.beginPath(); tctx.moveTo(3*s,5*s); tctx.lineTo(9*s,9*s); tctx.lineTo(5*s,2*s); tctx.fill();
-                    tctx.fillStyle = '#3e2723'; tctx.beginPath(); tctx.arc(5*s,-2*s,1.2*s,0,Math.PI*2); tctx.arc(5*s,2*s,1.2*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#3e2723'; tctx.beginPath(); tctx.arc(5*s,-2*s,1.2*s,0,Math.PI*2); tctx.fill(); tctx.beginPath(); tctx.arc(5*s,2*s,1.2*s,0,Math.PI*2); tctx.fill();
                     break;
                 case 'chaser':
                     tctx.fillStyle = 'rgba(255,255,255,0.7)'; tctx.beginPath(); tctx.ellipse(0,-6*s,4*s,7*s,0,0,Math.PI*2); tctx.ellipse(0,6*s,4*s,7*s,0,0,Math.PI*2); tctx.fill();
@@ -1136,17 +1008,9 @@
             goal.required = Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
             
             currentTheme = themes[(level - 1) % themes.length];
-            currentTrack = (level - 1) % tracks.length; 
-            
-            // MODIFIED: Reset sequence indices AND synchronize the audio timing logic
-            melodyNoteIndex = 0; bassNoteIndex = 0; harmonyNoteIndex = 0; drumNoteIndex = 0;
-            if (actx) {
-                let syncTime = actx.currentTime + 0.1;
-                nextNoteTime = syncTime;
-                nextBassNoteTime = syncTime;
-                nextHarmonyTime = syncTime;
-                nextDrumTime = syncTime;
-            }
+            // Restart the background music for the new level (matches the old sequencer's
+            // per-level resync), cycling through the same theme order.
+            playMusicTrack((level - 1) % musicFiles.length);
             
             document.body.style.setProperty('--bg-color', currentTheme.bg);
             landBlobs.push({x: 0, y: 0, r: 400 + Math.random()*100});
@@ -1326,7 +1190,16 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
-            document.getElementById('btn-remove-hat').addEventListener('click', () => equipItem('hat', null));
+            // Removing a hat also counts toward the hidden perf-overlay toggle: 20 clicks in a
+            // row on this button flips the overlay on/off (see removeHatClickCount below).
+            document.getElementById('btn-remove-hat').addEventListener('click', () => {
+                equipItem('hat', null);
+                removeHatClickCount++;
+                if (removeHatClickCount >= 20) {
+                    removeHatClickCount = 0;
+                    if (perfOverlay) perfOverlay.style.display = (perfOverlay.style.display === 'none') ? 'block' : 'none';
+                }
+            });
             
             // Re-bind the full-screen dismiss layout click listener
             let revealOverlay = document.getElementById('gacha-reveal-overlay');
@@ -1345,6 +1218,8 @@
             setupGachaPhysics();
             updateShopButtons();
         }
+        // Counter for the hidden perf-overlay toggle (20 consecutive Remove Hat clicks).
+        let removeHatClickCount = 0;
 
         // These live at module scope (rather than being redeclared inside setupGachaPhysics)
         // so the window-level listeners below can be attached exactly once. Previously they
@@ -1388,6 +1263,12 @@
             crane.x = 150;
             crane.y = crane.restY;
             crane.targetSlime = null;
+
+            // Reset the delta-time clock used by loopGachaPhysics() for crane movement, so
+            // re-opening the shop (or dismissing a reveal) never sees a huge elapsed-time gap
+            // from being closed/idle - that would otherwise read as a giant dt and cause the
+            // crane to jump.
+            loopGachaPhysics.lastTime = performance.now();
 
             const GACHA_POOL_SIZE = 28;
             const RARE_CHANCE = 0.05;
@@ -1443,6 +1324,21 @@
 
         function loopGachaPhysics() {
             if (!gachaCtx) return;
+
+            // Real-time scale factor, used ONLY for the crane below. The crane needs to reach
+            // its target in a consistent real-world amount of time regardless of how often the
+            // browser calls this loop (this is what was previously running at half speed under
+            // Low Power Mode's rAF throttling). The slime pool's idle bounce/gravity/collision
+            // physics is deliberately NOT scaled by this - it's decorative flavor, tuned as
+            // fixed-per-call values, and multiplying its gravity/friction/impulses by a
+            // frame-to-frame-varying dt introduced feedback instability (normal timing jitter
+            // got amplified through collision response into visibly "hyperactive" jostling).
+            let now = performance.now();
+            let dt = now - (loopGachaPhysics.lastTime || now);
+            loopGachaPhysics.lastTime = now;
+            let dtScale = dt / (1000 / 60);
+            dtScale = Math.max(0, Math.min(dtScale, 3)); // clamp extreme stalls (e.g. tab backgrounded)
+
             gachaCtx.clearRect(0, 0, 300, 240);
 
             for (let i = 0; i < gachaSlimes.length; i++) {
@@ -1514,14 +1410,14 @@
             }
 
             if (crane.state === 'descending') {
-                crane.y += crane.speed;
+                crane.y += crane.speed * dtScale;
                 let targetY = crane.targetSlime.y - crane.targetSlime.radius;
                 if (crane.y >= targetY) {
                     crane.state = 'ascending';
                     playSFX('click');
                 }
             } else if (crane.state === 'ascending') {
-                crane.y -= crane.speed;
+                crane.y -= crane.speed * dtScale;
                 crane.targetSlime.x = crane.x;
                 crane.targetSlime.y = crane.y + crane.targetSlime.radius;
                 if (crane.y <= crane.restY) {
@@ -1592,6 +1488,7 @@
             
             if (gachaAnimId) { cancelAnimationFrame(gachaAnimId); gachaAnimId = null; }
             if (tab === 'gacha') {
+                loopGachaPhysics.lastTime = performance.now();
                 gachaAnimId = requestAnimationFrame(loopGachaPhysics);
             } else {
                 populateInventory();
@@ -1816,7 +1713,7 @@
         });
         document.getElementById('go-play-again').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; resetGame(); startGame(); });
         document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; });
-        document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); initAudio(); });
+        document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); musicPlayer.volume = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
         syncSettingsUI();
@@ -1859,6 +1756,7 @@
             }
             lastTapTime = now;
         }, { passive: false, capture: true });
+
 
 
 
@@ -1911,7 +1809,6 @@
         }
 
         function update() {
-            scheduleMusic();
             manageBeeBuzzing();
 
             // Flush the coin total to localStorage at most twice a second, rather than on
@@ -2940,14 +2837,65 @@
             }
         }
 
-        // Initialize Main Loops with Fixed Timestep
+        // ---- TEMPORARY PERF OVERLAY (v2 — clock/timestamp diagnostic) ----
+        // Hidden by default now. Click the "Remove Hat" button in the shop's Hats tab 20 times
+        // in a row to toggle it on/off (see removeHatClickCount in SECTION 6).
+        const perfOverlay = document.createElement('div');
+        perfOverlay.id = 'perf-overlay';
+        perfOverlay.style.cssText = 'display:none;position:fixed;top:4px;left:4px;z-index:9999;background:rgba(0,0,0,0.75);color:#0f0;font-family:monospace;font-size:11px;padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre;line-height:1.4;';
+        perfOverlay.innerText = 'perf: warming up...';
+        document.body.appendChild(perfOverlay);
+
+        let perfStats = {
+            update: 0, draw: 0, pixelate: 0, frames: 0, catchUpHits: 0,
+            totalSteps: 0,                 // total update() calls in this window
+            rafDeltaSum: 0,                // sum of (currentTime - lastTime) as rAF reports it
+            wallDeltaSum: 0,                // sum of independently-measured wall time via performance.now()
+            windowStart: performance.now()
+        };
+        let lastWallNow = performance.now();
+
+        function reportPerfIfReady() {
+            perfStats.frames++;
+            const elapsed = performance.now() - perfStats.windowStart;
+            if (elapsed >= 1000) {
+                const n = perfStats.frames;
+                const fps = (n / (elapsed / 1000)).toFixed(1);
+                const avgUpdate = (perfStats.update / n).toFixed(2);
+                const avgDraw = (perfStats.draw / n).toFixed(2);
+                const avgPixelate = (perfStats.pixelate / n).toFixed(2);
+                const avgTotal = (parseFloat(avgUpdate) + parseFloat(avgDraw) + parseFloat(avgPixelate)).toFixed(2);
+                // "effective sim Hz": how many update() ticks actually ran per real second.
+                // Should be ~60 regardless of render fps if the sim clock is keeping up.
+                const simHz = (perfStats.totalSteps / (elapsed / 1000)).toFixed(1);
+                // Compares rAF's own timestamp deltas against an independently measured wall
+                // clock over the same window. If these diverge, rAF's timestamp isn't trustworthy
+                // for driving the sim clock under throttling, and that mismatch is the leak.
+                const rafMs = perfStats.rafDeltaSum.toFixed(0);
+                const wallMs = perfStats.wallDeltaSum.toFixed(0);
+                const driftPct = perfStats.wallDeltaSum > 0
+                    ? (((perfStats.wallDeltaSum - perfStats.rafDeltaSum) / perfStats.wallDeltaSum) * 100).toFixed(1)
+                    : '0.0';
+                perfOverlay.innerText =
+                    `fps: ${fps}   sim Hz: ${simHz} (target 60)\n` +
+                    `update:    ${avgUpdate}ms\n` +
+                    `draw:      ${avgDraw}ms\n` +
+                    `pixelate:  ${avgPixelate}ms\n` +
+                    `total:     ${avgTotal}ms  (budget 16.6ms)\n` +
+                    `catchup-maxed: ${perfStats.catchUpHits}/${n}\n` +
+                    `rAF-clock ms: ${rafMs}   wall-clock ms: ${wallMs}   drift: ${driftPct}%\n` +
+                    `entities: t${trees.length} e${enemies.length} i${items.length} d${decorations.length}`;
+                perfStats = { update: 0, draw: 0, pixelate: 0, frames: 0, catchUpHits: 0, totalSteps: 0, rafDeltaSum: 0, wallDeltaSum: 0, windowStart: performance.now() };
+            }
+        }
+        // ---- END TEMPORARY PERF OVERLAY ----
+
         let lastTime = performance.now();
         let accumulator = 0;
-        const timeStep = 1000 / 60; // Target 60 updates per second
+        const timeStep = 1000 / 60;
+        const maxCatchUpSteps = 15;
 
         function renderPixelated() {
-            // Downsample the full-resolution buffer, then upscale with smoothing off for crisp 8-bit pixels.
-            // The world/camera math in draw() never changes, so this never zooms the view.
             pixelCtx.clearRect(0, 0, pixelCanvas.width, pixelCanvas.height);
             pixelCtx.drawImage(canvas, 0, 0, pixelCanvas.width, pixelCanvas.height);
             displayCtx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
@@ -2955,28 +2903,43 @@
         }
 
         function gameLoop(currentTime) {
-            // Calculate delta time
-            accumulator += currentTime - lastTime;
+            // Independent wall-clock measurement, taken fresh right here rather than trusting
+            // the rAF-supplied timestamp, purely to compare the two against each other.
+            let wallNow = performance.now();
+            let wallDelta = wallNow - lastWallNow;
+            lastWallNow = wallNow;
+            perfStats.wallDeltaSum += wallDelta;
+
+            let rafDelta = currentTime - lastTime;
+            perfStats.rafDeltaSum += rafDelta;
+
+            accumulator += rafDelta;
             lastTime = currentTime;
-            
-            // Prevent spiral of death if tab is inactive for a long time
-            if (accumulator > 100) accumulator = 100;
-            
-            // Run physics update as many times as needed to catch up to real time
-            while (accumulator >= timeStep) {
+
+            let tUpdateStart = performance.now();
+            let steps = 0;
+            while (accumulator >= timeStep && steps < maxCatchUpSteps) {
                 update();
                 accumulator -= timeStep;
+                steps++;
             }
-            
-            // Draw once per frame
+            if (steps === maxCatchUpSteps) { accumulator = 0; perfStats.catchUpHits++; }
+            perfStats.totalSteps += steps;
+            let tUpdateEnd = performance.now();
+
             draw();
+            let tDrawEnd = performance.now();
             renderPixelated();
-            
-            // Requeue loop
+            let tPixelateEnd = performance.now();
+
+            perfStats.update += (tUpdateEnd - tUpdateStart);
+            perfStats.draw += (tDrawEnd - tUpdateEnd);
+            perfStats.pixelate += (tPixelateEnd - tDrawEnd);
+            reportPerfIfReady();
+
             requestAnimationFrame(gameLoop);
         }
 
-        // Start the loop
         requestAnimationFrame(gameLoop);
 
     </script>

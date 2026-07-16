@@ -378,7 +378,7 @@
         // Spatial hash grid for trees. Built once per level (after all trees are placed) and
         // used by the collision checks in update() so they only test trees near the entity in
         // question instead of scanning the entire trees array every tick. Tree count is set
-        // randomly at level generation and can range from ~100 to 300+, so unculled full scans
+        // randomly at level generation and can range from ~100 to 300+, so uncoiled full scans
         // (done every physics tick, for the player, every near-screen enemy, and every
         // projectile) were a major and very level-dependent source of sustained lag.
         const treeGridSize = 150;
@@ -1845,16 +1845,11 @@
         // plus the sped-up music that goes with it. The countdown pop only restarts when the
         // displayed second actually changes, but the music rate is nudged toward its target every
         // tick so it winds up/down smoothly instead of snapping instantly.
-                // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
-        // plus the sped-up music that goes with it. The music rate is computed directly from
-        // timeLeft every tick (rather than nudged incrementally), so the wind-up/wind-down is a
-        // smooth continuous curve with no stepping: barely noticeable at 10.5s remaining, full
-        // speed by 9.5s remaining.
         function updateTimeDangerEffects() {
             const musicNormalRate = 1.0;
             const musicDangerRate = 1.4;
-            const rampStart = 10.5; // rate begins easing up here
-            const rampEnd = 9.5;    // rate reaches max here
+            const musicRampSeconds = 1.5; // time to glide from normal to max danger speed
+            const musicRatePerTick = (musicDangerRate - musicNormalRate) / (musicRampSeconds * 60);
 
             if (timeLeft <= 10 && timeLeft > 0) {
                 let displaySec = Math.ceil(timeLeft);
@@ -1866,18 +1861,18 @@
                     el.classList.remove('countdown-pop');
                     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('countdown-pop')));
                 }
-            } else if (lastCountdownSecond !== -1) {
-                lastCountdownSecond = -1;
-                domRefs.timeCountdown.style.display = 'none';
-            }
-
-            if (timeLeft > 0 && timeLeft <= rampStart) {
                 musicSped = true;
-                let t = Math.max(0, Math.min(1, (rampStart - timeLeft) / (rampStart - rampEnd)));
-                musicPlayer.playbackRate = musicNormalRate + (musicDangerRate - musicNormalRate) * t;
-            } else if (musicSped) {
-                musicSped = false;
-                musicPlayer.playbackRate = musicNormalRate;
+                if (musicPlayer.playbackRate < musicDangerRate) {
+                    musicPlayer.playbackRate = Math.min(musicDangerRate, musicPlayer.playbackRate + musicRatePerTick);
+                }
+            } else {
+                if (lastCountdownSecond !== -1) { lastCountdownSecond = -1; domRefs.timeCountdown.style.display = 'none'; }
+                if (musicSped) {
+                    if (musicPlayer.playbackRate > musicNormalRate) {
+                        musicPlayer.playbackRate = Math.max(musicNormalRate, musicPlayer.playbackRate - musicRatePerTick);
+                    }
+                    if (musicPlayer.playbackRate <= musicNormalRate) musicSped = false;
+                }
             }
         }
 

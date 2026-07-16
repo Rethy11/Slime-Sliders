@@ -44,6 +44,26 @@
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         #hazard-warning { position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%); display: none; background: rgba(0, 0, 0, 0.7); color: #ff477e; padding: 10px 20px; border-radius: 30px; border: 2px solid #ff477e; font-size: 1.5rem; font-weight: bold; text-shadow: 0 0 5px #000; z-index: 10; pointer-events: none; animation: pulse 0.5s infinite; }
+        #hazard-vignette {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 8; opacity: 0;
+            background: radial-gradient(circle, rgba(150,0,0,0) 65%, rgba(120,0,0,0.92) 100%);
+            transition: opacity 0.2s linear;
+        }
+
+        #time-countdown {
+            position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(1);
+            font-size: 4.5rem; color: #ff2222;
+            text-shadow: 0 0 20px #ff0000, 0 0 45px #ff0000, 0 4px 0 rgba(0,0,0,0.6);
+            z-index: 15; pointer-events: none; display: none;
+        }
+        .countdown-pop { animation: countdownPop 1s ease-out; }
+        @keyframes countdownPop {
+            0% { transform: translate(-50%, -50%) scale(1.8); opacity: 0.2; }
+            30% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+            100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+        }
+
 
         #powerup-indicator { position: absolute; bottom: 65px; left: 50%; transform: translateX(-50%); display: none; align-items: center; gap: 8px; background: rgba(0,0,0,0.55); color: #fff; padding: 0; border-radius: 20px; font-weight: bold; pointer-events: none; border: 2px solid rgba(255,255,255,0.6); overflow: hidden; min-width: 220px; max-width: 320px; }
         #pu-fill { position: absolute; top: 0; left: 0; height: 100%; width: 100%; background: #ff6b35; opacity: 0.6; transition: background 0.2s; }
@@ -215,14 +235,18 @@
     <canvas id="gameCanvas"></canvas>
 
     <div id="ui-layer">
+        <div id="hazard-vignette"></div>
         <div id="timer-container"><div id="timer-fill"></div></div>
         <div id="hazard-warning">HAZARD</div>
+        <div id="time-countdown"></div>
         <div id="powerup-indicator"><div id="pu-fill"></div><div id="pu-content"><img class="pu-icon icon-img" id="pu-icon" style="width:1.3rem;height:1.3rem;" alt=""><span id="pu-desc"></span></div></div>
         <div class="hud-top">
             <div><div class="hud-panel">Level: <span id="level-display">1</span></div><div id="items-hud" class="items-hud"></div></div>
             <div><div class="hud-panel" style="color: #ffd700;"><img class="icon-img" id="hud-coin-icon" alt=""> <span id="coin-display">0</span></div></div>
         </div>
     </div>
+
+
     <div id="item-toast"><img class="icon-img" id="item-toast-icon" style="width:1.4em;height:1.4em;" alt=""> <span id="item-toast-text"></span></div>
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
@@ -305,6 +329,7 @@
         // Cached DOM references for the HUD, so the hot game loop never has to call
         // getElementById repeatedly (that lookup + the layout writes below it were a major
         // source of frame hitches, especially while a powerup was active).
+
         const domRefs = {
             levelDisplay: document.getElementById('level-display'),
             coinDisplay: document.getElementById('coin-display'),
@@ -315,8 +340,17 @@
             puDesc: document.getElementById('pu-desc'),
             puFill: document.getElementById('pu-fill'),
             hazardWarning: document.getElementById('hazard-warning'),
-            itemsHud: document.getElementById('items-hud')
+            itemsHud: document.getElementById('items-hud'),
+            hazardVignette: document.getElementById('hazard-vignette'),
+            timeCountdown: document.getElementById('time-countdown')
         };
+
+// Tracks the last whole-second value shown by the dramatic time countdown, and whether the
+// music is currently pitched up for the "final ten seconds" danger state, so both can be
+// restored cleanly on level change / reset / game over.
+        let lastCountdownSecond = -1;
+        let musicSped = false;
+
 
         // Coin total is only flushed to localStorage periodically instead of on every single
         // pickup, since localStorage.setItem is synchronous and can stall a frame when several
@@ -540,6 +574,7 @@
             musicPlayer.src = musicFiles[idx];
             musicPlayer.currentTime = 0;
             musicPlayer.volume = userSettings.musicVol;
+            musicPlayer.playbackRate = 1.0;
             musicPlayer.play().catch(() => {});
         }
 
@@ -1007,6 +1042,12 @@
             flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; landBlobs = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             safeGridCache.clear();
+
+            lastCountdownSecond = -1;
+            musicSped = false;
+            if (domRefs.timeCountdown) domRefs.timeCountdown.style.display = 'none';
+            updateHazardVignette(0);
+
 
             // Roguelite: every level, re-spawn the player's earned companion slimes fresh, and
             // reset the trail buffer they follow so they don't rush in from a previous level.
@@ -1782,6 +1823,41 @@
             if (timeLeft <= 3) domRefs.timerContainer.classList.add('danger'); else domRefs.timerContainer.classList.remove('danger');
         }
 
+        // Drives the red vignette that fades in around the screen edges while the player is
+        // hovering over a hazard, growing darker and creeping further inward as they approach
+        // falling in. ratio is hazardTimer / hazardLimit, clamped to [0,1]; 0 clears the effect.
+        function updateHazardVignette(ratio) {
+            let el = domRefs.hazardVignette;
+            if (!el) return;
+            ratio = Math.max(0, Math.min(1, ratio));
+            el.style.opacity = ratio;
+            if (ratio > 0) {
+                let innerPct = 65 - ratio * 45; // shrinks from 65% (barely visible) to 20% (screen mostly red)
+                el.style.background = `radial-gradient(circle, rgba(150,0,0,0) ${innerPct}%, rgba(120,0,0,0.92) 100%)`;
+            }
+        }
+
+        // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
+        // plus the sped-up music that goes with it. Only restarts the pop animation and touches the
+        // music's playbackRate when the displayed second actually changes, rather than every tick.
+        function updateTimeDangerEffects() {
+            if (timeLeft <= 10 && timeLeft > 0) {
+                let displaySec = Math.ceil(timeLeft);
+                if (displaySec !== lastCountdownSecond) {
+                    lastCountdownSecond = displaySec;
+                    let el = domRefs.timeCountdown;
+                    el.innerText = displaySec;
+                    el.style.display = 'block';
+                    el.classList.remove('countdown-pop');
+                    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('countdown-pop')));
+                }
+                if (!musicSped) { musicSped = true; musicPlayer.playbackRate = 1.4; }
+            } else {
+                if (lastCountdownSecond !== -1) { lastCountdownSecond = -1; domRefs.timeCountdown.style.display = 'none'; }
+                if (musicSped) { musicSped = false; musicPlayer.playbackRate = 1.0; }
+            }
+        }
+
         function syncSettingsUI() {
             document.getElementById('music-slider').value = userSettings.musicVol;
             document.getElementById('sfx-slider').value = userSettings.sfxVol;
@@ -1927,6 +2003,7 @@
                 camera.y += (player.worldY - canvas.height / 2 - camera.y) * 0.15;
 
                 if (gameState === 'playing') {
+
                     let warnUI = document.getElementById('hazard-warning');
 
                     // --- Roguelite: player trail (used by companion slimes to follow) ---
@@ -1987,11 +2064,14 @@
                         if (player.hazardTimer === 0) spawnSplash(player.worldX, player.worldY);
                         player.hazardTimer += 1/60;
                         if (player.hazardTimer > 0.2) warnUI.style.display = 'block';
+                        updateHazardVignette(player.hazardTimer / hazardLimit);
                         if (player.hazardTimer >= hazardLimit) triggerGameOver('hazard');
-                    } else { player.hazardTimer = 0; warnUI.style.display = 'none'; }
+                    } else { player.hazardTimer = 0; warnUI.style.display = 'none'; updateHazardVignette(0); }
 
                     timeLeft -= 1/60;
                     if (timeLeft <= 0) triggerGameOver('time'); if (Math.floor(timeLeft*60)%10 === 0) updateTimerBarOnly();
+                    updateTimeDangerEffects();
+
                     
                     let pSpeedSq = player.vx*player.vx + player.vy*player.vy;
                     if (pSpeedSq > 20 && Math.random() < 0.1 + pSpeedSq * 0.005) {
@@ -2934,6 +3014,10 @@
             runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0;
             updateItemsHUD();
             document.getElementById('hazard-warning').style.display = 'none';
+            lastCountdownSecond = -1;
+            musicSped = false;
+            if (domRefs.timeCountdown) domRefs.timeCountdown.style.display = 'none';
+            updateHazardVignette(0);
         }
 
         function triggerGameOver(reason) {
@@ -2941,8 +3025,12 @@
             gameState = 'game_over';
             flushCoinsIfDirty();
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
-            document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
+            // Almanac and Settings corner icons are intentionally left visible here so the player can
+            // still check what killed them or adjust settings from the Game Over screen.
             document.getElementById('game-over-screen').style.display = 'flex';
+            lastCountdownSecond = -1;
+            if (musicSped) { musicSped = false; musicPlayer.playbackRate = 1.0; }
+            updateHazardVignette(0);
             if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
             }
             document.getElementById('go-level').innerText = level; document.getElementById('go-best').innerText = highestLevel;
@@ -2954,6 +3042,7 @@
                 unlockAlmanacEntry(reason);
             }
         }
+
 
         function unlockAlmanacEntry(enemyId) {
             let key = 'almanac_' + enemyId;
@@ -3084,4 +3173,3 @@
     </script>
 </body>
 </html>
-

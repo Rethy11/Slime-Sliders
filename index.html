@@ -301,6 +301,14 @@
         <h2 id="level-title">Level Complete!</h2>
         <button id="level-continue-btn">Continue</button>
     </div>
+
+    <script src="sprites/wanderer.js"></script>
+    <script src="sprites/dasher.js"></script>
+    <script src="sprites/chaser.js"></script>
+    <script src="sprites/shooter.js"></script>
+    <script src="sprites/hopper.js"></script>
+    <script src="sprites/mimic.js"></script>
+
     <script>
 
         // ==========================================
@@ -2832,107 +2840,17 @@
                 else if (item.type === 'enemy') {
                     let e = item.obj;
                     // Blend this enemy's rendered position between its previous and current
-                    // physics-tick position for the duration of the (unmodified) drawing logic
-                    // below, then restore the real values. This is scoped to a small IIFE so the
-                    // several early `return`s inside the per-type drawing branches (mimic,
-                    // dasher) can't accidentally skip the restore step.
+                    // physics-tick position for the duration of the sprite's draw call, then
+                    // restore the real simulation values. Actual per-type drawing (body, state
+                    // animation, and shadow) now lives in sprites/<type>.js, loaded via
+                    // <script src> tags and exposed on the global EnemySprites object.
                     let realEX = e.x, realEY = e.y;
                     if (e.prevX !== undefined) {
                         e.x = e.prevX + (realEX - e.prevX) * renderAlpha;
                         e.y = e.prevY + (realEY - e.prevY) * renderAlpha;
                     }
-                    (function drawEnemyInterpolated() {
-                        if (e.type === 'mimic') {
-                            let shake = Math.sin(Date.now() / 50 + e.blinkSeed) * 3;
-                            ctx.save(); ctx.translate(e.x + (e.state === 'idle' ? shake : 0), e.y);
-                            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(0, e.radius, e.radius, e.radius*0.5, 0, 0, Math.PI*2); ctx.fill();
-                            if (e.state === 'idle') {
-                                ctx.fillStyle = '#4a2311'; ctx.beginPath(); ctx.roundRect(-e.radius, -e.radius*0.5, e.radius*2, e.radius*1.5, 5); ctx.fill();
-                                ctx.fillStyle = '#7a3b1a'; ctx.fillRect(-e.radius, 0, e.radius*2, 5);
-                                ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(0, 2, 4, 0, Math.PI*2); ctx.fill();
-                            } else {
-                                let chomp = Math.abs(Math.sin(Date.now()/100)) * 10;
-                                ctx.fillStyle = '#4a2311'; ctx.beginPath(); ctx.roundRect(-e.radius, -e.radius*1.2 - chomp, e.radius*2, e.radius, 5); ctx.fill();
-                                ctx.fillStyle = '#fff';
-                                for(let t=0; t<3; t++){ ctx.beginPath(); ctx.moveTo(-e.radius + t*(e.radius*0.6) + 4, -e.radius*0.2 - chomp); ctx.lineTo(-e.radius + t*(e.radius*0.6) + 12, 0 - chomp); ctx.lineTo(-e.radius + t*(e.radius*0.6) + 20, -e.radius*0.2 - chomp); ctx.fill(); }
-                                ctx.fillStyle = '#4a2311'; ctx.beginPath(); ctx.roundRect(-e.radius, -e.radius*0.2, e.radius*2, e.radius*1.2, 5); ctx.fill();
-                            } ctx.restore(); return;
-                        }
-                        if (e.type !== 'hopper' || e.state === 'idle') { ctx.fillStyle = 'rgba(0,0,0,0.2)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.radius, e.radius, e.radius*0.5, 0, 0, Math.PI*2); ctx.fill(); } 
-                        else if (e.type === 'hopper' && e.state === 'jump') { ctx.fillStyle = 'rgba(0,0,0,0.1)'; ctx.beginPath(); ctx.ellipse(e.x, e.y + e.radius, e.radius*0.5, e.radius*0.25, 0, 0, Math.PI*2); ctx.fill(); }
-                        
-                        if (e.type === 'chaser') {
-                            ctx.save();
-                            ctx.translate(e.x, e.y); ctx.rotate(e.state === 'chase' ? Math.atan2(player.worldY - e.y, player.worldX - e.x) : e.angle);
-                            let wingFlap = Math.sin(Date.now()/20) * 8;
-                            ctx.fillStyle = 'rgba(255, 255, 255, 0.7)'; ctx.beginPath(); ctx.ellipse(0, -e.radius, e.radius*0.6, e.radius*1.2, wingFlap*Math.PI/180, 0, Math.PI*2); ctx.fill();
-                            ctx.beginPath(); ctx.ellipse(0, e.radius, e.radius*0.6, e.radius*1.2, -wingFlap*Math.PI/180, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.ellipse(0, 0, e.radius, e.radius*0.6, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#000'; ctx.fillRect(-e.radius*0.6, -e.radius*0.5, e.radius*0.3, e.radius); ctx.fillRect(e.radius*0.2, -e.radius*0.5, e.radius*0.3, e.radius);
-                            ctx.beginPath(); ctx.arc(e.radius, -2, 2, 0, Math.PI*2); ctx.arc(e.radius, 2, 2, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-e.radius, 0); ctx.lineTo(-e.radius-6, -4); ctx.lineTo(-e.radius-6, 4); ctx.fill(); ctx.restore();
-                        } else if (e.type === 'dasher') {
-                            ctx.save();
-                            ctx.translate(e.x, e.y); ctx.rotate(e.angle); 
-                            if (e.stateTimer > 60 && e.stateTimer < 80) { ctx.translate((Math.random()-0.5)*4, (Math.random()-0.5)*4); }
-                            ctx.fillStyle = '#795548'; ctx.beginPath(); ctx.ellipse(0, 0, e.radius, e.radius*0.7, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#5d4037'; ctx.beginPath(); ctx.ellipse(-e.radius*0.7, 0, e.radius*0.3, e.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.beginPath(); ctx.moveTo(-e.radius, 0); ctx.lineTo(-e.radius-8, -2); ctx.lineTo(-e.radius-8, 2); ctx.fill();
-                            ctx.fillStyle = '#3e2723'; ctx.beginPath(); ctx.arc(e.radius*0.2, -e.radius*0.6, 4, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(e.radius*0.2, e.radius*0.6, 4, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#ecf0f1'; ctx.beginPath(); ctx.moveTo(e.radius*0.3, -e.radius*0.5); ctx.lineTo(e.radius*1.2, -e.radius*1.2); ctx.lineTo(e.radius*0.5, -e.radius*0.2); ctx.fill();
-                            ctx.beginPath(); ctx.moveTo(e.radius*0.3, e.radius*0.5); ctx.lineTo(e.radius*1.2, e.radius*1.2); ctx.lineTo(e.radius*0.5, e.radius*0.2); ctx.fill();
-                            ctx.fillStyle = e.stateTimer > 60 ? '#e74c3c' : '#000'; ctx.beginPath(); ctx.arc(e.radius*0.6, -e.radius*0.3, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(e.radius*0.6, e.radius*0.3, 2, 0, Math.PI*2); ctx.fill();
-                            if (e.stateTimer > 60 && Math.random() < 0.3) { ctx.fillStyle = 'rgba(255,255,255,0.7)'; ctx.beginPath(); ctx.arc(e.radius*0.8, -e.radius*0.1, 4+Math.random()*3, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(e.radius*0.8, e.radius*0.1, 4+Math.random()*3, 0, Math.PI*2); ctx.fill(); }
-                            ctx.restore(); return;
-                        } else if (e.type === 'shooter') {
-                            ctx.save();
-                            ctx.translate(e.x, e.y); ctx.rotate(Math.atan2(player.worldY - e.y, player.worldX - e.x));
-                            ctx.fillStyle = '#34495e'; ctx.beginPath(); ctx.arc(0, 0, e.radius, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.arc(0, 0, e.radius*0.7, 0, Math.PI*2); ctx.fill();
-                            let charge = e.stateTimer > 80 ? (e.stateTimer - 80) / 40 : 0;
-                            ctx.fillStyle = `rgb(255, ${Math.floor(255 - charge*255)}, ${Math.floor(255 - charge*255)})`;
-                            ctx.beginPath(); ctx.arc(e.radius*0.3, 0, e.radius*0.4 + charge*2, 0, Math.PI*2); ctx.fill();
-                            if (charge > 0) { ctx.strokeStyle = '#ff0055'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(e.radius*0.3, 0, e.radius*0.6 + Math.random()*4, 0, Math.PI*2); ctx.stroke(); }
-                            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(e.radius*0.4, 0, 3, 0, Math.PI*2); ctx.fill(); ctx.restore();
-                        } else if (e.type === 'hopper') {
-                            if (e.state === 'idle' && e.stateTimer > 0) {
-                                ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(e.targetX, e.targetY, 3, 0, Math.PI*2); ctx.fill();
-                                ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.beginPath(); ctx.arc(e.targetX-3, e.targetY-3, 2, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(e.targetX+3, e.targetY-3, 2, 0, Math.PI*2); ctx.fill();
-                            }
-                            let renderY = e.state === 'jump' ? e.y - Math.sin((e.stateTimer-60)/30 * Math.PI) * 60 : e.y;
-                            let jumpStretch = e.state === 'jump' ? 1.3 : 1; let jumpSquash = e.state === 'jump' ? 0.8 : 1;
-                            if (e.state === 'idle' && e.stateTimer > 40) { jumpStretch = 0.8; jumpSquash = 1.2; }
-                            ctx.save();
-                            ctx.translate(e.x, renderY); ctx.rotate(e.angle); ctx.scale(jumpStretch, jumpSquash);
-                            ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.ellipse(0, 0, e.radius, e.radius*0.8, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.ellipse(e.radius*0.2, 0, e.radius*0.7, e.radius*0.6, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.ellipse(0, -e.radius*0.7, e.radius*0.4, e.radius*0.3, 0, 0, Math.PI*2); ctx.ellipse(0, e.radius*0.7, e.radius*0.4, e.radius*0.3, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(e.radius*0.5, -e.radius*0.4, 4, 0, Math.PI*2); ctx.arc(e.radius*0.5, e.radius*0.4, 4, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(e.radius*0.6, -e.radius*0.4, 2, 0, Math.PI*2); ctx.arc(e.radius*0.6, e.radius*0.4, 2, 0, Math.PI*2); ctx.fill();
-                            if (e.state === 'jump' && e.stateTimer > 65 && e.stateTimer < 85) { ctx.strokeStyle = '#ff9ff3'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(e.radius*0.8, 0); ctx.lineTo(e.radius*2.5, 0); ctx.stroke(); ctx.fillStyle = '#ff9ff3'; ctx.beginPath(); ctx.arc(e.radius*2.5, 0, 4, 0, Math.PI*2); ctx.fill(); }
-                            ctx.restore();
-                        } else if (e.type === 'wanderer') {
-                            let renderY = e.y;
-                            let speed = Math.sqrt(e.speed * e.speed); let wobble = Math.sin(Date.now() / 80 + e.blinkSeed) * speed * 0.1;
-                            let stretchX = 1 + wobble; let stretchY = 1 - wobble;
-                            ctx.save(); ctx.translate(e.x, renderY); ctx.rotate(e.angle); ctx.scale(stretchX, stretchY);
-                            ctx.fillStyle = e.color; ctx.beginPath(); ctx.ellipse(0, 0, e.radius, e.radius*0.8, 0, 0, Math.PI*2); ctx.fill();
-                            ctx.fillStyle = 'rgba(255,255,255,0.3)'; ctx.beginPath(); ctx.ellipse(-e.radius*0.3, -e.radius*0.3, e.radius*0.3, e.radius*0.15, Math.PI/4, 0, Math.PI*2); ctx.fill();
-                            if (e.heldCoin) {
-                                ctx.save();
-                                ctx.scale(1/stretchX, 1/stretchY); ctx.globalAlpha = 0.8;
-                                if (e.heldCoin === 'coin') { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.arc(0, 0, 8, 0, Math.PI * 2); ctx.fill(); } 
-                                else if (e.heldCoin === 'ruby') { ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(0, -8); ctx.lineTo(8, 0); ctx.lineTo(0, 8); ctx.lineTo(-8, 0); ctx.fill(); } 
-                                else if (e.heldCoin === 'sapphire') { ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.moveTo(-6, -6); ctx.lineTo(6, -6); ctx.lineTo(0, 8); ctx.fill(); }
-                                else if (e.heldCoin === 'emerald') { ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.moveTo(-4, -8); ctx.lineTo(4, -8); ctx.lineTo(8, 0); ctx.lineTo(4, 8); ctx.lineTo(-4, 8); ctx.lineTo(-8, 0); ctx.fill(); }
-                                ctx.restore();
-                            }
-                            ctx.fillStyle = '#000';
-                            if (Math.sin(Date.now()/200 + e.blinkSeed) > 0.95) { ctx.fillRect(e.radius*0.2, -e.radius*0.4, 2, 8); ctx.fillRect(e.radius*0.2, e.radius*0.2, 2, 8); } 
-                            else { ctx.beginPath(); ctx.arc(e.radius*0.4, -e.radius*0.3, 3, 0, Math.PI*2); ctx.arc(e.radius*0.4, e.radius*0.3, 3, 0, Math.PI*2); ctx.fill(); }
-                            ctx.restore();
-                        }
-                    })();
+                    let sprite = window.EnemySprites && window.EnemySprites[e.type];
+                    if (sprite) sprite(ctx, e, player);
                     e.x = realEX; e.y = realEY;
                 }
                 else if (item.type === 'companion') {
@@ -3009,6 +2927,7 @@
                     
                     // requestAnimationFrame(draw) removed! It is now handled centrally in Section 9.
                 }
+
 
         // ==========================================
         // SECTION 9 - INITIALIZATION & MAIN LOOP

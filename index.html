@@ -1840,7 +1840,17 @@
         // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
         // plus the sped-up music that goes with it. Only restarts the pop animation and touches the
         // music's playbackRate when the displayed second actually changes, rather than every tick.
+
+        // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
+        // plus the sped-up music that goes with it. The countdown pop only restarts when the
+        // displayed second actually changes, but the music rate is nudged toward its target every
+        // tick so it winds up/down smoothly instead of snapping instantly.
         function updateTimeDangerEffects() {
+            const musicNormalRate = 1.0;
+            const musicDangerRate = 1.4;
+            const musicRampSeconds = 1.5; // time to glide from normal to max danger speed
+            const musicRatePerTick = (musicDangerRate - musicNormalRate) / (musicRampSeconds * 60);
+
             if (timeLeft <= 10 && timeLeft > 0) {
                 let displaySec = Math.ceil(timeLeft);
                 if (displaySec !== lastCountdownSecond) {
@@ -1851,12 +1861,21 @@
                     el.classList.remove('countdown-pop');
                     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('countdown-pop')));
                 }
-                if (!musicSped) { musicSped = true; musicPlayer.playbackRate = 1.4; }
+                musicSped = true;
+                if (musicPlayer.playbackRate < musicDangerRate) {
+                    musicPlayer.playbackRate = Math.min(musicDangerRate, musicPlayer.playbackRate + musicRatePerTick);
+                }
             } else {
                 if (lastCountdownSecond !== -1) { lastCountdownSecond = -1; domRefs.timeCountdown.style.display = 'none'; }
-                if (musicSped) { musicSped = false; musicPlayer.playbackRate = 1.0; }
+                if (musicSped) {
+                    if (musicPlayer.playbackRate > musicNormalRate) {
+                        musicPlayer.playbackRate = Math.max(musicNormalRate, musicPlayer.playbackRate - musicRatePerTick);
+                    }
+                    if (musicPlayer.playbackRate <= musicNormalRate) musicSped = false;
+                }
             }
         }
+
 
         function syncSettingsUI() {
             document.getElementById('music-slider').value = userSettings.musicVol;

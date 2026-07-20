@@ -620,7 +620,7 @@
         musicPlayerFast.loop = true;
         musicPlayerFast.preload = 'auto';
         musicPlayerFast.playsInline = true;
-        musicPlayerFast.playbackRate = 1.4; // fixed for the whole life of the element - never scrubbed
+        musicPlayerFast.playbackRate = 1.6; // fixed for the whole life of the element - never scrubbed
 
         // Builds the Web Audio graph exactly once, on the first user-gesture-triggered call to
         // initAudio(). Must happen after a gesture or the AudioContext is created suspended.
@@ -678,6 +678,10 @@
             musicDangerActive = active;
             musicSped = active;
             if (!audioGraphReady) return;
+            // Guard against either element having silently stalled (e.g. a stalled load) -
+            // without this, the fast element fading "in" could fade in to nothing.
+            if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
+            if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
             let now = actx.currentTime;
             // Ramp from wherever the gains currently sit (not a hardcoded endpoint) so
             // re-triggering mid-fade never pops.
@@ -1931,7 +1935,7 @@
         }
 
         // Setup Event Listeners
-        document.getElementById('play-btn').addEventListener('click', () => { initAudio(); startGame(); });
+        document.getElementById('play-btn').addEventListener('click', () => { startGame(); });
         document.getElementById('title-shop-btn').addEventListener('click', toggleShop);
         document.getElementById('go-shop-btn').addEventListener('click', toggleShop);
         document.getElementById('level-continue-btn').addEventListener('click', nextLevel);
@@ -2961,6 +2965,13 @@
             gameState = 'playing'; camera.x = player.worldX - canvas.width / 2;
             camera.y = player.worldY - canvas.height / 2;
             camera.prevX = camera.x; camera.prevY = camera.y;
+            // Unlock/build the audio graph directly off this click, then load the level's own
+            // track straight away - previously this went through initAudio() (which picks a
+            // random *title* track) immediately followed by a second track load to correct it,
+            // two rapid back-to-back src/currentTime/play() resets on both music elements that
+            // could leave the "fast" element stalled or out of sync by the time it was needed.
+            if (!audioGraphReady) setupAudioGraph();
+            if (actx.state === 'suspended') actx.resume();
             if (levelPreGenerated) {
                 // Level 1 was already fully generated at page load and is sitting ready to go -
                 // just make sure its track is loaded now that this user gesture has unlocked

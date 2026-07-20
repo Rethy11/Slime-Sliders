@@ -611,6 +611,20 @@
         const musicDangerRate = 1.6;  // playback rate for the "final ten seconds" fast element
         let musicDangerActive = false;
 
+        // Sets playbackRate on the fast element and turns OFF pitch preservation. By default,
+        // playbackRate changes try to preserve pitch using a time-stretching algorithm, which
+        // is exactly what was making the sped-up music sound glitchy/grainy throughout (not
+        // just at the crossfade) - it's a well-known weak point for percussive/chiptune-style
+        // audio. Disabling it makes the element simply resample instead, which raises the pitch
+        // (the classic "sped-up tape" effect) with none of the time-stretch artifacts - and is
+        // also what we actually want for a "danger speed-up" feel anyway.
+        function applyFastRate(el) {
+            el.playbackRate = musicDangerRate;
+            el.preservesPitch = false;
+            el.mozPreservesPitch = false;
+            el.webkitPreservesPitch = false;
+        }
+
         const musicPlayerNormal = new Audio();
         musicPlayerNormal.loop = true;
         musicPlayerNormal.preload = 'auto';
@@ -621,7 +635,7 @@
         musicPlayerFast.loop = true;
         musicPlayerFast.preload = 'auto';
         musicPlayerFast.playsInline = true;
-        musicPlayerFast.playbackRate = musicDangerRate;
+        applyFastRate(musicPlayerFast);
 
         // Builds the Web Audio graph exactly once, on the first user-gesture-triggered call to
         // initAudio(). Must happen after a gesture or the AudioContext is created suspended.
@@ -659,13 +673,13 @@
             currentTrack = idx;
             musicPlayerNormal.src = musicFiles[idx];
             musicPlayerFast.src = musicFiles[idx];
-            // Re-assert playbackRate every time a new resource is loaded: WebKit/Safari resets
-            // playbackRate to 1.0 whenever .src is (re)assigned, even though the property is
-            // meant to be independent of the loaded resource per spec. Setting it once at
-            // construction time (before any src existed) was silently undone on every level
-            // load, which is why the "danger" element was never actually playing any faster.
+            // Re-assert playbackRate (and pitch-preservation) every time a new resource is
+            // loaded: WebKit/Safari resets these to their defaults whenever .src is
+            // (re)assigned, even though they're meant to be independent of the loaded resource
+            // per spec. Setting them once at construction time (before any src existed) was
+            // silently undone on every level load.
             musicPlayerNormal.playbackRate = 1.0;
-            musicPlayerFast.playbackRate = musicDangerRate;
+            applyFastRate(musicPlayerFast);
             musicPlayerNormal.currentTime = 0;
             musicPlayerFast.currentTime = 0;
             musicDangerActive = false;
@@ -690,9 +704,9 @@
             // without this, the fast element fading "in" could fade in to nothing.
             if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
             if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
-            // Also re-assert the rate itself here, belt-and-braces against the same WebKit
-            // reset-on-load quirk documented in playMusicTrack().
-            if (musicPlayerFast.playbackRate !== musicDangerRate) musicPlayerFast.playbackRate = musicDangerRate;
+            // Also re-assert the rate/pitch settings here, belt-and-braces against the same
+            // WebKit reset-on-load quirk documented in playMusicTrack().
+            if (musicPlayerFast.playbackRate !== musicDangerRate || musicPlayerFast.preservesPitch) applyFastRate(musicPlayerFast);
             // The two elements have been playing independently at different rates since the
             // track loaded, so they drift apart - the fast one free-running ahead of the normal
             // one. Left alone, crossfading to it lands on a different, unrelated point in the

@@ -607,7 +607,7 @@
         // Background music: one file per theme/level track, same order as `themes`/level index.
         const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
         let currentTrack = 0;
-        const musicRampSeconds = 1.5; // time to glide between normal and danger speed
+        const musicRampSeconds = 0.4; // time to glide between normal and danger speed
         const musicDangerRate = 1.6;  // playback rate for the "final ten seconds" fast element
         let musicDangerActive = false;
 
@@ -693,6 +693,17 @@
             // Also re-assert the rate itself here, belt-and-braces against the same WebKit
             // reset-on-load quirk documented in playMusicTrack().
             if (musicPlayerFast.playbackRate !== musicDangerRate) musicPlayerFast.playbackRate = musicDangerRate;
+            // The two elements have been playing independently at different rates since the
+            // track loaded, so they drift apart - the fast one free-running ahead of the normal
+            // one. Left alone, crossfading to it lands on a different, unrelated point in the
+            // song (an audible jump-cut), not just a pitch change - which is what was making it
+            // sound "jumpy and odd". Re-sync the incoming element to the outgoing element's
+            // current position right before the fade so it continues the same musical moment.
+            let dur = musicPlayerNormal.duration;
+            if (isFinite(dur) && dur > 0) {
+                if (active) musicPlayerFast.currentTime = musicPlayerNormal.currentTime % dur;
+                else musicPlayerNormal.currentTime = musicPlayerFast.currentTime % dur;
+            }
             let now = actx.currentTime;
             // Ramp from wherever the gains currently sit (not a hardcoded endpoint) so
             // re-triggering mid-fade never pops.

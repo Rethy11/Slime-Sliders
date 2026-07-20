@@ -455,6 +455,9 @@
 
         let gameState = 'title';
         let previousState = 'title';
+        // True from the moment the first level is pre-generated on page load until it's
+        // actually consumed by startGame() - see the bottom of this script and startGame().
+        let levelPreGenerated = false;
         let level = 1;
         let score = 0;
         let totalCoins = parseInt(storage.get('landSlidersCoins')) || 0;
@@ -579,39 +582,137 @@
 
         // ==========================================
         // SECTION 3 - AUDIO ENGINE
-        // Sound effects still use the Web Audio API (procedural synthesis), but the background
-        // music tracks are now real, pre-rendered audio files played back with <audio> elements
-        // instead of being scheduled note-by-note through oscillators.
+        // Sound effects still use the Web Audio API (procedural synthesis). Background music
+        // is played through TWO <audio> elements per track - one at normal speed, one pitched
+        // up to the "danger" speed - routed into Web Audio via MediaElementAudioSourceNode so
+        // volume is controlled with GainNodes instead of element.volume.
+        //
+        // Why: iOS Safari silently ignores HTMLMediaElement.volume (hardware buttons take
+        // precedence over JS-controlled volume by design), which is why the music slider had
+        // no effect on iOS. Routing through a GainNode sidesteps that restriction entirely.
+        //
+        // This also fixes the "final ten seconds" speedup cutting out: that used to work by
+        // reassigning musicPlayer.playbackRate on every single physics tick (60x/sec) while
+        // the track was actively playing, which is a known trigger for audio elements
+        // stalling/rebuffering (especially on iOS Safari) - the music would silently drop out
+        // for a few seconds and resume already at max rate once the browser recovered. Now
+        // each element's playbackRate is set exactly once, when the track loads, and never
+        // touched again; the "speed up" effect is achieved purely by crossfading the gain
+        // between the two elements with a couple of scheduled AudioParam ramps.
         // ==========================================
-        let actx;
+        let actx = null;
+        let audioGraphReady = false;
+        let musicGainMaster, gainNormal, gainFast, sfxGainBus;
 
         // Background music: one file per theme/level track, same order as `themes`/level index.
         const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
         let currentTrack = 0;
-        const musicPlayer = new Audio();
-        musicPlayer.loop = true;
-        musicPlayer.volume = userSettings.musicVol;
-        musicPlayer.preload = 'auto';
+        const musicRampSeconds = 1.5; // time to glide between normal and danger speed
+        let musicDangerActive = false;
 
-        // Restarts playback of the given track from the beginning (mirrors the old sequencer's
-        // behavior of resyncing all note indices to 0 at the start of every level).
+        const musicPlayerNormal = new Audio();
+        musicPlayerNormal.loop = true;
+        musicPlayerNormal.preload = 'auto';
+        musicPlayerNormal.playsInline = true;
+        musicPlayerNormal.playbackRate = 1.0;
+
+        const musicPlayerFast = new Audio();
+        musicPlayerFast.loop = true;
+        musicPlayerFast.preload = 'auto';
+        musicPlayerFast.playsInline = true;
+        musicPlayerFast.playbackRate = 1.4; // fixed for the whole life of the element - never scrubbed
+
+        // Builds the Web Audio graph exactly once, on the first user-gesture-triggered call to
+        // initAudio(). Must happen after a gesture or the AudioContext is created suspended.
+        function setupAudioGraph() {
+            if (audioGraphReady) return;
+            actx = new (window.AudioContext || window.webkitAudioContext)();
+
+            musicGainMaster = actx.createGain();
+            musicGainMaster.gain.value = userSettings.musicVol;
+            musicGainMaster.connect(actx.destination);
+
+            gainNormal = actx.createGain();
+            gainNormal.gain.value = 1;
+            gainNormal.connect(musicGainMaster);
+
+            gainFast = actx.createGain();
+            gainFast.gain.value = 0;
+            gainFast.connect(musicGainMaster);
+
+            actx.createMediaElementSource(musicPlayerNormal).connect(gainNormal);
+            actx.createMediaElementSource(musicPlayerFast).connect(gainFast);
+
+            sfxGainBus = actx.createGain();
+            sfxGainBus.gain.value = 1;
+            sfxGainBus.connect(actx.destination);
+
+            audioGraphReady = true;
+        }
+
+        // (Re)loads both music elements with a track and resets the crossfade to "normal".
+        // Safe to call before the audio graph exists (e.g. pre-generating the first level on
+        // page load, before any user gesture) - it just primes the elements silently and
+        // playback naturally starts once initAudio() unlocks things on the first tap.
         function playMusicTrack(idx) {
             currentTrack = idx;
-            musicPlayer.src = musicFiles[idx];
-            musicPlayer.currentTime = 0;
-            musicPlayer.volume = userSettings.musicVol;
-            musicPlayer.playbackRate = 1.0;
-            musicPlayer.play().catch(() => {});
+            musicPlayerNormal.src = musicFiles[idx];
+            musicPlayerFast.src = musicFiles[idx];
+            musicPlayerNormal.currentTime = 0;
+            musicPlayerFast.currentTime = 0;
+            musicDangerActive = false;
+            musicSped = false;
+            if (audioGraphReady) {
+                let now = actx.currentTime;
+                gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(1, now);
+                gainFast.gain.cancelScheduledValues(now); gainFast.gain.setValueAtTime(0, now);
+                musicPlayerNormal.play().catch(() => {});
+                musicPlayerFast.play().catch(() => {});
+            }
+        }
+
+        // Crossfades between the normal-speed and danger-speed instances of the current track
+        // using scheduled gain ramps (smooth and glitch-free) rather than touching playbackRate.
+        function setMusicDanger(active) {
+            if (active === musicDangerActive) return;
+            musicDangerActive = active;
+            musicSped = active;
+            if (!audioGraphReady) return;
+            let now = actx.currentTime;
+            // Ramp from wherever the gains currently sit (not a hardcoded endpoint) so
+            // re-triggering mid-fade never pops.
+            gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(gainNormal.gain.value, now);
+            gainFast.gain.cancelScheduledValues(now); gainFast.gain.setValueAtTime(gainFast.gain.value, now);
+            gainNormal.gain.linearRampToValueAtTime(active ? 0 : 1, now + musicRampSeconds);
+            gainFast.gain.linearRampToValueAtTime(active ? 1 : 0, now + musicRampSeconds);
         }
 
         function initAudio() {
-            if (!actx) {
-                actx = new (window.AudioContext || window.webkitAudioContext)();
+            if (!audioGraphReady) {
+                setupAudioGraph();
                 if (gameState === 'title') currentTrack = Math.floor(Math.random() * musicFiles.length);
                 playMusicTrack(currentTrack);
             }
             if (actx.state === 'suspended') actx.resume();
-            if (musicPlayer.paused) musicPlayer.play().catch(() => {});
+            if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
+            if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
+        }
+
+        // Stops music when the game leaves the screen (tab switch, app backgrounded/closed as
+        // a PWA) instead of letting it keep playing silently in the background.
+        let musicWasPlayingBeforeHidden = false;
+        function pauseMusicForVisibility() {
+            if (!audioGraphReady) return;
+            musicWasPlayingBeforeHidden = !musicPlayerNormal.paused || !musicPlayerFast.paused;
+            musicPlayerNormal.pause();
+            musicPlayerFast.pause();
+            if (actx.state === 'running') actx.suspend();
+        }
+        function resumeMusicForVisibility() {
+            if (!audioGraphReady || !musicWasPlayingBeforeHidden) return;
+            if (actx.state === 'suspended') actx.resume();
+            musicPlayerNormal.play().catch(() => {});
+            musicPlayerFast.play().catch(() => {});
         }
 
         function playSFX(type, pitchMult = 1) {
@@ -1164,8 +1265,11 @@
             displayCtx.imageSmoothingEnabled = false;
         }
         window.addEventListener('resize', resize); resize();
-        document.addEventListener('visibilitychange', () => { if (document.hidden) flushCoinsIfDirty(); });
-        window.addEventListener('pagehide', flushCoinsIfDirty);
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) { flushCoinsIfDirty(); pauseMusicForVisibility(); }
+            else { resumeMusicForVisibility(); }
+        });
+        window.addEventListener('pagehide', () => { flushCoinsIfDirty(); pauseMusicForVisibility(); });
         document.getElementById('hud-coin-icon').src = iconDataURL('coin', 22);
         document.getElementById('unlock-star-l').src = iconDataURL('star', 20);
         document.getElementById('unlock-star-r').src = iconDataURL('star', 20);
@@ -1716,6 +1820,8 @@
         }
 
         function toggleAlmanac() {
+            // Don't allow Almanac to open on top of Settings - it has to be closed first.
+            if (document.getElementById('settings-modal').style.display === 'block') return;
             if (gameState === 'playing') { previousState = gameState;
             gameState = 'paused'; }
             else if (gameState !== 'paused') { previousState = gameState;
@@ -1724,6 +1830,8 @@
         }
 
         function toggleSettings() {
+            // Don't allow Settings to open on top of Almanac - it has to be closed first.
+            if (document.getElementById('almanac-modal').style.display === 'block') return;
             if (gameState === 'playing') { previousState = gameState;
             gameState = 'paused'; }
             else if (gameState !== 'paused') { previousState = gameState;
@@ -1792,11 +1900,6 @@
         // displayed second actually changes, but the music rate is nudged toward its target every
         // tick so it winds up/down smoothly instead of snapping instantly.
         function updateTimeDangerEffects() {
-            const musicNormalRate = 1.0;
-            const musicDangerRate = 1.4;
-            const musicRampSeconds = 1.5; // time to glide from normal to max danger speed
-            const musicRatePerTick = (musicDangerRate - musicNormalRate) / (musicRampSeconds * 60);
-
             if (timeLeft <= 10 && timeLeft > 0) {
                 let displaySec = Math.ceil(timeLeft);
                 if (displaySec !== lastCountdownSecond) {
@@ -1807,18 +1910,12 @@
                     el.classList.remove('countdown-pop');
                     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('countdown-pop')));
                 }
-                musicSped = true;
-                if (musicPlayer.playbackRate < musicDangerRate) {
-                    musicPlayer.playbackRate = Math.min(musicDangerRate, musicPlayer.playbackRate + musicRatePerTick);
-                }
+                // Only actually schedules a ramp the first tick this becomes true (setMusicDanger
+                // no-ops if already active) - see SECTION 3 for why this replaced per-tick rate changes.
+                setMusicDanger(true);
             } else {
                 if (lastCountdownSecond !== -1) { lastCountdownSecond = -1; domRefs.timeCountdown.style.display = 'none'; }
-                if (musicSped) {
-                    if (musicPlayer.playbackRate > musicNormalRate) {
-                        musicPlayer.playbackRate = Math.max(musicNormalRate, musicPlayer.playbackRate - musicRatePerTick);
-                    }
-                    if (musicPlayer.playbackRate <= musicNormalRate) musicSped = false;
-                }
+                setMusicDanger(false);
             }
         }
 
@@ -1850,7 +1947,7 @@
         });
         document.getElementById('go-play-again').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; resetGame(); startGame(); });
         document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; });
-        document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); musicPlayer.volume = userSettings.musicVol; initAudio(); });
+        document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); if (musicGainMaster) musicGainMaster.gain.value = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
         syncSettingsUI();
@@ -2864,7 +2961,15 @@
             gameState = 'playing'; camera.x = player.worldX - canvas.width / 2;
             camera.y = player.worldY - canvas.height / 2;
             camera.prevX = camera.x; camera.prevY = camera.y;
-            generateLevel();
+            if (levelPreGenerated) {
+                // Level 1 was already fully generated at page load and is sitting ready to go -
+                // just make sure its track is loaded now that this user gesture has unlocked
+                // audio, rather than throwing the pre-built level away and generating a new one.
+                levelPreGenerated = false;
+                playMusicTrack((level - 1) % musicFiles.length);
+            } else {
+                generateLevel();
+            }
         }
 
         function resetGame() {
@@ -2891,7 +2996,7 @@
             // still check what killed them or adjust settings from the Game Over screen.
             document.getElementById('game-over-screen').style.display = 'flex';
             lastCountdownSecond = -1;
-            if (musicSped) { musicSped = false; musicPlayer.playbackRate = 1.0; }
+            setMusicDanger(false);
             updateHazardVignette(0);
             if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
             }
@@ -3029,6 +3134,14 @@
 
             requestAnimationFrame(gameLoop);
         }
+
+        // Generate the first level immediately so it's fully ready the moment the player taps
+        // Play, instead of building it inside the click handler where any delay is felt as
+        // input lag. gameState is still 'title' at this point and update() only advances real
+        // gameplay logic (timer, enemies, spawns, etc.) once gameState === 'playing', so the
+        // world exists but the game itself stays paused until startGame() runs.
+        generateLevel();
+        levelPreGenerated = true;
 
         requestAnimationFrame(gameLoop);
 

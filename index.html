@@ -608,6 +608,7 @@
         const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
         let currentTrack = 0;
         const musicRampSeconds = 1.5; // time to glide between normal and danger speed
+        const musicDangerRate = 1.6;  // playback rate for the "final ten seconds" fast element
         let musicDangerActive = false;
 
         const musicPlayerNormal = new Audio();
@@ -620,7 +621,7 @@
         musicPlayerFast.loop = true;
         musicPlayerFast.preload = 'auto';
         musicPlayerFast.playsInline = true;
-        musicPlayerFast.playbackRate = 1.6; // fixed for the whole life of the element - never scrubbed
+        musicPlayerFast.playbackRate = musicDangerRate;
 
         // Builds the Web Audio graph exactly once, on the first user-gesture-triggered call to
         // initAudio(). Must happen after a gesture or the AudioContext is created suspended.
@@ -658,6 +659,13 @@
             currentTrack = idx;
             musicPlayerNormal.src = musicFiles[idx];
             musicPlayerFast.src = musicFiles[idx];
+            // Re-assert playbackRate every time a new resource is loaded: WebKit/Safari resets
+            // playbackRate to 1.0 whenever .src is (re)assigned, even though the property is
+            // meant to be independent of the loaded resource per spec. Setting it once at
+            // construction time (before any src existed) was silently undone on every level
+            // load, which is why the "danger" element was never actually playing any faster.
+            musicPlayerNormal.playbackRate = 1.0;
+            musicPlayerFast.playbackRate = musicDangerRate;
             musicPlayerNormal.currentTime = 0;
             musicPlayerFast.currentTime = 0;
             musicDangerActive = false;
@@ -682,6 +690,9 @@
             // without this, the fast element fading "in" could fade in to nothing.
             if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
             if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
+            // Also re-assert the rate itself here, belt-and-braces against the same WebKit
+            // reset-on-load quirk documented in playMusicTrack().
+            if (musicPlayerFast.playbackRate !== musicDangerRate) musicPlayerFast.playbackRate = musicDangerRate;
             let now = actx.currentTime;
             // Ramp from wherever the gains currently sit (not a hardcoded endpoint) so
             // re-triggering mid-fade never pops.

@@ -583,22 +583,22 @@
         // ==========================================
         // SECTION 3 - AUDIO ENGINE
         // Sound effects still use the Web Audio API (procedural synthesis). Background music
-        // is played through TWO <audio> elements per track - one at normal speed, one pitched
-        // up to the "danger" speed - routed into Web Audio via MediaElementAudioSourceNode so
-        // volume is controlled with GainNodes instead of element.volume.
+        // is played through TWO <audio> elements - the normal loop, and a separate pre-rendered
+        // "danger" stinger for the final ten seconds - routed into Web Audio via
+        // MediaElementAudioSourceNode so volume is controlled with GainNodes instead of
+        // element.volume.
         //
         // Why: iOS Safari silently ignores HTMLMediaElement.volume (hardware buttons take
         // precedence over JS-controlled volume by design), which is why the music slider had
         // no effect on iOS. Routing through a GainNode sidesteps that restriction entirely.
         //
-        // This also fixes the "final ten seconds" speedup cutting out: that used to work by
-        // reassigning musicPlayer.playbackRate on every single physics tick (60x/sec) while
-        // the track was actively playing, which is a known trigger for audio elements
-        // stalling/rebuffering (especially on iOS Safari) - the music would silently drop out
-        // for a few seconds and resume already at max rate once the browser recovered. Now
-        // each element's playbackRate is set exactly once, when the track loads, and never
-        // touched again; the "speed up" effect is achieved purely by crossfading the gain
-        // between the two elements with a couple of scheduled AudioParam ramps.
+        // Design note: earlier versions tried to speed up the SAME track via playbackRate and
+        // crossfade into it, which required re-syncing the two elements' currentTime to the
+        // same musical position right before every crossfade - and that resync (an active seek
+        // on a playing element) was audibly glitchy no matter how few times it ran. The danger
+        // stinger is a distinct short audio file per track that always starts fresh from 0 when
+        // the crossfade begins, so there is no position to keep in sync and nothing to seek -
+        // the crossfade is a pure gain ramp between two already-correctly-positioned elements.
         // ==========================================
         let actx = null;
         let audioGraphReady = false;
@@ -606,36 +606,25 @@
 
         // Background music: one file per theme/level track, same order as `themes`/level index.
         const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
+        // Matching "final ten seconds" danger stinger per track. These are separate, pre-made
+        // audio files (not the same song sped up at runtime) - point them at real assets before
+        // shipping. If you'd rather use one shared stinger for every theme, just repeat the
+        // same path in every slot.
+        const musicFilesDanger = ['audio/forest_danger.mp3', 'audio/desert_danger.mp3', 'audio/snow_danger.mp3', 'audio/volcano_danger.mp3', 'audio/swamp_danger.mp3', 'audio/autumn_danger.mp3'];
         let currentTrack = 0;
-        const musicRampSeconds = 0.4; // time to glide between normal and danger speed
-        const musicDangerRate = 1.6;  // playback rate for the "final ten seconds" fast element
+        const musicRampSeconds = 0.4; // time to glide between normal and danger music
         let musicDangerActive = false;
-
-        // Sets playbackRate on the fast element and turns OFF pitch preservation. By default,
-        // playbackRate changes try to preserve pitch using a time-stretching algorithm, which
-        // is exactly what was making the sped-up music sound glitchy/grainy throughout (not
-        // just at the crossfade) - it's a well-known weak point for percussive/chiptune-style
-        // audio. Disabling it makes the element simply resample instead, which raises the pitch
-        // (the classic "sped-up tape" effect) with none of the time-stretch artifacts - and is
-        // also what we actually want for a "danger speed-up" feel anyway.
-        function applyFastRate(el) {
-            el.playbackRate = musicDangerRate;
-            el.preservesPitch = false;
-            el.mozPreservesPitch = false;
-            el.webkitPreservesPitch = false;
-        }
+        let dangerFadeToken = 0; // bumped on every setMusicDanger() call; lets a delayed pause() no-op if re-triggered mid-fade
 
         const musicPlayerNormal = new Audio();
         musicPlayerNormal.loop = true;
         musicPlayerNormal.preload = 'auto';
         musicPlayerNormal.playsInline = true;
-        musicPlayerNormal.playbackRate = 1.0;
 
         const musicPlayerFast = new Audio();
         musicPlayerFast.loop = true;
         musicPlayerFast.preload = 'auto';
         musicPlayerFast.playsInline = true;
-        applyFastRate(musicPlayerFast);
 
         // Builds the Web Audio graph exactly once, on the first user-gesture-triggered call to
         // initAudio(). Must happen after a gesture or the AudioContext is created suspended.
@@ -665,58 +654,44 @@
             audioGraphReady = true;
         }
 
-        // (Re)loads both music elements with a track and resets the crossfade to "normal".
-        // Safe to call before the audio graph exists (e.g. pre-generating the first level on
-        // page load, before any user gesture) - it just primes the elements silently and
-        // playback naturally starts once initAudio() unlocks things on the first tap.
+        // Loads the normal track and starts it immediately; loads (but does not play) its
+        // danger stinger, ready to start from 0 the instant it's needed. Safe to call before
+        // the audio graph exists (e.g. pre-generating the first level on page load, before any
+        // user gesture) - it just primes the elements silently and playback naturally starts
+        // once initAudio() unlocks things on the first tap.
         function playMusicTrack(idx) {
             currentTrack = idx;
             musicPlayerNormal.src = musicFiles[idx];
-            musicPlayerFast.src = musicFiles[idx];
-            // Re-assert playbackRate (and pitch-preservation) every time a new resource is
-            // loaded: WebKit/Safari resets these to their defaults whenever .src is
-            // (re)assigned, even though they're meant to be independent of the loaded resource
-            // per spec. Setting them once at construction time (before any src existed) was
-            // silently undone on every level load.
-            musicPlayerNormal.playbackRate = 1.0;
-            applyFastRate(musicPlayerFast);
+            musicPlayerFast.src = musicFilesDanger[idx];
             musicPlayerNormal.currentTime = 0;
             musicPlayerFast.currentTime = 0;
             musicDangerActive = false;
             musicSped = false;
+            dangerFadeToken++;
             if (audioGraphReady) {
                 let now = actx.currentTime;
                 gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(1, now);
                 gainFast.gain.cancelScheduledValues(now); gainFast.gain.setValueAtTime(0, now);
+                musicPlayerFast.pause();
                 musicPlayerNormal.play().catch(() => {});
-                musicPlayerFast.play().catch(() => {});
             }
         }
 
-        // Crossfades between the normal-speed and danger-speed instances of the current track
-        // using scheduled gain ramps (smooth and glitch-free) rather than touching playbackRate.
+        // Crossfades between the normal music and the danger stinger using scheduled gain
+        // ramps (smooth and glitch-free). The stinger always starts from position 0, so there
+        // is nothing to keep in sync between the two elements - just a gain ramp.
         function setMusicDanger(active) {
             if (active === musicDangerActive) return;
             musicDangerActive = active;
             musicSped = active;
+            dangerFadeToken++;
+            let myFadeToken = dangerFadeToken;
             if (!audioGraphReady) return;
-            // Guard against either element having silently stalled (e.g. a stalled load) -
-            // without this, the fast element fading "in" could fade in to nothing.
             if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
-            if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
-            // Also re-assert the rate/pitch settings here, belt-and-braces against the same
-            // WebKit reset-on-load quirk documented in playMusicTrack().
-            if (musicPlayerFast.playbackRate !== musicDangerRate || musicPlayerFast.preservesPitch) applyFastRate(musicPlayerFast);
-            // The two elements have been playing independently at different rates since the
-            // track loaded, so they drift apart - the fast one free-running ahead of the normal
-            // one. Left alone, crossfading to it lands on a different, unrelated point in the
-            // song (an audible jump-cut), not just a pitch change - which is what was making it
-            // sound "jumpy and odd". Re-sync the incoming element to the outgoing element's
-            // current position right before the fade so it continues the same musical moment.
-            let dur = musicPlayerNormal.duration;
-            if (isFinite(dur) && dur > 0) {
-                if (active) musicPlayerFast.currentTime = musicPlayerNormal.currentTime % dur;
-                else musicPlayerNormal.currentTime = musicPlayerFast.currentTime % dur;
+            if (active) {
+                // Fresh start every time - this is the whole reason no resync is needed.
+                musicPlayerFast.currentTime = 0;
+                musicPlayerFast.play().catch(() => {});
             }
             let now = actx.currentTime;
             // Ramp from wherever the gains currently sit (not a hardcoded endpoint) so
@@ -725,6 +700,13 @@
             gainFast.gain.cancelScheduledValues(now); gainFast.gain.setValueAtTime(gainFast.gain.value, now);
             gainNormal.gain.linearRampToValueAtTime(active ? 0 : 1, now + musicRampSeconds);
             gainFast.gain.linearRampToValueAtTime(active ? 1 : 0, now + musicRampSeconds);
+            if (!active) {
+                // Once the fade-out finishes, stop the stinger so it's not silently decoding in
+                // the background - unless another crossfade has since started (token changed).
+                setTimeout(() => {
+                    if (dangerFadeToken === myFadeToken) musicPlayerFast.pause();
+                }, musicRampSeconds * 1000 + 50);
+            }
         }
 
         function initAudio() {
@@ -735,7 +717,7 @@
             }
             if (actx.state === 'suspended') actx.resume();
             if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
-            if (musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
+            if (musicDangerActive && musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
         }
 
         // Stops music when the game leaves the screen (tab switch, app backgrounded/closed as
@@ -752,7 +734,7 @@
             if (!audioGraphReady || !musicWasPlayingBeforeHidden) return;
             if (actx.state === 'suspended') actx.resume();
             musicPlayerNormal.play().catch(() => {});
-            musicPlayerFast.play().catch(() => {});
+            if (musicDangerActive) musicPlayerFast.play().catch(() => {});
         }
 
         function playSFX(type, pitchMult = 1) {
@@ -1932,13 +1914,9 @@
         }
 
         // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
-        // plus the sped-up music that goes with it. Only restarts the pop animation and touches the
-        // music's playbackRate when the displayed second actually changes, rather than every tick.
-
-        // Drives the dramatic "10, 9, 8..." countdown in the final ten seconds of the level timer,
-        // plus the sped-up music that goes with it. The countdown pop only restarts when the
-        // displayed second actually changes, but the music rate is nudged toward its target every
-        // tick so it winds up/down smoothly instead of snapping instantly.
+        // plus the danger stinger that goes with it. The countdown pop only restarts when the
+        // displayed second actually changes; setMusicDanger() itself no-ops on repeat calls, so
+        // the stinger only actually starts/stops on the tick the state changes.
         function updateTimeDangerEffects() {
             if (timeLeft <= 10 && timeLeft > 0) {
                 let displaySec = Math.ceil(timeLeft);
@@ -1950,8 +1928,6 @@
                     el.classList.remove('countdown-pop');
                     requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('countdown-pop')));
                 }
-                // Only actually schedules a ramp the first tick this becomes true (setMusicDanger
-                // no-ops if already active) - see SECTION 3 for why this replaced per-tick rate changes.
                 setMusicDanger(true);
             } else {
                 if (lastCountdownSecond !== -1) { lastCountdownSecond = -1; domRefs.timeCountdown.style.display = 'none'; }

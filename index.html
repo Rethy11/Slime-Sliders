@@ -434,6 +434,59 @@
             return treeQueryResult;
         }
 
+        // Spatial hash grid for fences (same pattern as the tree grid above). Fences are solid -
+        // entities get pushed back out along the fence's normal, same shape of check as tree
+        // collision but against a line segment instead of a circle.
+        const fenceGridSize = 150;
+        let fenceGrid = new Map();
+        function buildFenceGrid() {
+            fenceGrid = new Map();
+            for (let f of fences) {
+                let key = Math.floor(f.midX / fenceGridSize) + '_' + Math.floor(f.midY / fenceGridSize);
+                let bucket = fenceGrid.get(key);
+                if (!bucket) { bucket = []; fenceGrid.set(key, bucket); }
+                bucket.push(f);
+            }
+        }
+        let fenceQueryResult = [];
+        function getNearbyFences(x, y) {
+            fenceQueryResult.length = 0;
+            let cx = Math.floor(x / fenceGridSize), cy = Math.floor(y / fenceGridSize);
+            for (let dx = -1; dx <= 1; dx++) {
+                for (let dy = -1; dy <= 1; dy++) {
+                    let bucket = fenceGrid.get((cx + dx) + '_' + (cy + dy));
+                    if (bucket) for (let i = 0; i < bucket.length; i++) fenceQueryResult.push(bucket[i]);
+                }
+            }
+            return fenceQueryResult;
+        }
+        // Pushes (x, y) back out of any nearby fence segment it's overlapping (within `radius` of
+        // the segment plus the fence's own thickness), and returns the corrected point. Used by
+        // the player and enemies each tick so fences act as solid walls rather than decoration.
+        const fenceThickness = 10;
+        function resolveFenceCollision(x, y, radius) {
+            let nearFences = getNearbyFences(x, y);
+            for (let i = 0; i < nearFences.length; i++) {
+                let f = nearFences[i];
+                let dx = f.x2 - f.x1, dy = f.y2 - f.y1;
+                let lenSq = dx*dx + dy*dy;
+                let t = lenSq > 0 ? ((x - f.x1) * dx + (y - f.y1) * dy) / lenSq : 0;
+                t = Math.max(0, Math.min(1, t));
+                let cx = f.x1 + t * dx, cy = f.y1 + t * dy;
+                let ex = x - cx, ey = y - cy;
+                let distSq = ex*ex + ey*ey;
+                let threshold = radius + fenceThickness;
+                if (distSq < threshold * threshold) {
+                    let d = Math.sqrt(distSq);
+                    if (d < 0.0001) { ex = 1; ey = 0; d = 1; } // degenerate: sitting exactly on the segment
+                    let overlap = threshold - d;
+                    x += (ex / d) * overlap;
+                    y += (ey / d) * overlap;
+                }
+            }
+            return { x, y };
+        }
+
         // Persistent pool of render-queue entries. Every frame previously allocated a brand new
         // {type, obj} wrapper object for every single visible tree/enemy/item/particle, plus a
         // new array from items.filter()/powerups.filter(), plus 10+ new forEach closures, plus a
@@ -492,7 +545,12 @@
         let pointerScreenY = window.innerHeight / 2;
         
         // Entity Arrays
-        let landBlobs = []; let items = []; let enemies = []; let trees = []; let hives = [];
+        // Hex-grid terrain: hexTiles maps "q,r" -> {q,r,x,y,type:'land'|'hole',element,hasFence,fenceDirs}.
+        // landHexList/holeHexList are derived flat arrays (rebuilt each level) kept around so hot
+        // paths (isSafe, drawing, spawning) don't have to filter the map every time.
+        let hexTiles = new Map(); let landHexList = []; let holeHexList = []; let borderHexList = [];
+        let fences = [];
+        let items = []; let enemies = []; let trees = []; let hives = [];
         let projectiles = []; let icicles = []; let flameParticles = []; let leaves = [];
         let splashes = []; let decorations = []; let powerups = []; let chest = null;
 
@@ -838,6 +896,53 @@
             return dist(px, py, ax + dx * t, ay + dy * t);
         }
 
+        // ---- Hex grid math (pointy-top, axial coordinates) ----
+        // Tile size mirrors the goal's footprint, per design: "smaller (the size of the goal)"
+        const HEX_SIZE = 48;
+        const HEX_DIRS = [{q:1,r:0},{q:1,r:-1},{q:0,r:-1},{q:-1,r:0},{q:-1,r:1},{q:0,r:1}];
+        function hexKey(q, r) { return q + ',' + r; }
+        function axialToPixel(q, r) { return { x: HEX_SIZE * Math.sqrt(3) * (q + r/2), y: HEX_SIZE * 1.5 * r }; }
+        function pixelToAxial(x, y) {
+            let q = (x * Math.sqrt(3)/3 - y/3) / HEX_SIZE;
+            let r = (y * 2/3) / HEX_SIZE;
+            // cube rounding to the nearest hex
+            let cx = q, cz = r, cy = -cx - cz;
+            let rx = Math.round(cx), ry = Math.round(cy), rz = Math.round(cz);
+            let dx = Math.abs(rx - cx), dy = Math.abs(ry - cy), dz = Math.abs(rz - cz);
+            if (dx > dy && dx > dz) rx = -ry - rz; else if (dy > dz) ry = -rx - rz; else rz = -rx - ry;
+            return { q: rx, r: rz };
+        }
+        function hexCorners(cx, cy) {
+            let pts = [];
+            for (let i = 0; i < 6; i++) {
+                let a = (Math.PI / 180) * (60 * i - 30);
+                pts.push({ x: cx + HEX_SIZE * Math.cos(a), y: cy + HEX_SIZE * Math.sin(a) });
+            }
+            return pts;
+        }
+        // Returns the two corner points of the edge tile shares with its neighbor in direction
+        // (dq,dr), found by looking 30 degrees either side of the direction to the neighbor's
+        // center - robust regardless of how hexCorners indexes its corners.
+        function hexEdgeCorners(tile, dq, dr) {
+            let n = axialToPixel(tile.q + dq, tile.r + dr);
+            let a = Math.atan2(n.y - tile.y, n.x - tile.x);
+            let a1 = a - Math.PI/6, a2 = a + Math.PI/6;
+            return [
+                { x: tile.x + HEX_SIZE * Math.cos(a1), y: tile.y + HEX_SIZE * Math.sin(a1) },
+                { x: tile.x + HEX_SIZE * Math.cos(a2), y: tile.y + HEX_SIZE * Math.sin(a2) }
+            ];
+        }
+        function pathHexUnion(ctx, tileList) {
+            ctx.beginPath();
+            for (let tile of tileList) {
+                if (!isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) continue;
+                let c = hexCorners(tile.x, tile.y);
+                ctx.moveTo(c[0].x, c[0].y);
+                for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y);
+                ctx.closePath();
+            }
+        }
+
         // ---- Hand-drawn pixel-icon sprites (replaces all emoji) ----
         function drawPixelIcon(type, tctx, x, y, size) {
             tctx.save(); tctx.translate(x, y);
@@ -969,26 +1074,46 @@
         // SECTION 5 - LEVEL GENERATION & ENTITY SPAWNING
         // Placement of ground blobs, entities, loot drops.
         // ==========================================
+        // A point is safe (not a hazard/hole/sky) exactly when the hex tile it falls in exists
+        // and is land. This covers hazard holes and the outer sky in one check, since both are
+        // simply "not a land tile" - matching the design that the sky is a hazard too.
         function isSafe(x, y) {
-            for (let b of landBlobs) { if (dist(x, y, b.x, b.y) <= b.r) return true; }
-            return false;
+            let h = pixelToAxial(x, y);
+            let tile = hexTiles.get(hexKey(h.q, h.r));
+            return !!tile && tile.type === 'land';
         }
 
+        // Picks a random continuous point within some land hex, jittered a bit off-center so
+        // mobile spawns (enemies, powerups) don't all line up on a lattice. Used for entities
+        // that roam rather than sit fixed at a hex's center.
         function getValidSpawn(minRadius, objectRadius) {
+            if (!landHexList.length) return { x: 0, y: 0 };
             for (let attempts = 0; attempts < 100; attempts++) {
-                let blob = landBlobs[Math.floor(Math.random() * landBlobs.length)];
+                let tile = landHexList[Math.floor(Math.random() * landHexList.length)];
                 let a = Math.random() * Math.PI * 2;
-                let r = Math.sqrt(Math.random()) * (blob.r - objectRadius);
-                let tx = blob.x + Math.cos(a) * r; let ty = blob.y + Math.sin(a) * r;
+                let r = Math.random() * HEX_SIZE * 0.4;
+                let tx = tile.x + Math.cos(a) * r; let ty = tile.y + Math.sin(a) * r;
                 if (dist(0, 0, tx, ty) < minRadius) continue;
                 if (dist(tx, ty, goal.x, goal.y) < goal.radius + objectRadius + 30) continue;
                 if (goal.active && distToSegment(tx, ty, 0, 0, goal.x, goal.y) < 80) continue;
+                if (!isSafe(tx, ty)) continue;
                 let valid = true;
                 for (let t of trees) { if (dist(tx, ty, t.x, t.y) < objectRadius + t.radius + 15) { valid = false; break; } }
                 for (let h of hives) { if (dist(tx, ty, h.x, h.y) < objectRadius + h.radius + 15) { valid = false; break; } }
                 if (valid) return { x: tx, y: ty };
             }
-            return { x: 0, y: 0 };
+            return { x: landHexList[0].x, y: landHexList[0].y };
+        }
+
+        // Picks a random unoccupied land hex's exact center - used for the single-element-per-
+        // hex placements (chest, hives) so they land cleanly on the honeycomb grid.
+        function pickLandHex(minDistFromOrigin) {
+            let candidates = landHexList.filter(t => !t.element &&
+                dist(t.x, t.y, 0, 0) >= minDistFromOrigin &&
+                (!goal.active || dist(t.x, t.y, goal.x, goal.y) > goal.radius + 60));
+            if (!candidates.length) candidates = landHexList.filter(t => !t.element);
+            if (!candidates.length) return null;
+            return candidates[Math.floor(Math.random() * candidates.length)];
         }
 
         function spawnSplash(x, y) {
@@ -1106,9 +1231,58 @@
             enemies.splice(idx, 1); screenShake = Math.max(screenShake, 6);
         }
 
+        // Builds every land hex that has at least one neighbor which is a hole or is missing
+        // entirely (i.e. borders the sky). Populates each qualifying tile's fenceCandidateDirs
+        // and returns the flat list, also used elsewhere (ambient rim splashes).
+        function findBorderHexes() {
+            let border = [];
+            for (let tile of landHexList) {
+                let dirs = [];
+                for (let i = 0; i < 6; i++) {
+                    let d = HEX_DIRS[i];
+                    let nb = hexTiles.get(hexKey(tile.q + d.q, tile.r + d.r));
+                    if (!nb || nb.type === 'hole') dirs.push(i);
+                }
+                if (dirs.length) { tile.fenceCandidateDirs = dirs; border.push(tile); }
+                else tile.fenceCandidateDirs = null;
+            }
+            return border;
+        }
+
+        // Fences have a base chance to appear along any land-hex edge that faces a hazard hole
+        // or the sky, then a couple of relaxation passes raise the odds for hexes sitting next
+        // to an already-fenced border hex, so fences tend to link up into continuous runs
+        // instead of scattering randomly. Fences never occupy a hex's single-element slot.
+        function buildFences() {
+            fences = [];
+            borderHexList = findBorderHexes();
+            const baseChance = 0.09, linkChance = 0.32, relaxPasses = 2;
+            for (let tile of borderHexList) tile.hasFence = Math.random() < baseChance;
+            for (let pass = 0; pass < relaxPasses; pass++) {
+                for (let tile of borderHexList) {
+                    if (tile.hasFence) continue;
+                    let neighborHasFence = false;
+                    for (let d of HEX_DIRS) {
+                        let nb = hexTiles.get(hexKey(tile.q + d.q, tile.r + d.r));
+                        if (nb && nb.fenceCandidateDirs && nb.hasFence) { neighborHasFence = true; break; }
+                    }
+                    if (neighborHasFence && Math.random() < linkChance) tile.hasFence = true;
+                }
+            }
+            for (let tile of borderHexList) {
+                if (!tile.hasFence) continue;
+                for (let dirIdx of tile.fenceCandidateDirs) {
+                    let d = HEX_DIRS[dirIdx];
+                    let [p1, p2] = hexEdgeCorners(tile, d.q, d.r);
+                    fences.push({ x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y, midX: (p1.x+p2.x)/2, midY: (p1.y+p2.y)/2 });
+                }
+            }
+        }
+
         function generateLevel() {
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
-            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; landBlobs = [];
+            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null;
+            hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             safeGridCache.clear();
 
@@ -1135,52 +1309,118 @@
             playMusicTrack((level - 1) % musicFiles.length);
             
             document.body.style.setProperty('--bg-color', currentTheme.bg);
-            landBlobs.push({x: 0, y: 0, r: 400 + Math.random()*100});
+
+            // ---- Footprint: reuse the old organic blob-chain shape to decide overall map size
+            // and layout (so total area/level-scaling/goal placement stays the same as before),
+            // then discretize it onto the hex grid instead of rendering the circles directly. ----
+            let shapeBlobs = [{ x: 0, y: 0, r: 400 + Math.random() * 100 }];
             let blobCount = 4 + Math.floor(scaledLevel * 0.25);
             for (let i = 0; i < blobCount; i++) {
-                let baseNode = landBlobs[Math.floor(Math.random() * landBlobs.length)];
+                let baseNode = shapeBlobs[Math.floor(Math.random() * shapeBlobs.length)];
                 let angle = Math.random() * Math.PI * 2;
                 let isDisconnected = Math.random() < 0.25;
                 let distance = isDisconnected ? baseNode.r + 250 + Math.random() * 150 : baseNode.r + 50 + Math.random() * 200;
                 let radius = 250 + Math.random() * 250;
-                landBlobs.push({ x: baseNode.x + Math.cos(angle)*distance, y: baseNode.y + Math.sin(angle)*distance, r: radius });
+                shapeBlobs.push({ x: baseNode.x + Math.cos(angle)*distance, y: baseNode.y + Math.sin(angle)*distance, r: radius });
             }
+            let endNode = shapeBlobs[shapeBlobs.length - 1];
+            function inFootprint(x, y) { for (let b of shapeBlobs) { if (dist(x, y, b.x, b.y) <= b.r) return true; } return false; }
 
-            let endNode = landBlobs[landBlobs.length - 1];
-            goal.x = endNode.x; goal.y = endNode.y; goal.active = true;
-
-            for (let b of landBlobs) {
-                let count = (b.r * Math.PI * 2) / 100;
-                for (let i=0; i<count; i++) {
-                    let a = Math.random() * Math.PI * 2; let r = b.r - (Math.random() * 40); 
-                    let tx = b.x + Math.cos(a) * r; let ty = b.y + Math.sin(a) * r;
-                    if (dist(tx, ty, goal.x, goal.y) < goal.radius + 40) continue;
-                    if (distToSegment(tx, ty, 0, 0, goal.x, goal.y) < 80) continue;
-                    trees.push({ x: tx, y: ty, radius: 25 + Math.random() * 20, type: Math.random() > 0.5 ? 'rock' : 'tree', variant: Math.floor(Math.random()*3), seed: Math.random()*1000 });
+            let minQ = Infinity, maxQ = -Infinity, minR = Infinity, maxR = -Infinity;
+            for (let b of shapeBlobs) {
+                let span = Math.ceil(b.r / (HEX_SIZE * 1.4)) + 2;
+                let c = pixelToAxial(b.x, b.y);
+                minQ = Math.min(minQ, c.q - span); maxQ = Math.max(maxQ, c.q + span);
+                minR = Math.min(minR, c.r - span); maxR = Math.max(maxR, c.r + span);
+            }
+            for (let r = minR; r <= maxR; r++) {
+                for (let q = minQ; q <= maxQ; q++) {
+                    let p = axialToPixel(q, r);
+                    if (inFootprint(p.x, p.y)) hexTiles.set(hexKey(q, r), { q, r, x: p.x, y: p.y, type: 'land', element: null, hasFence: false, fenceCandidateDirs: null });
                 }
             }
 
-            let scatterCount = 15 + scaledLevel * 1.5;
-            for(let i=0; i < scatterCount; i++) {
-                let pos = getValidSpawn(200, 25);
-                trees.push({ x: pos.x, y: pos.y, radius: 20 + Math.random() * 15, type: Math.random() > 0.7 ? 'rock' : 'tree', variant: Math.floor(Math.random()*3), seed: Math.random()*1000 });
-            }
-            buildTreeGrid();
+            // Pin down the goal's hex before hole-carving so it's never eaten by a hole.
+            let goalHexCoord = pixelToAxial(endNode.x, endNode.y);
+            let goalKey = hexKey(goalHexCoord.q, goalHexCoord.r);
+            let goalTile = hexTiles.get(goalKey);
+            if (!goalTile) { let p = axialToPixel(goalHexCoord.q, goalHexCoord.r); goalTile = { q: goalHexCoord.q, r: goalHexCoord.r, x: p.x, y: p.y, type: 'land', element: null, hasFence: false, fenceCandidateDirs: null }; hexTiles.set(goalKey, goalTile); }
 
-            let chestPos = getValidSpawn(300, 25);
-            chest = { x: chestPos.x, y: chestPos.y, radius: 25, collected: false };
-            for(let i=0; i < 25 + scaledLevel * 2.5; i++) {
-                let coinPos = getValidSpawn(100, 12);
-                items.push({ x: coinPos.x, y: coinPos.y, vx: 0, vy: 0, radius: itemRadiusFor(rollItemType(scaledLevel)), type: rollItemType(scaledLevel), collected: false, seed: Math.random()*1000, beingEaten: false });
+            // ---- Carve interior hazard clusters: hazard only fills gaps fully surrounded by
+            // land, never touching the outer sky boundary, and never the player's spawn or the
+            // goal. Holes grow from a seed into a small cluster (rather than each tile rolling
+            // independently) so a hazard patch is almost never a single isolated hexagon. ----
+            function isInterior(tile) { return HEX_DIRS.every(d => hexTiles.has(hexKey(tile.q + d.q, tile.r + d.r))); }
+            const holeSeedChance = 0.03, holeGrowChance = 0.55, minClusterSize = 2, maxClusterSize = 6;
+            let carved = new Set();
+            for (let tile of hexTiles.values()) {
+                if (tile === goalTile || carved.has(tile)) continue;
+                if (dist(tile.x, tile.y, 0, 0) < 220) continue;
+                if (!isInterior(tile)) continue;
+                if (Math.random() >= holeSeedChance) continue;
+                let targetSize = minClusterSize + Math.floor(Math.random() * (maxClusterSize - minClusterSize + 1));
+                let cluster = [tile];
+                tile.type = 'hole'; carved.add(tile);
+                let frontier = [tile];
+                while (cluster.length < targetSize && frontier.length) {
+                    let cur = frontier.shift();
+                    let dirsShuffled = HEX_DIRS.slice().sort(() => Math.random() - 0.5);
+                    for (let d of dirsShuffled) {
+                        if (cluster.length >= targetSize) break;
+                        let nb = hexTiles.get(hexKey(cur.q + d.q, cur.r + d.r));
+                        if (!nb || nb === goalTile || carved.has(nb) || nb.type === 'hole') continue;
+                        if (dist(nb.x, nb.y, 0, 0) < 220) continue;
+                        if (!isInterior(nb)) continue;
+                        // Force the very first neighbor so a hole is almost never left as a lone
+                        // tile; subsequent growth is probabilistic to keep clusters small.
+                        let forceAdd = cluster.length === 1;
+                        if (forceAdd || Math.random() < holeGrowChance) { nb.type = 'hole'; carved.add(nb); cluster.push(nb); frontier.push(nb); }
+                    }
+                }
             }
+            landHexList = []; holeHexList = [];
+            for (let tile of hexTiles.values()) { if (tile.type === 'hole') holeHexList.push(tile); else landHexList.push(tile); }
+
+            goal.x = goalTile.x; goal.y = goalTile.y; goal.active = true;
+            goalTile.element = { type: 'goal' };
+
+            buildFences();
+            buildFenceGrid();
+
+            let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
+            if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; }
 
             if (level >= 3) {
                 let numHives = Math.floor(scaledLevel / 4) + 1;
-                for(let i=0; i < numHives; i++) {
-                    let hp = getValidSpawn(250, 30);
-                    hives.push({ x: hp.x, y: hp.y, radius: 25 });
+                for (let i = 0; i < numHives; i++) {
+                    let hTile = pickLandHex(250);
+                    if (hTile) { hives.push({ x: hTile.x, y: hTile.y, radius: 25 }); hTile.element = { type: 'hive' }; }
                 }
             }
+
+            // ---- Single-element scatter: every remaining empty land hex rolls independently
+            // for a tree/rock or a coin. Chances are flat per-hex (scaling gently with level)
+            // rather than derived from a target count, so density is easy to reason about and
+            // doesn't collapse on smaller maps - still noticeably sparser than the old blob-edge
+            // ring + scatter passes, without being empty.
+            let openTiles = landHexList.filter(t => !t.element && dist(t.x, t.y, 0, 0) >= 200 &&
+                dist(t.x, t.y, goal.x, goal.y) >= goal.radius + 50 &&
+                distToSegment(t.x, t.y, 0, 0, goal.x, goal.y) >= 70);
+            let treeRockChance = Math.min(0.42, 0.24 + scaledLevel * 0.006);
+            let coinChance = Math.min(0.45, 0.18 + scaledLevel * 0.008);
+            for (let tile of openTiles) {
+                let roll = Math.random();
+                if (roll < treeRockChance) {
+                    let type = Math.random() > 0.6 ? 'rock' : 'tree';
+                    tile.element = { type };
+                    trees.push({ x: tile.x, y: tile.y, radius: 25 + Math.random() * 20, type, variant: Math.floor(Math.random()*3), seed: Math.random()*1000 });
+                } else if (roll < treeRockChance + coinChance) {
+                    let itype = rollItemType(scaledLevel);
+                    tile.element = { type: 'coin' };
+                    items.push({ x: tile.x, y: tile.y, vx: 0, vy: 0, radius: itemRadiusFor(itype), type: itype, collected: false, seed: Math.random()*1000, beingEaten: false });
+                }
+            }
+            buildTreeGrid();
 
             let baseSpeed = 1.5 + (scaledLevel * 0.1);
             let shooterCount = 0; let mimicSpawned = false;
@@ -1214,11 +1454,11 @@
                 enemies.push(e);
             }
 
-            for (let b of landBlobs) {
-                let density = (b.r * b.r * Math.PI) / 8000;
-                for(let i=0; i < density; i++) {
-                    let r = Math.sqrt(Math.random()) * b.r; let ang = Math.random() * Math.PI * 2;
-                    decorations.push({ x: b.x + Math.cos(ang) * r, y: b.y + Math.sin(ang) * r, type: Math.floor(Math.random() * 3), color: currentTheme.decorColors[Math.floor(Math.random() * currentTheme.decorColors.length)] });
+            for (let tile of landHexList) {
+                let density = 2 + Math.floor(Math.random() * 3);
+                for (let i = 0; i < density; i++) {
+                    let a = Math.random() * Math.PI * 2; let r = Math.random() * HEX_SIZE * 0.85;
+                    decorations.push({ x: tile.x + Math.cos(a) * r, y: tile.y + Math.sin(a) * r, type: Math.floor(Math.random() * 3), color: currentTheme.decorColors[Math.floor(Math.random() * currentTheme.decorColors.length)] });
                 }
             }
 
@@ -2152,10 +2392,10 @@
 
                     
                     let pSpeedSq = player.vx*player.vx + player.vy*player.vy;
-                    if (pSpeedSq > 20 && Math.random() < 0.1 + pSpeedSq * 0.005) {
-                        let b = landBlobs[Math.floor(Math.random() * landBlobs.length)];
-                        if (isOnScreen(b.x, b.y, b.r)) {
-                            let a = Math.random() * Math.PI * 2; let sx = b.x + Math.cos(a)*b.r; let sy = b.y + Math.sin(a)*b.r;
+                    if (pSpeedSq > 20 && Math.random() < 0.1 + pSpeedSq * 0.005 && borderHexList.length) {
+                        let tile = borderHexList[Math.floor(Math.random() * borderHexList.length)];
+                        if (isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) {
+                            let a = Math.random() * Math.PI * 2; let sx = tile.x + Math.cos(a)*HEX_SIZE; let sy = tile.y + Math.sin(a)*HEX_SIZE;
                             if (isOnScreen(sx, sy, 50)) { splashes.push({ x: sx, y: sy, vx: 0, vy: 0, life: 1, maxLife: 1.5, type: 'ripple', color: currentTheme.hazard.edge }); }
                         }
                     }
@@ -2272,6 +2512,11 @@
                                     if (e.type === 'wanderer' || e.type === 'dasher') e.angle += (Math.random() * 0.5) + 0.5;
                                 }
                             }
+                            let fencePushed = resolveFenceCollision(e.x, e.y, e.radius);
+                            if (fencePushed.x !== e.x || fencePushed.y !== e.y) {
+                                if (e.type === 'wanderer' || e.type === 'dasher') e.angle += (Math.random() * 0.5) + 0.5;
+                                e.x = fencePushed.x; e.y = fencePushed.y;
+                            }
                         }
                         if (e.type !== 'hopper' || e.state === 'idle') {
                             let pdx = player.worldX - e.x, pdy = player.worldY - e.y;
@@ -2309,6 +2554,12 @@
                             let d = Math.sqrt(distSq);
                             let overlap = collisionDist - d; let angle = Math.atan2(dy, dx);
                             player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
+                        }
+                    }
+                    {
+                        let pushed = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4);
+                        if (pushed.x !== player.worldX || pushed.y !== player.worldY) {
+                            player.worldX = pushed.x; player.worldY = pushed.y; player.vx *= 0.6; player.vy *= 0.6;
                         }
                     }
                     for (let hi = 0; hi < hives.length; hi++) {
@@ -2351,6 +2602,20 @@
                     let dx = p.x - t.x, dy = p.y - t.y;
                     let th = p.radius + t.radius * 0.8;
                     if (dx*dx + dy*dy < th*th) { hitObstacle = true; break; }
+                }
+                if (!hitObstacle) {
+                    let nearFencesProj = getNearbyFences(p.x, p.y);
+                    for (let fi = 0; fi < nearFencesProj.length; fi++) {
+                        let f = nearFencesProj[fi];
+                        let dx = f.x2 - f.x1, dy = f.y2 - f.y1;
+                        let lenSq = dx*dx + dy*dy;
+                        let t = lenSq > 0 ? ((p.x - f.x1) * dx + (p.y - f.y1) * dy) / lenSq : 0;
+                        t = Math.max(0, Math.min(1, t));
+                        let cx = f.x1 + t * dx, cy = f.y1 + t * dy;
+                        let ex = p.x - cx, ey = p.y - cy;
+                        let th = p.radius + fenceThickness;
+                        if (ex*ex + ey*ey < th*th) { hitObstacle = true; break; }
+                    }
                 }
                 if (hitObstacle) { projectiles.splice(i, 1); continue; }
                 
@@ -2424,28 +2689,144 @@
             ctx.fillStyle = '#fffbe0'; ctx.beginPath(); ctx.arc(x2, y2, 4 + Math.sin(Date.now()/60)*2, 0, Math.PI*2); ctx.fill(); ctx.restore();
         }
 
-        function drawHazardBackground() {
+        // The outer part of the map (everything past the honeycomb's edge) is open sky with
+        // slow-drifting clouds, a fixed sun glow, a dim parallax cloud layer behind the main
+        // clouds, and sparse drifting birds for a bit more atmosphere than a flat gradient. It
+        // still counts as a hazard for gameplay purposes (isSafe treats it the same as a hole),
+        // it just isn't lava/water flavored out there.
+        function drawSkyBackground() {
+            let grad = ctx.createLinearGradient(0, camera.y, 0, camera.y + canvas.height);
+            grad.addColorStop(0, '#6ec2ff'); grad.addColorStop(0.55, '#8fd3ff'); grad.addColorStop(1, '#d3f0ff');
+            ctx.fillStyle = grad;
+            ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+
+            // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
+            // rather than following the player around.
+            ctx.save();
+            let sunX = 500, sunY = -600;
+            let sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 750);
+            sunGrad.addColorStop(0, 'rgba(255,255,230,0.5)');
+            sunGrad.addColorStop(1, 'rgba(255,255,230,0)');
+            ctx.fillStyle = sunGrad;
+            ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+            ctx.restore();
+
+            const driftSpeed = 8;
+            let drift = (Date.now() / 1000) * driftSpeed;
+
+            // Dim, slower-drifting back layer for parallax depth.
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.45)';
+            drawCloudLayer(600, 340, drift * 0.4, 18, 16, 9.13);
+            ctx.restore();
+
+            // Sparse distant birds, far enough apart that they read as ambient detail.
+            ctx.save();
+            ctx.strokeStyle = 'rgba(50,55,65,0.55)';
+            ctx.lineWidth = 2;
+            drawBirdLayer(drift);
+            ctx.restore();
+
+            // Main puffy cloud layer, closest and brightest.
+            ctx.save();
+            ctx.fillStyle = 'rgba(255,255,255,0.85)';
+            drawCloudLayer(420, 260, drift, 30, 26, 0);
+            ctx.restore();
+        }
+        // Shared by both cloud layers (drawSkyBackground). Cloud identity (seed) comes from a
+        // stable integer tile index (i,j), never from the continuously-changing drifted position
+        // - only the final draw position depends on drift. Otherwise each cloud's "identity" kept
+        // shifting every frame, which read as clouds glitching/morphing instead of drifting
+        // smoothly. `seedOffset` gives each layer its own independent pattern.
+        function drawCloudLayer(spacingX, spacingY, drift, sizeBase, sizeVar, seedOffset) {
+            let iStart = Math.floor((camera.x - drift) / spacingX) - 1;
+            let iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
+            let jStart = Math.floor(camera.y / spacingY) - 1;
+            let jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + seedOffset) * 43758.5453);
+                    seed -= Math.floor(seed);
+                    let cx = i * spacingX + seed * 140 + drift;
+                    let cy = j * spacingY + ((seed * 71) % 1) * 120;
+                    drawCloudPuff(cx, cy, sizeBase + seed * sizeVar);
+                }
+            }
+        }
+        // Sparse drifting V-shaped birds, gently bobbing, well-spaced so most grid cells are
+        // skipped and only a handful are ever on screen at once.
+        function drawBirdLayer(drift) {
+            const spacingX = 900, spacingY = 700;
+            let bdrift = drift * 1.5;
+            let iStart = Math.floor((camera.x - bdrift) / spacingX) - 1;
+            let iEnd = Math.ceil((camera.x + canvas.width - bdrift) / spacingX) + 1;
+            let jStart = Math.floor(camera.y / spacingY) - 1;
+            let jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 34.55 + j * 91.7) * 21943.15);
+                    seed -= Math.floor(seed);
+                    if (seed > 0.4) continue; // keep birds sparse
+                    let bx = i * spacingX + seed * 300 + bdrift;
+                    let by = j * spacingY + ((seed * 53) % 1) * 300 + Math.sin(Date.now() / 900 + seed * 10) * 12;
+                    let wing = 7 + seed * 4;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - wing, by + wing * 0.5);
+                    ctx.lineTo(bx, by);
+                    ctx.lineTo(bx + wing, by + wing * 0.5);
+                    ctx.stroke();
+                }
+            }
+        }
+        function drawCloudPuff(cx, cy, size) {
+            ctx.beginPath();
+            ctx.ellipse(cx, cy, size, size * 0.55, 0, 0, Math.PI * 2);
+            ctx.ellipse(cx - size * 0.65, cy + size * 0.18, size * 0.62, size * 0.4, 0, 0, Math.PI * 2);
+            ctx.ellipse(cx + size * 0.65, cy + size * 0.12, size * 0.68, size * 0.42, 0, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Draws the animated water/lava/ice noise texture within a square region roughly `span`
+        // wide, respecting whatever clip is already active on ctx. Shared by the small hazard
+        // pockets that fill hex holes.
+        function drawHazardTexture(cx, cy, span) {
             let hz = currentTheme.hazard;
-            ctx.fillStyle = hz.color; ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height); 
-            ctx.save(); ctx.strokeStyle = hz.edge; ctx.fillStyle = hz.edge;
-            let offsetX = camera.x % 100; let offsetY = camera.y % 100;
-            // All cells share the same alpha/lineWidth per hazard type, so build one path for
-            // every cell and issue a single fill()/stroke() at the end instead of one draw call
-            // per cell (previously up to a few hundred separate draw calls per frame here).
-            if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; } 
-            else if (hz.type === 'lava') { ctx.globalAlpha = 0.4; } 
+            ctx.save();
+            ctx.strokeStyle = hz.edge; ctx.fillStyle = hz.edge;
+            if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; }
+            else if (hz.type === 'lava') { ctx.globalAlpha = 0.4; }
             else if (hz.type === 'ice') { ctx.globalAlpha = 0.3; ctx.lineWidth = 2; }
             ctx.beginPath();
-            for (let x = camera.x - offsetX - 100; x < camera.x + canvas.width + 100; x += 120) {
-                for (let y = camera.y - offsetY - 100; y < camera.y + canvas.height + 100; y += 120) {
+            for (let x = cx - span; x < cx + span; x += 40) {
+                for (let y = cy - span; y < cy + span; y += 40) {
                     let noise = Math.sin(x*0.01 + Date.now()/500) + Math.cos(y*0.01 + Date.now()/400);
-                    if (hz.type === 'water') { ctx.moveTo(x + noise*20 + (10 + noise*5), y + noise*20); ctx.arc(x + noise*20, y + noise*20, 10 + noise*5, 0, Math.PI*2); } 
-                    else if (hz.type === 'lava') { ctx.moveTo(x + noise*15 + (8 + noise*4), y + noise*15); ctx.arc(x + noise*15, y + noise*15, 8 + noise*4, 0, Math.PI*2); } 
-                    else if (hz.type === 'ice') { ctx.moveTo(x, y); ctx.lineTo(x + 30 + noise*10, y + 20 + noise*10); }
+                    if (hz.type === 'water') { ctx.moveTo(x + noise*7 + (7 + noise*2), y + noise*7); ctx.arc(x + noise*7, y + noise*7, 7 + noise*2, 0, Math.PI*2); }
+                    else if (hz.type === 'lava') { ctx.moveTo(x + noise*6 + (6 + noise*2), y + noise*6); ctx.arc(x + noise*6, y + noise*6, 6 + noise*2, 0, Math.PI*2); }
+                    else if (hz.type === 'ice') { ctx.moveTo(x, y); ctx.lineTo(x + 16 + noise*5, y + 11 + noise*5); }
                 }
             }
             if (hz.type === 'lava') ctx.fill(); else ctx.stroke();
             ctx.restore();
+        }
+
+        // Hazard (water/lava/ice) only ever fills the interior holes left by hex generation -
+        // never the outer edge of the map, which is sky instead (see drawSkyBackground).
+        function drawHazardHoles() {
+            let hz = currentTheme.hazard;
+            for (let tile of holeHexList) {
+                if (!isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) continue;
+                let c = hexCorners(tile.x, tile.y);
+                ctx.save();
+                ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath();
+                ctx.fillStyle = hz.color; ctx.fill();
+                ctx.clip();
+                drawHazardTexture(tile.x, tile.y, HEX_SIZE);
+                ctx.restore();
+                ctx.save();
+                ctx.lineWidth = 4; ctx.strokeStyle = hz.edge;
+                ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath(); ctx.stroke();
+                ctx.restore();
+            }
         }
 
         function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId, targetCtx) {
@@ -2682,7 +3063,8 @@
             let pdrawY = player.prevWorldY + (player.worldY - player.prevWorldY) * renderAlpha;
             
             ctx.save(); ctx.translate(-camX + shakeX, -camY + shakeY); 
-            drawHazardBackground();
+            drawSkyBackground();
+            drawHazardHoles();
             
             let tiltX = player.vx * 1.5; let tiltY = player.vy * 1.5;
 
@@ -2691,20 +3073,23 @@
             if (currentTheme.name === 'Desert') ctx.fillStyle = '#a67c52';
             else if (currentTheme.name === 'Snow') ctx.fillStyle = '#3e2723';
             else if (currentTheme.name === 'Volcano') ctx.fillStyle = '#1a0f00';
-            ctx.beginPath();
-            landBlobs.forEach(b => { ctx.moveTo(b.x + b.r, b.y); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); }); ctx.fill();
+            pathHexUnion(ctx, landHexList); ctx.fill();
             ctx.restore();
 
             ctx.save(); ctx.translate(tiltX, tiltY);
 
-            ctx.save(); ctx.lineWidth = 16; ctx.strokeStyle = currentTheme.hazard.edge;
-            ctx.beginPath(); landBlobs.forEach(b => { ctx.moveTo(b.x + b.r, b.y); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); }); ctx.stroke();
-            ctx.fillStyle = currentTheme.bg; ctx.beginPath(); landBlobs.forEach(b => { ctx.moveTo(b.x + b.r, b.y); ctx.arc(b.x, b.y, b.r, 0, Math.PI*2); }); ctx.fill(); ctx.clip();
+            // A single path built from every land hex's outline, stroked (giving the visible
+            // honeycomb cell borders) then filled with the ground color and used as a clip so
+            // grid-dust and decorations stay confined to land tiles - mirrors the old single
+            // fill/stroke/clip-per-frame approach, just with hexagons standing in for circles.
+            ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = currentTheme.hazard.edge;
+            pathHexUnion(ctx, landHexList); ctx.stroke();
+            ctx.fillStyle = currentTheme.bg; ctx.fill(); ctx.clip();
             ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4;
             const startX = Math.floor((camera.x - tiltX) / gridSize) * gridSize; const startY = Math.floor((camera.y - tiltY) / gridSize) * gridSize;
             // Build one path for every visible dust mark and stroke it once, instead of a
             // separate beginPath()/stroke() per grid cell. isSafeGridCached also avoids
-            // re-scanning every land blob for grid coordinates already checked in a recent frame.
+            // re-hitting the hex lookup for grid coordinates already checked in a recent frame.
             ctx.beginPath();
             for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
                 for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
@@ -2726,6 +3111,7 @@
 
             rqCount = 0;
             for (let i = 0; i < trees.length; i++) { let t = trees[i]; if (isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) pushRQ(t.type, t, t.y + t.radius); }
+            for (let i = 0; i < fences.length; i++) { let f = fences[i]; if (isOnScreen(f.midX + tiltX, f.midY + tiltY, cullBuffer)) pushRQ('fence', f, f.midY + 10); }
             for (let i = 0; i < hives.length; i++) { let h = hives[i]; if (isOnScreen(h.x + tiltX, h.y + tiltY, cullBuffer)) pushRQ('hive', h, h.y + (h.radius || 0)); }
             for (let i = 0; i < enemies.length; i++) { let e = enemies[i]; if (isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) pushRQ('enemy', e, e.y + (e.radius || 0)); }
             for (let i = 0; i < items.length; i++) { let c = items[i]; if (!c.collected && isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) pushRQ(c.type, c, c.y + (c.radius || 0)); }
@@ -2807,6 +3193,25 @@
                         ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, Math.PI, 0, false); ctx.lineTo(r.x + r.radius*0.9, r.y + r.radius*0.18); ctx.quadraticCurveTo(r.x, r.y + r.radius*0.35, r.x - r.radius*0.9, r.y + r.radius*0.18); ctx.closePath(); ctx.fill();
                     }
                     ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x - r.radius*0.3, r.y - r.radius*0.15); ctx.lineTo(r.x + r.radius*0.15, r.y + r.radius*0.05); ctx.stroke();
+                }
+                else if (item.type === 'fence') {
+                    // A simple post-and-rail fence segment sitting along one hex edge, oriented
+                    // to match that edge. Fences don't occupy a hex's single-element slot, so
+                    // these draw independently of whatever tree/rock/coin/chest sits at center.
+                    let f = item.obj;
+                    let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
+                    let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
+                    ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
+                    ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(-len/2, 5, len, 4);
+                    ctx.fillStyle = '#8a5a2b';
+                    ctx.fillRect(-len/2 - 2, -14, 5, 20);
+                    ctx.fillRect(len/2 - 3, -14, 5, 20);
+                    ctx.fillStyle = '#a97a3c';
+                    ctx.fillRect(-len/2, -10, len, 4);
+                    ctx.fillRect(-len/2, -2, len, 4);
+                    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
+                    ctx.strokeRect(-len/2, -10, len, 4); ctx.strokeRect(-len/2, -2, len, 4);
+                    ctx.restore();
                 }
                 else if (item.type === 'hive') {
                     let h = item.obj;

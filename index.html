@@ -519,6 +519,10 @@
         // cells overlapping the camera brings both down to a small, roughly constant number of
         // isOnScreen checks regardless of how big the level is - mirrors getTreesInView /
         // getDecorationsInView exactly.
+        // Tile size mirrors the goal's footprint, per design: "smaller (the size of the goal)"
+        // Declared here (rather than down with the rest of the hex grid math) because the
+        // land-tile spatial-hash grid below needs it, and this runs first.
+        const HEX_SIZE = 48;
         const landTileGridSize = HEX_SIZE * 4;
         let landTileGrid = new Map();
         let holeTileGrid = new Map();
@@ -1016,7 +1020,8 @@
 
         // ---- Hex grid math (pointy-top, axial coordinates) ----
         // Tile size mirrors the goal's footprint, per design: "smaller (the size of the goal)"
-        const HEX_SIZE = 48;
+        // (HEX_SIZE itself is declared near the top of the script, since the land-tile
+        // spatial-hash grid below also depends on it and runs before this point.)
         const HEX_DIRS = [{q:1,r:0},{q:1,r:-1},{q:0,r:-1},{q:-1,r:0},{q:-1,r:1},{q:0,r:1}];
         function hexKey(q, r) { return q + ',' + r; }
         function axialToPixel(q, r) { return { x: HEX_SIZE * Math.sqrt(3) * (q + r/2), y: HEX_SIZE * 1.5 * r }; }

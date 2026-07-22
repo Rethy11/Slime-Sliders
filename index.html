@@ -388,12 +388,22 @@
             if (coinsDirty) { storage.set('landSlidersCoins', totalCoins); coinsDirty = false; }
         }
 
+        // PERF: every spatial-hash grid below (trees/decorations/fences/land-tiles/safe-cache)
+        // used to key its Map with a template-string concatenation ("cx + '_' + cy"). That
+        // allocates a brand-new string and re-hashes its characters on every single lookup -
+        // and lookups happen dozens of times per entity per tick (9 buckets per query x every
+        // tree/fence/projectile/enemy check, every frame). Packing the two integers into one
+        // number instead gives V8 a plain integer Map key: no allocation, no string hashing,
+        // just numeric equality. Safe for any coordinate/cell-index magnitude this game
+        // produces (levels are nowhere near the ~5,000,000-unit bound this leaves headroom for).
+        function packGridKey(a, b) { return a * 10000000 + b; }
+
         // Memoizes isSafe() results for the fixed grid-dust decoration pass in draw(), since
         // those world coordinates repeat across many consecutive frames as the camera pans and
         // isSafe() itself has to scan every land blob. Cleared whenever a new level is generated.
         let safeGridCache = new Map();
         function isSafeGridCached(x, y) {
-            let key = x + '_' + y;
+            let key = packGridKey(x, y);
             let cached = safeGridCache.get(key);
             if (cached !== undefined) return cached;
             let result = isSafe(x, y);
@@ -412,7 +422,7 @@
         function buildTreeGrid() {
             treeGrid = new Map();
             for (let t of trees) {
-                let key = Math.floor(t.x / treeGridSize) + '_' + Math.floor(t.y / treeGridSize);
+                let key = packGridKey(Math.floor(t.x / treeGridSize), Math.floor(t.y / treeGridSize));
                 let bucket = treeGrid.get(key);
                 if (!bucket) { bucket = []; treeGrid.set(key, bucket); }
                 bucket.push(t);
@@ -427,11 +437,50 @@
             let cx = Math.floor(x / treeGridSize), cy = Math.floor(y / treeGridSize);
             for (let dx = -1; dx <= 1; dx++) {
                 for (let dy = -1; dy <= 1; dy++) {
-                    let bucket = treeGrid.get((cx + dx) + '_' + (cy + dy));
+                    let bucket = treeGrid.get(packGridKey(cx + dx, cy + dy));
                     if (bucket) for (let i = 0; i < bucket.length; i++) treeQueryResult.push(bucket[i]);
                 }
             }
             return treeQueryResult;
+        }
+        // PERF: generic "give me everything in this rectangular region" query over a
+        // grid-bucketed array, used at draw time so trees/decorations only need to check
+        // isOnScreen against a small handful of nearby candidates instead of the entire
+        // (100-4000+ entry) array every single frame. gridSize must match the grid the
+        // buckets were built with (treeGridSize / decorGridSize below).
+        function queryGridRange(grid, cellSize, x0, y0, x1, y1, out) {
+            out.length = 0;
+            let cx0 = Math.floor(x0 / cellSize), cx1 = Math.floor(x1 / cellSize);
+            let cy0 = Math.floor(y0 / cellSize), cy1 = Math.floor(y1 / cellSize);
+            for (let cx = cx0; cx <= cx1; cx++) {
+                for (let cy = cy0; cy <= cy1; cy++) {
+                    let bucket = grid.get(packGridKey(cx, cy));
+                    if (bucket) for (let i = 0; i < bucket.length; i++) out.push(bucket[i]);
+                }
+            }
+            return out;
+        }
+        let treeViewResult = [];
+        function getTreesInView(x0, y0, x1, y1) {
+            return queryGridRange(treeGrid, treeGridSize, x0, y0, x1, y1, treeViewResult);
+        }
+        // Decorations (grass/flower/leaf specks scattered across every land tile, 2-4 per tile
+        // - easily thousands on a large level) get their own coarser grid. They're static and
+        // rebuilt once per generateLevel(), same lifecycle as trees.
+        const decorGridSize = 300;
+        let decorGrid = new Map();
+        function buildDecorGrid() {
+            decorGrid = new Map();
+            for (let d of decorations) {
+                let key = packGridKey(Math.floor(d.x / decorGridSize), Math.floor(d.y / decorGridSize));
+                let bucket = decorGrid.get(key);
+                if (!bucket) { bucket = []; decorGrid.set(key, bucket); }
+                bucket.push(d);
+            }
+        }
+        let decorViewResult = [];
+        function getDecorationsInView(x0, y0, x1, y1) {
+            return queryGridRange(decorGrid, decorGridSize, x0, y0, x1, y1, decorViewResult);
         }
 
         // Spatial hash grid for fences (same pattern as the tree grid above). Fences are solid -
@@ -442,7 +491,7 @@
         function buildFenceGrid() {
             fenceGrid = new Map();
             for (let f of fences) {
-                let key = Math.floor(f.midX / fenceGridSize) + '_' + Math.floor(f.midY / fenceGridSize);
+                let key = packGridKey(Math.floor(f.midX / fenceGridSize), Math.floor(f.midY / fenceGridSize));
                 let bucket = fenceGrid.get(key);
                 if (!bucket) { bucket = []; fenceGrid.set(key, bucket); }
                 bucket.push(f);
@@ -454,12 +503,50 @@
             let cx = Math.floor(x / fenceGridSize), cy = Math.floor(y / fenceGridSize);
             for (let dx = -1; dx <= 1; dx++) {
                 for (let dy = -1; dy <= 1; dy++) {
-                    let bucket = fenceGrid.get((cx + dx) + '_' + (cy + dy));
+                    let bucket = fenceGrid.get(packGridKey(cx + dx, cy + dy));
                     if (bucket) for (let i = 0; i < bucket.length; i++) fenceQueryResult.push(bucket[i]);
                 }
             }
             return fenceQueryResult;
         }
+        // Spatial hash grid for land/hole hex tiles (same pattern as the tree/decoration grids
+        // above). PERF: computeVisibleLandTiles() and drawHazardHoles() used to linear-scan the
+        // *entire* landHexList/holeHexList every single frame just to run isOnScreen() on each
+        // tile - by far the single highest call-count function in the perf report (isOnScreen:
+        // ~8M calls/session). Map size grows with level (up to 9 overlapping blobs at radius
+        // 250-500 by level 20), so that scan cost scales with total level area, not with what's
+        // actually visible. Bucketing once per generateLevel() and querying only the handful of
+        // cells overlapping the camera brings both down to a small, roughly constant number of
+        // isOnScreen checks regardless of how big the level is - mirrors getTreesInView /
+        // getDecorationsInView exactly.
+        const landTileGridSize = HEX_SIZE * 4;
+        let landTileGrid = new Map();
+        let holeTileGrid = new Map();
+        function buildLandTileGrid() {
+            landTileGrid = new Map();
+            holeTileGrid = new Map();
+            for (let t of landHexList) {
+                let key = packGridKey(Math.floor(t.x / landTileGridSize), Math.floor(t.y / landTileGridSize));
+                let bucket = landTileGrid.get(key);
+                if (!bucket) { bucket = []; landTileGrid.set(key, bucket); }
+                bucket.push(t);
+            }
+            for (let t of holeHexList) {
+                let key = packGridKey(Math.floor(t.x / landTileGridSize), Math.floor(t.y / landTileGridSize));
+                let bucket = holeTileGrid.get(key);
+                if (!bucket) { bucket = []; holeTileGrid.set(key, bucket); }
+                bucket.push(t);
+            }
+        }
+        let landTileViewResult = [];
+        function getLandTilesInView(x0, y0, x1, y1) {
+            return queryGridRange(landTileGrid, landTileGridSize, x0, y0, x1, y1, landTileViewResult);
+        }
+        let holeTileViewResult = [];
+        function getHoleTilesInView(x0, y0, x1, y1) {
+            return queryGridRange(holeTileGrid, landTileGridSize, x0, y0, x1, y1, holeTileViewResult);
+        }
+
         // Pushes (x, y) back out of any nearby fence segment it's overlapping (within `radius` of
         // the segment plus the fence's own thickness), and returns the corrected point. Used by
         // the player and enemies each tick so fences act as solid walls rather than decoration.
@@ -505,6 +592,21 @@
             rqCount++;
         }
         function rqSortCompare(a, b) { return a.sortY - b.sortY; }
+
+        // PERF: gradient caches for per-particle effects drawn every frame (icicles, flame
+        // particles - see the render loop in SECTION 8). CanvasGradient objects are relatively
+        // expensive to build, and these were being rebuilt from scratch for every single
+        // particle on every single frame - a burst-spawning item (e.g. Spikes' ice-nova volley)
+        // can have a dozen+ alive at once, all needing a gradient every tick just to stay drawn.
+        // Reused/bucketed here instead - see the icicle/flame branches of the render loop for
+        // why each one is safe to cache (identical output every time vs. bucketed by size).
+        let icicleGradientCache = null;
+        const flameGradientCache = new Map();
+        // PERF: see drawSkyBackground (SECTION 8) - both cached the same way, keyed off
+        // canvas.height so a resize correctly invalidates and rebuilds them.
+        let skyGradientCache = null;
+        let skyGradientCacheH = -1;
+        let sunGradientCache = null;
 
         let gameState = 'title';
         let previousState = 'title';
@@ -597,6 +699,10 @@
             { id: 'ice',       name: 'Ice Nova',    desc: 'Ice Nova',    color: '#7fdbff', duration: 7, radius: 0,   tick: 1.1,  mode: 'nova',     coinDrop: [2,4] },
             { id: 'rampage',   name: 'Rampage',     desc: 'Invincible',  color: '#ff477e', duration: 8, radius: 0,   tick: 0,    mode: 'contact',  coinDrop: [3,5] }
         ];
+        // PERF: id -> object lookup, built once. powerupTypes.find(...) was run every single
+        // frame for every rendered/active powerup (render loop + update() + pickup handling) -
+        // a Map lookup replaces that repeated linear scan with a constant-time get().
+        const powerupTypesById = new Map(powerupTypes.map(p => [p.id, p]));
         
         // Gacha Loot Tables
         const basicSkins = [
@@ -611,6 +717,9 @@
             { id: "gray", name: "Gray", color: "#8d99ae" }, { id: "brown", name: "Brown", color: "#795548" },
             { id: "teal", name: "Teal", color: "#009688" }, { id: "lime", name: "Lime", color: "#cddc39" }
         ];
+        // PERF: same reasoning as powerupTypesById - drawCharacterModel runs this lookup every
+        // single frame for every rendered character with a basic (non-rare) skin equipped.
+        const basicSkinsById = new Map(basicSkins.map(s => [s.id, s]));
 
         const rareSkins = [
             { id: "rainbow", name: "Rainbow", preview: "linear-gradient(45deg, red, orange, yellow, green, blue, purple)", isAnimated: true },
@@ -847,15 +956,24 @@
                 if (beeBuzzOsc) { beeBuzzOsc.stop(); beeBuzzOsc = null; }
                 return;
             }
-            let activeBees = enemies.filter(e => e.type === 'chaser' && isOnScreen(e.x, e.y, 100));
-            if (activeBees.length > 0) {
+            // PERF: was `enemies.filter(...)` + `.some(...)`, allocating a fresh array every
+            // physics tick just to check two booleans. A single manual pass gets the same
+            // result with zero allocation.
+            let hasActiveBee = false, isChasing = false;
+            for (let i = 0; i < enemies.length; i++) {
+                let e = enemies[i];
+                if (e.type === 'chaser' && isOnScreen(e.x, e.y, 100)) {
+                    hasActiveBee = true;
+                    if (e.state === 'chase') { isChasing = true; break; }
+                }
+            }
+            if (hasActiveBee) {
                 if (!beeBuzzOsc) {
                     beeBuzzOsc = actx.createOscillator(); beeBuzzGain = actx.createGain();
                     beeBuzzGain.gain.setValueAtTime(0, actx.currentTime); 
                     beeBuzzOsc.connect(beeBuzzGain); beeBuzzGain.connect(actx.destination);
                     beeBuzzOsc.type = 'triangle'; beeBuzzOsc.start();
                 }
-                let isChasing = activeBees.some(b => b.state === 'chase');
                 let targetFreq = isChasing ? 220 : 130; 
                 let targetVol = isChasing ? (userSettings.sfxVol * 0.15) : (userSettings.sfxVol * 0.05); 
                 let t = actx.currentTime;
@@ -932,15 +1050,46 @@
                 { x: tile.x + HEX_SIZE * Math.cos(a2), y: tile.y + HEX_SIZE * Math.sin(a2) }
             ];
         }
+        // PERF: tile corner points only depend on a tile's fixed (x,y) center, so they're
+        // computed once and cached on the tile object itself (tile.corners) instead of being
+        // re-derived with 6 Math.cos/Math.sin calls every single time a tile is pathed. Hex
+        // tiles never move once a level is generated, so this cache is valid for the tile's
+        // entire lifetime and is cleared automatically when generateLevel() rebuilds the lists.
+        function cachedHexCorners(tile) {
+            return tile.corners || (tile.corners = hexCorners(tile.x, tile.y));
+        }
         function pathHexUnion(ctx, tileList) {
             ctx.beginPath();
             for (let tile of tileList) {
-                if (!isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) continue;
-                let c = hexCorners(tile.x, tile.y);
+                let c = cachedHexCorners(tile);
                 ctx.moveTo(c[0].x, c[0].y);
                 for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y);
                 ctx.closePath();
             }
+        }
+        // PERF: draw() calls pathHexUnion(ctx, landHexList) twice per frame (once to fill the
+        // ground base, once to stroke the grid-dust clip region). Previously each call
+        // independently re-scanned the *entire* landHexList and ran isOnScreen() on every tile,
+        // even tiles nowhere near the camera - on a large level this was by far the single
+        // biggest per-frame cost (see perf report: pathHexUnion + isOnScreen + hexCorners).
+        // Now the on-screen subset is computed once per frame into a reused array (no per-frame
+        // allocation) and both pathHexUnion calls just consume that pre-filtered list.
+        let visibleLandTiles = [];
+        function computeVisibleLandTiles() {
+            visibleLandTiles.length = 0;
+            let buf = HEX_SIZE * 2;
+            // PERF: narrow to the grid cells overlapping the viewport first (see
+            // buildLandTileGrid) instead of scanning every land tile in the level, then run the
+            // exact same isOnScreen check only on those candidates - identical visual result.
+            let candidates = getLandTilesInView(
+                camera.x - buf, camera.y - buf,
+                camera.x + canvas.width + buf, camera.y + canvas.height + buf
+            );
+            for (let i = 0; i < candidates.length; i++) {
+                let tile = candidates[i];
+                if (isOnScreen(tile.x, tile.y, buf)) visibleLandTiles.push(tile);
+            }
+            return visibleLandTiles;
         }
 
         // ---- Hand-drawn pixel-icon sprites (replaces all emoji) ----
@@ -1380,6 +1529,7 @@
             }
             landHexList = []; holeHexList = [];
             for (let tile of hexTiles.values()) { if (tile.type === 'hole') holeHexList.push(tile); else landHexList.push(tile); }
+            buildLandTileGrid();
 
             goal.x = goalTile.x; goal.y = goalTile.y; goal.active = true;
             goalTile.element = { type: 'goal' };
@@ -1461,6 +1611,7 @@
                     decorations.push({ x: tile.x + Math.cos(a) * r, y: tile.y + Math.sin(a) * r, type: Math.floor(Math.random() * 3), color: currentTheme.decorColors[Math.floor(Math.random() * currentTheme.decorColors.length)] });
                 }
             }
+            buildDecorGrid();
 
             let powerupCount = Math.random() < 0.5 ? 1 : 2;
             for (let i = 0; i < powerupCount; i++) {
@@ -2113,7 +2264,7 @@
             domRefs.timerFill.style.width = Math.max(0, (timeLeft / MAX_TIME) * 100) + "%";
             if (timeLeft <= 3) domRefs.timerContainer.classList.add('danger'); else domRefs.timerContainer.classList.remove('danger');
             if (player.activePowerup) {
-                let pu = powerupTypes.find(p => p.id === player.activePowerup);
+                let pu = powerupTypesById.get(player.activePowerup);
                 domRefs.powerupIndicator.style.display = 'flex';
                 domRefs.puIcon.src = iconDataURL(pu.id, 32); domRefs.puDesc.innerText = pu.desc;
                 domRefs.puFill.style.width = Math.max(0, (player.powerupTimeLeft / player.powerupDuration) * 100) + '%';
@@ -2253,7 +2404,7 @@
         function getLightningTargetWorld() { return { x: pointerScreenX + camera.x, y: pointerScreenY + camera.y }; }
 
         function applyPowerupEffect() {
-            let pu = powerupTypes.find(p => p.id === player.activePowerup); if (!pu) return;
+            let pu = powerupTypesById.get(player.activePowerup); if (!pu) return;
             if (pu.id === 'lightning') playSFX('lightning');
 
             if (pu.mode === 'contact') {
@@ -2402,7 +2553,7 @@
 
                     powerups.forEach(p => {
                         if (!p.collected && dist(player.worldX, player.worldY, p.x, p.y) < player.radius + p.radius) {
-                            p.collected = true; let pu = powerupTypes.find(pt => pt.id === p.typeId);
+                            p.collected = true; let pu = powerupTypesById.get(p.typeId);
                             player.activePowerup = pu.id; player.powerupDuration = pu.duration; player.powerupTimeLeft = pu.duration; player.powerupTickTimer = pu.tick; 
                             screenShake = 12; playSFX('powerup_pickup'); updateHUD();
                         }
@@ -2695,20 +2846,38 @@
         // still counts as a hazard for gameplay purposes (isSafe treats it the same as a hole),
         // it just isn't lava/water flavored out there.
         function drawSkyBackground() {
-            let grad = ctx.createLinearGradient(0, camera.y, 0, camera.y + canvas.height);
-            grad.addColorStop(0, '#6ec2ff'); grad.addColorStop(0.55, '#8fd3ff'); grad.addColorStop(1, '#d3f0ff');
-            ctx.fillStyle = grad;
-            ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+            // PERF: both gradients below used to be rebuilt from scratch every single frame,
+            // unconditionally, with camera.x/y baked directly into their coordinates. A
+            // CanvasGradient's control points are evaluated against whatever transform is
+            // active when it's painted (not the transform at creation time), so baking the
+            // camera position in meant a fresh gradient object was required every single frame
+            // just to stay aligned as the camera moved - guaranteed cost on every frame,
+            // regardless of gameplay. Translating to the camera's position first and building
+            // both gradients in local (0,0)-relative space instead makes them genuinely
+            // constant (same colors, same fixed sun position/radius every time), so they can be
+            // created once and reused forever; only a canvas resize invalidates them.
+            ctx.save();
+            ctx.translate(camera.x, camera.y);
+            if (!skyGradientCache || skyGradientCacheH !== canvas.height) {
+                skyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                skyGradientCache.addColorStop(0, '#6ec2ff'); skyGradientCache.addColorStop(0.55, '#8fd3ff'); skyGradientCache.addColorStop(1, '#d3f0ff');
+                skyGradientCacheH = canvas.height;
+            }
+            ctx.fillStyle = skyGradientCache;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
             // rather than following the player around.
             ctx.save();
             let sunX = 500, sunY = -600;
-            let sunGrad = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 750);
-            sunGrad.addColorStop(0, 'rgba(255,255,230,0.5)');
-            sunGrad.addColorStop(1, 'rgba(255,255,230,0)');
-            ctx.fillStyle = sunGrad;
-            ctx.fillRect(camera.x, camera.y, canvas.width, canvas.height);
+            if (!sunGradientCache) {
+                sunGradientCache = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 750);
+                sunGradientCache.addColorStop(0, 'rgba(255,255,230,0.5)');
+                sunGradientCache.addColorStop(1, 'rgba(255,255,230,0)');
+            }
+            ctx.fillStyle = sunGradientCache;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.restore();
             ctx.restore();
 
             const driftSpeed = 8;
@@ -2813,9 +2982,17 @@
         // never the outer edge of the map, which is sky instead (see drawSkyBackground).
         function drawHazardHoles() {
             let hz = currentTheme.hazard;
-            for (let tile of holeHexList) {
-                if (!isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) continue;
-                let c = hexCorners(tile.x, tile.y);
+            let buf = HEX_SIZE * 2;
+            // PERF: same grid-narrowing as computeVisibleLandTiles - only check candidates from
+            // cells overlapping the viewport instead of every hole in the level.
+            let candidates = getHoleTilesInView(
+                camera.x - buf, camera.y - buf,
+                camera.x + canvas.width + buf, camera.y + canvas.height + buf
+            );
+            for (let ti = 0; ti < candidates.length; ti++) {
+                let tile = candidates[ti];
+                if (!isOnScreen(tile.x, tile.y, buf)) continue;
+                let c = cachedHexCorners(tile);
                 ctx.save();
                 ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath();
                 ctx.fillStyle = hz.color; ctx.fill();
@@ -2843,7 +3020,7 @@
             let fillColor = '#00ffcc'; // Fallback
             let drawSpecial = null;
             
-            let basicMatch = basicSkins.find(s => s.id === colorId);
+            let basicMatch = basicSkinsById.get(colorId);
             if (basicMatch) fillColor = basicMatch.color;
             else if (colorId === 'rainbow') { fillColor = `hsl(${(t / 5) % 360}, 100%, 50%)`; drawSpecial = 'rainbow'; }
             else if (colorId === 'gold') {
@@ -3073,7 +3250,8 @@
             if (currentTheme.name === 'Desert') ctx.fillStyle = '#a67c52';
             else if (currentTheme.name === 'Snow') ctx.fillStyle = '#3e2723';
             else if (currentTheme.name === 'Volcano') ctx.fillStyle = '#1a0f00';
-            pathHexUnion(ctx, landHexList); ctx.fill();
+            let visLand = computeVisibleLandTiles();
+            pathHexUnion(ctx, visLand); ctx.fill();
             ctx.restore();
 
             ctx.save(); ctx.translate(tiltX, tiltY);
@@ -3083,7 +3261,7 @@
             // grid-dust and decorations stay confined to land tiles - mirrors the old single
             // fill/stroke/clip-per-frame approach, just with hexagons standing in for circles.
             ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = currentTheme.hazard.edge;
-            pathHexUnion(ctx, landHexList); ctx.stroke();
+            pathHexUnion(ctx, visLand); ctx.stroke();
             ctx.fillStyle = currentTheme.bg; ctx.fill(); ctx.clip();
             ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4;
             const startX = Math.floor((camera.x - tiltX) / gridSize) * gridSize; const startY = Math.floor((camera.y - tiltY) / gridSize) * gridSize;
@@ -3099,18 +3277,36 @@
             }
             ctx.stroke();
             const cullBuffer = 100; let breezeX = player.vx * 0.08; 
-            decorations.forEach(d => {
+            // PERF: was decorations.forEach() over the full array (can be thousands of specks
+            // on a large level) checking isOnScreen on every single one every frame. Now we
+            // first narrow to the handful of grid buckets overlapping the current viewport,
+            // then run the exact same isOnScreen check only on those candidates - identical
+            // visual result, far fewer checks.
+            let decorCandidates = getDecorationsInView(
+                camera.x - tiltX - cullBuffer, camera.y - tiltY - cullBuffer,
+                camera.x - tiltX + canvas.width + cullBuffer, camera.y - tiltY + canvas.height + cullBuffer
+            );
+            for (let di = 0; di < decorCandidates.length; di++) {
+                let d = decorCandidates[di];
                 if(isOnScreen(d.x + tiltX, d.y + tiltY, cullBuffer)) {
                     ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
                     if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
                     else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
                     else { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX*5, d.y - 6, d.x + breezeX*10, d.y - 12); ctx.stroke(); }
                 }
-             });
+            }
             ctx.restore(); 
 
             rqCount = 0;
-            for (let i = 0; i < trees.length; i++) { let t = trees[i]; if (isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) pushRQ(t.type, t, t.y + t.radius); }
+            // PERF: was a full trees.length scan checking isOnScreen on every tree every frame
+            // (100-300+ trees). Reuses the same treeGrid built for physics collision to narrow
+            // to nearby buckets first - identical visual result (isOnScreen still does the
+            // final exact check), far fewer checks on a tree-dense level.
+            let treeCandidates = getTreesInView(
+                camera.x - tiltX - cullBuffer, camera.y - tiltY - cullBuffer,
+                camera.x - tiltX + canvas.width + cullBuffer, camera.y - tiltY + canvas.height + cullBuffer
+            );
+            for (let i = 0; i < treeCandidates.length; i++) { let t = treeCandidates[i]; if (isOnScreen(t.x + tiltX, t.y + tiltY, cullBuffer)) pushRQ(t.type, t, t.y + t.radius); }
             for (let i = 0; i < fences.length; i++) { let f = fences[i]; if (isOnScreen(f.midX + tiltX, f.midY + tiltY, cullBuffer)) pushRQ('fence', f, f.midY + 10); }
             for (let i = 0; i < hives.length; i++) { let h = hives[i]; if (isOnScreen(h.x + tiltX, h.y + tiltY, cullBuffer)) pushRQ('hive', h, h.y + (h.radius || 0)); }
             for (let i = 0; i < enemies.length; i++) { let e = enemies[i]; if (isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) pushRQ('enemy', e, e.y + (e.radius || 0)); }
@@ -3230,7 +3426,7 @@
                     if (window.LootSprites && window.LootSprites[item.type]) window.LootSprites[item.type](ctx, c);
                 }
                 else if (item.type === 'powerup') {
-                    let p = item.obj; let pu = powerupTypes.find(pt => pt.id === p.typeId); let bob = Math.sin(Date.now()/260 + (p.spawnSeed||0)) * 6; let spin = (Date.now()/450) % (Math.PI*2);
+                    let p = item.obj; let pu = powerupTypesById.get(p.typeId); let bob = Math.sin(Date.now()/260 + (p.spawnSeed||0)) * 6; let spin = (Date.now()/450) % (Math.PI*2);
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + p.radius*0.9, p.radius*0.9, p.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     ctx.save(); ctx.globalAlpha = 0.2 + 0.15*Math.sin(Date.now()/250); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.radius*1.7, 0, Math.PI*2); ctx.fill(); ctx.restore();
                     ctx.save(); ctx.translate(p.x, p.y + bob); ctx.rotate(spin); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
@@ -3270,15 +3466,39 @@
                 else if (item.type === 'icicle') {
                     let ic = item.obj;
                     ctx.save(); ctx.translate(ic.x, ic.y); ctx.rotate(ic.angle);
-                    let grad = ctx.createLinearGradient(-14, 0, 10, 0); grad.addColorStop(0, 'rgba(127,219,255,0)'); grad.addColorStop(1, '#e8fbff'); ctx.fillStyle = grad;
+                    // PERF: this gradient is drawn entirely in local (post-translate/rotate)
+                    // space with fixed coordinates (-14,0)-(10,0) and fixed color stops - it is
+                    // byte-for-byte identical on every single icicle, every single frame. It was
+                    // being recreated from scratch per-icicle per-frame (a burst item like
+                    // Spikes can have 10+ alive at once); building it once and reusing the same
+                    // CanvasGradient object is free and visually identical.
+                    if (!icicleGradientCache) {
+                        icicleGradientCache = ctx.createLinearGradient(-14, 0, 10, 0);
+                        icicleGradientCache.addColorStop(0, 'rgba(127,219,255,0)'); icicleGradientCache.addColorStop(1, '#e8fbff');
+                    }
+                    ctx.fillStyle = icicleGradientCache;
                     ctx.beginPath(); ctx.moveTo(-14, -3); ctx.lineTo(8, -1.5); ctx.lineTo(12, 0); ctx.lineTo(8, 1.5); ctx.lineTo(-14, 3); ctx.closePath(); ctx.fill();
                     ctx.strokeStyle = '#0a2e44'; ctx.lineWidth = 0.6; ctx.stroke(); ctx.restore();
                 }
                 else if (item.type === 'flame') {
-                    let f = item.obj; let alpha = Math.max(0, f.life / f.maxLife); ctx.save(); ctx.globalAlpha = alpha;
-                    let grad = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, f.size);
-                    grad.addColorStop(0, '#fff3b0'); grad.addColorStop(0.5, '#ff9f1c'); grad.addColorStop(1, '#ff6b35'); ctx.fillStyle = grad;
-                    ctx.beginPath(); ctx.arc(f.x, f.y, f.size * alpha, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                    let f = item.obj; let alpha = Math.max(0, f.life / f.maxLife);
+                    ctx.save(); ctx.globalAlpha = alpha; ctx.translate(f.x, f.y);
+                    // PERF: was ctx.createRadialGradient(f.x, f.y, ...) - a brand new gradient
+                    // object per flame particle per frame, at every world position they ever
+                    // occupy (so it could never be reused). Translating to the particle's
+                    // position first and building the gradient in local (0,0) space instead
+                    // means the only thing that actually changes its appearance is `size` -
+                    // bucketing by rounded size lets every flame particle share a small, fixed
+                    // pool of cached gradients instead of allocating a fresh one each frame.
+                    let sizeKey = Math.max(1, Math.round(f.size));
+                    let grad = flameGradientCache.get(sizeKey);
+                    if (!grad) {
+                        grad = ctx.createRadialGradient(0, 0, 0, 0, 0, sizeKey);
+                        grad.addColorStop(0, '#fff3b0'); grad.addColorStop(0.5, '#ff9f1c'); grad.addColorStop(1, '#ff6b35');
+                        flameGradientCache.set(sizeKey, grad);
+                    }
+                    ctx.fillStyle = grad;
+                    ctx.beginPath(); ctx.arc(0, 0, f.size * alpha, 0, Math.PI*2); ctx.fill(); ctx.restore();
                 }
                 else if (item.type === 'enemy') {
                     let e = item.obj;

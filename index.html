@@ -370,12 +370,60 @@
         const pixelCanvas = document.createElement('canvas');
         const pixelCtx = pixelCanvas.getContext('2d');
         const PIXEL_SCALE = 2; // higher = chunkier "8-bit" pixels; does not change what's visible
+
+        // Void skin's map-wide desaturation used to rely on `ctx.filter = 'grayscale(1)'`.
+        // Support for CanvasRenderingContext2D.filter is inconsistent across browsers/webviews
+        // (notably several mobile WebViews silently no-op it instead of erroring), so instead of
+        // trusting the browser to grayscale pixels for us, we intercept every fillStyle/
+        // strokeStyle assignment on the main offscreen `ctx` and convert the color ourselves
+        // whenever voidGrayscaleActive is on. This produces identical results everywhere,
+        // regardless of ctx.filter support. Solid hex/rgb/rgba strings are converted; gradients
+        // and patterns are passed through unchanged (see drawSkyBackground's sun-glow skip for
+        // the one gradient that needed separate handling).
+        let voidGrayscaleActive = false;
+        function toGrayscaleColor(input) {
+            if (typeof input !== 'string') return input;
+            let hexMatch = input.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+            if (hexMatch) {
+                let hex = hexMatch[1], r, g, b;
+                if (hex.length === 3) { r = parseInt(hex[0] + hex[0], 16); g = parseInt(hex[1] + hex[1], 16); b = parseInt(hex[2] + hex[2], 16); }
+                else { r = parseInt(hex.slice(0, 2), 16); g = parseInt(hex.slice(2, 4), 16); b = parseInt(hex.slice(4, 6), 16); }
+                let l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+                return `rgb(${l},${l},${l})`;
+            }
+            let rgbMatch = input.match(/^rgba?\(([^)]+)\)$/);
+            if (rgbMatch) {
+                let parts = rgbMatch[1].split(',').map(s => s.trim());
+                let r = parseFloat(parts[0]), g = parseFloat(parts[1]), b = parseFloat(parts[2]);
+                let l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
+                return parts.length > 3 ? `rgba(${l},${l},${l},${parts[3]})` : `rgb(${l},${l},${l})`;
+            }
+            return input;
+        }
+        (function interceptVoidColors() {
+            let proto = Object.getPrototypeOf(ctx);
+            let fillDesc = Object.getOwnPropertyDescriptor(proto, 'fillStyle');
+            let strokeDesc = Object.getOwnPropertyDescriptor(proto, 'strokeStyle');
+            Object.defineProperty(ctx, 'fillStyle', {
+                set(v) { fillDesc.set.call(this, voidGrayscaleActive ? toGrayscaleColor(v) : v); },
+                get() { return fillDesc.get.call(this); }
+            });
+            Object.defineProperty(ctx, 'strokeStyle', {
+                set(v) { strokeDesc.set.call(this, voidGrayscaleActive ? toGrayscaleColor(v) : v); },
+                get() { return strokeDesc.get.call(this); }
+            });
+        })();
         
         const memoryStorage = {};
         const storage = {
             get: (key) => { try { return localStorage.getItem(key) ?? memoryStorage[key]; } catch(e) { return memoryStorage[key] || null; } },
             set: (key, val) => { memoryStorage[key] = val; try { localStorage.setItem(key, val); } catch(e) {} }
         };
+
+        // DEV BUILD: The Void skin comes pre-unlocked for testing - remove this block for a
+        // normal release build. Only sets it if the player doesn't already own it, so it
+        // won't stomp a real save that's already unlocked (or bought extra copies of) Void.
+        if (parseInt(storage.get('inv_void') || 0) < 1) storage.set('inv_void', 1);
 
         // Cached DOM references for the HUD, so the hot game loop never has to call
         // getElementById repeatedly (that lookup + the layout writes below it were a major
@@ -862,7 +910,7 @@
             { id: "galaxy", name: "Galaxy", preview: "radial-gradient(circle, #7597de, #2b1055)", isAnimated: true },
             { id: "ice", name: "Glacier", preview: "linear-gradient(135deg, #a5f2f3, #ffffff)", isAnimated: true },
             { id: "toxic", name: "Toxic Sludge", preview: "radial-gradient(circle, #39ff14, #003300)", isAnimated: true },
-            { id: "void", name: "The Void", preview: "#050505", isAnimated: true },
+            { id: "void", name: "The Void", preview: "radial-gradient(circle, #8a0f1a, #0a0a0a)", isAnimated: true },
             { id: "sparkle", name: "Fairy Dust", preview: "#ffb6c1", isAnimated: true },
             { id: "glitch", name: "Glitch", preview: "linear-gradient(90deg, #0ff, #f0f)", isAnimated: true },
             { id: "neon", name: "Neon Pulse", preview: "linear-gradient(45deg, #ff00ff, #00ffff)", isAnimated: true }
@@ -1155,6 +1203,22 @@
         function normalizeAngle(a) { 
             while (a > Math.PI) a -= Math.PI*2; 
             while (a < -Math.PI) a += Math.PI*2; return a; 
+        }
+        // Small cubic-bezier helpers - used by the Void skin's tentacle trees to place suction
+        // ridges and the tip eye at exact points/orientations along the curve without having
+        // to hand-track segment geometry.
+        function cubicPoint(x0, y0, x1, y1, x2, y2, x3, y3, t) {
+            let mt = 1 - t;
+            return {
+                x: mt*mt*mt*x0 + 3*mt*mt*t*x1 + 3*mt*t*t*x2 + t*t*t*x3,
+                y: mt*mt*mt*y0 + 3*mt*mt*t*y1 + 3*mt*t*t*y2 + t*t*t*y3
+            };
+        }
+        function cubicTangentAngle(x0, y0, x1, y1, x2, y2, x3, y3, t) {
+            let mt = 1 - t;
+            let dx = 3*mt*mt*(x1-x0) + 6*mt*t*(x2-x1) + 3*t*t*(x3-x2);
+            let dy = 3*mt*mt*(y1-y0) + 6*mt*t*(y2-y1) + 3*t*t*(y3-y2);
+            return Math.atan2(dy, dx);
         }
         function distToSegment(px, py, ax, ay, bx, by) {
             let dx = bx - ax, dy = by - ay, lenSq = dx*dx + dy*dy;
@@ -3066,7 +3130,7 @@
             }
             if (!voidSkyGradientCache || voidSkyGradientCacheH !== canvas.height) {
                 voidSkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                voidSkyGradientCache.addColorStop(0, '#050510'); voidSkyGradientCache.addColorStop(0.55, '#1a0e2e'); voidSkyGradientCache.addColorStop(1, '#3d1f57');
+                voidSkyGradientCache.addColorStop(0, '#010001'); voidSkyGradientCache.addColorStop(0.55, '#0c0507'); voidSkyGradientCache.addColorStop(1, '#1c0e10');
                 voidSkyGradientCacheH = canvas.height;
             }
             if (!galaxySkyGradientCache || galaxySkyGradientCacheH !== canvas.height) {
@@ -3079,17 +3143,22 @@
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
-            // rather than following the player around.
-            ctx.save();
-            let sunX = 500, sunY = -600;
-            if (!sunGradientCache) {
-                sunGradientCache = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 750);
-                sunGradientCache.addColorStop(0, 'rgba(255,255,230,0.5)');
-                sunGradientCache.addColorStop(1, 'rgba(255,255,230,0)');
+            // rather than following the player around. Void: skipped entirely rather than drawn
+            // and grayscaled - it's a CanvasGradient, which the color interceptor above can't
+            // convert (only solid hex/rgb/rgba strings), so leaving it in would tint the void
+            // sky warm/yellow regardless of the desaturation pass.
+            if (player.color !== 'void') {
+                ctx.save();
+                let sunX = 500, sunY = -600;
+                if (!sunGradientCache) {
+                    sunGradientCache = ctx.createRadialGradient(sunX, sunY, 0, sunX, sunY, 750);
+                    sunGradientCache.addColorStop(0, 'rgba(255,255,230,0.5)');
+                    sunGradientCache.addColorStop(1, 'rgba(255,255,230,0)');
+                }
+                ctx.fillStyle = sunGradientCache;
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
             }
-            ctx.fillStyle = sunGradientCache;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.restore();
 
             // Galaxy: a faint twinkling starfield drifts across the sky, fixed in world space
             // like the sun glow above, backed by soft drifting nebula clouds and a couple of
@@ -3605,6 +3674,41 @@
             }
         }
 
+        // Void: every grass/flower/leaf speck renders as either a tiny drifting mote of dust
+        // (mostly white or grey, ignoring the speck's usual theme color) or, rarely, a larger
+        // blinking eye watching from the ground. Which one a given speck is comes from a
+        // stable hash of its fixed world position, so the same specks are always eyes every
+        // frame rather than flickering between the two. The dust motes are left under the
+        // map's grayscale filter (their colors are already grayscale, so it doesn't matter);
+        // the eyes save/restore their own filter so they stay in full color, same trick as
+        // drawFleshRock.
+        function drawVoidDecor(d, breezeX) {
+            let seed = Math.abs(Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453); seed -= Math.floor(seed);
+            if (seed > 0.92) {
+                ctx.save();
+                voidGrayscaleActive = false;
+                let er = 6 + seed * 3; // noticeably larger than the standard 3px decor dot
+                let blinkPhase = (Date.now() / 1000 + seed * 12) % (3 + seed * 2);
+                let isBlinking = blinkPhase > (2.7 + seed * 1.6);
+                ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.ellipse(d.x, d.y + er * 0.25, er * 0.95, er * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+                if (isBlinking) {
+                    ctx.strokeStyle = '#b89494'; ctx.lineWidth = 1.6;
+                    ctx.beginPath(); ctx.moveTo(d.x - er * 0.75, d.y); ctx.lineTo(d.x + er * 0.75, d.y); ctx.stroke();
+                } else {
+                    ctx.fillStyle = '#eee2dd'; ctx.beginPath(); ctx.ellipse(d.x, d.y, er * 0.75, er * 0.5, 0, 0, Math.PI * 2); ctx.fill();
+                    let pupilDrift = Math.sin(d.x * 0.7 + d.y * 0.3) * er * 0.12;
+                    ctx.fillStyle = '#7a0f14'; ctx.beginPath(); ctx.arc(d.x + pupilDrift, d.y, er * 0.28, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#1a0505'; ctx.beginPath(); ctx.arc(d.x + pupilDrift, d.y, er * 0.13, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(d.x + pupilDrift - er * 0.1, d.y - er * 0.12, er * 0.08, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
+                voidGrayscaleActive = true;
+            } else {
+                ctx.fillStyle = seed > 0.5 ? 'rgba(225,225,225,0.7)' : 'rgba(130,130,130,0.65)';
+                ctx.beginPath(); ctx.arc(d.x, d.y, 1.4 + seed * 1.3, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
         // Corrupted Data (secret skin): strips enemies, trees, rocks, and both enemy and
         // player projectiles down to their raw collision circles instead of their usual art -
         // a faint translucent fill, a stroked outline, a small center crosshair, and a short
@@ -3703,6 +3807,48 @@
             ctx.restore();
         }
 
+        // Void: every rock renders as a pulsing, oozing mass of red flesh instead of its
+        // usual theme art - the one thing besides the blinking decor eyes that stays in full
+        // color while the rest of the map desaturates, so it saves/restores its own filter
+        // rather than relying on the grayscale toggle set once at the top of draw().
+        function drawFleshRock(x, y, radius) {
+            ctx.save();
+            voidGrayscaleActive = false;
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+            let t = Date.now();
+            let pulse = 0.5 + 0.5 * Math.sin(t / 900 + x * 0.01);
+            let grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.35, radius * 0.1, x, y, radius * 1.1);
+            grad.addColorStop(0, `rgba(255,100,95,${0.9 + 0.1 * pulse})`); grad.addColorStop(0.45, '#a5121f'); grad.addColorStop(1, '#43060c');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(x, y, radius, Math.PI, 0, false);
+            ctx.lineTo(x + radius * 0.9, y + radius * 0.18);
+            ctx.quadraticCurveTo(x, y + radius * 0.35, x - radius * 0.9, y + radius * 0.18);
+            ctx.closePath(); ctx.fill();
+            // Dark, thread-like veins across the surface.
+            ctx.strokeStyle = 'rgba(25,0,4,0.55)'; ctx.lineWidth = 1.5;
+            const veins = [[-0.3, -0.2, 0.2, -0.5], [0.1, 0.05, 0.35, -0.4], [-0.1, 0.15, -0.4, 0.3]];
+            for (let i = 0; i < veins.length; i++) {
+                let v = veins[i];
+                ctx.beginPath(); ctx.moveTo(x + v[0] * radius, y + v[1] * radius);
+                ctx.quadraticCurveTo(x + (v[0] + v[2]) * 0.5 * radius, y + (v[1] + v[3]) * 0.5 * radius - radius * 0.1, x + v[2] * radius, y + v[3] * radius);
+                ctx.stroke();
+            }
+            // Wet, glistening highlight.
+            ctx.fillStyle = `rgba(255,205,200,${0.3 + 0.2 * pulse})`;
+            ctx.beginPath(); ctx.ellipse(x - radius * 0.35, y - radius * 0.4, radius * 0.22, radius * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
+            // A slow drip of ooze forming and stretching down one side.
+            let dripLen = radius * (0.25 + 0.3 * pulse);
+            ctx.fillStyle = '#7a0d16';
+            ctx.beginPath();
+            ctx.moveTo(x + radius * 0.5 - radius * 0.05, y + radius * 0.1);
+            ctx.lineTo(x + radius * 0.5 + radius * 0.05, y + radius * 0.1);
+            ctx.quadraticCurveTo(x + radius * 0.58, y + radius * 0.1 + dripLen * 0.6, x + radius * 0.5, y + radius * 0.1 + dripLen);
+            ctx.closePath(); ctx.fill();
+            ctx.beginPath(); ctx.arc(x + radius * 0.5, y + radius * 0.1 + dripLen, radius * 0.07, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            voidGrayscaleActive = true;
+        }
+
         // Galaxy: every tree renders as a bioluminescent alien plant instead of its usual
         // foliage - a dark stalk rising from a mound of alien soil, a cluster of curling
         // tendrils tipped with pulsing glow-pods, and a larger glowing bud at the top. Sways
@@ -3738,6 +3884,85 @@
             mgrad.addColorStop(0, `rgba(190,140,255,${0.85 * mainGlow})`); mgrad.addColorStop(1, 'rgba(190,140,255,0)');
             ctx.fillStyle = mgrad; ctx.beginPath(); ctx.arc(mx, my, radius * 0.6 * mainGlow, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#c9a3ff'; ctx.beginPath(); ctx.arc(mx, my, radius * 0.28, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Void: every tree renders as a single dark tentacle rising from a pool of black ooze,
+        // bent toward the player as if being drawn in by the player's own gravity. The bend is
+        // driven purely by the tree's current position relative to player.worldX/worldY -
+        // there's no idle sway or independent motion like the other rare-skin foliage; a
+        // stationary player means a perfectly still tentacle. Only the tip's eye-glow pulses
+        // (a timer-driven opacity flicker, not movement) to keep it feeling alive.
+        function drawVoidTentacle(x, y, radius, seed) {
+            ctx.save();
+            // Pool of ooze at the base.
+            ctx.fillStyle = 'rgba(0,0,0,0.4)';
+            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+
+            let ddx = player.worldX - x, ddy = player.worldY - y;
+            let distToPlayer = Math.hypot(ddx, ddy);
+            let targetAngle = Math.atan2(ddy, ddx);
+            let upAngle = -Math.PI / 2;
+            let angleDiff = normalizeAngle(targetAngle - upAngle);
+
+            // strength: 0 far away (tentacle stands straight up, no bend) -> 1 right at the
+            // player (full bend/reach). The steep exponent keeps strength near zero across
+            // most of maxReach and only ramps up sharply in the last stretch, so distant
+            // trees read as basically inert and the effect is strongest only when the player
+            // is practically touching the tree.
+            let maxReach = 560;
+            let strength = Math.max(0, 1 - distToPlayer / maxReach);
+            strength = Math.pow(strength, 2.4);
+
+            let bendAngle = upAngle + angleDiff * strength;
+            // The tip tracks the same proximity-scaled bend as the rest of the curve (rather
+            // than always pointing exactly at the player), so it stays attached to the drawn
+            // curve and only swings to fully face the player once strength ramps up close up.
+            let hookAngle = bendAngle;
+
+            let len = radius * (2.1 + 0.7 * strength);
+            let baseX = x, baseY = y + radius * 0.1;
+            let c1x = baseX + Math.cos(upAngle) * len * 0.32, c1y = baseY + Math.sin(upAngle) * len * 0.32;
+            let c2x = baseX + Math.cos(bendAngle) * len * 0.72, c2y = baseY + Math.sin(bendAngle) * len * 0.72;
+            let tipX = baseX + Math.cos(hookAngle) * len, tipY = baseY + Math.sin(hookAngle) * len;
+
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#180e28'; ctx.lineWidth = radius * 0.44;
+            ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
+            // Faint violet underbelly stripe for dimension.
+            ctx.strokeStyle = '#3d2461'; ctx.lineWidth = radius * 0.18;
+            ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
+
+            // Suction ridges along the curve.
+            const ridgeTs = [0.32, 0.52, 0.72];
+            for (let rt of ridgeTs) {
+                let pt = cubicPoint(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
+                let tan = cubicTangentAngle(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
+                ctx.save();
+                ctx.translate(pt.x, pt.y); ctx.rotate(tan + Math.PI / 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.55)';
+                ctx.beginPath(); ctx.ellipse(0, 0, radius * 0.17 * (1 - rt * 0.25), radius * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+            }
+
+            // Glowing eye at the tip, pupil oriented toward the player. Exempted from the
+            // map's grayscale filter (see draw()) the same way the ground-level blinking
+            // eyes and the fleshy rocks are - eyes stay in full color everywhere in Void.
+            ctx.save();
+            voidGrayscaleActive = false;
+            let glow = 0.7 + 0.3 * Math.sin(Date.now() / 450 + seed * 6);
+            let egrad = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, radius * 0.55 * glow);
+            egrad.addColorStop(0, `rgba(210,170,255,${0.8 * glow})`); egrad.addColorStop(1, 'rgba(210,170,255,0)');
+            ctx.fillStyle = egrad; ctx.beginPath(); ctx.arc(tipX, tipY, radius * 0.55 * glow, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#e8d5ff'; ctx.beginPath(); ctx.arc(tipX, tipY, radius * 0.22, 0, Math.PI * 2); ctx.fill();
+            ctx.save();
+            ctx.translate(tipX, tipY); ctx.rotate(targetAngle + Math.PI / 2);
+            ctx.fillStyle = '#0a0512';
+            ctx.beginPath(); ctx.ellipse(0, 0, radius * 0.05, radius * 0.19, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            ctx.restore();
+            voidGrayscaleActive = true;
+
             ctx.restore();
         }
 
@@ -4087,6 +4312,13 @@
             let pdrawY = player.prevWorldY + (player.worldY - player.prevWorldY) * renderAlpha;
             
             ctx.save(); ctx.translate(-camX + shakeX, -camY + shakeY); 
+            // Void: the entire map desaturates to grayscale while equipped - every layer
+            // drawn from here down (sky, floor, decor, trees, fences, hazards, coins, goal)
+            // inherits this filter via canvas state unless a draw call explicitly saves and
+            // sets filter back to 'none' for itself (see drawFleshRock, the eye branch of
+            // drawVoidDecor, the tentacle eye-glow in drawVoidTentacle, and the player block
+            // below) - those are the only things that stay in full color.
+            voidGrayscaleActive = (player.color === 'void');
             drawSkyBackground();
             drawHazardHoles();
             
@@ -4142,6 +4374,25 @@
                         ctx.fillStyle = 'rgba(120,115,108,0.4)';
                         ctx.beginPath(); ctx.arc(lt.x + (dseed - 0.5) * HEX_SIZE, lt.y + (((dseed * 17) % 1) - 0.5) * HEX_SIZE, 1.4, 0, Math.PI * 2); ctx.fill();
                     }
+                }
+                ctx.restore();
+            }
+            // Void: while equipped, the floor becomes a dark, uneven expanse - a near-black
+            // base with slow-pulsing patches of deeper mottling scattered per-tile (same
+            // stable-hash trick as the Galaxy craters above, so the pattern doesn't reshuffle
+            // every frame). Drawn under the grayscale filter like everything else here.
+            if (player.color === 'void') {
+                ctx.fillStyle = '#0b0708'; ctx.fill();
+                ctx.save();
+                let voidT = Date.now();
+                for (let li = 0; li < visLand.length; li++) {
+                    let lt = visLand[li];
+                    let seed = Math.abs(Math.sin(lt.x * 12.9898 + lt.y * 78.233) * 43758.5453); seed -= Math.floor(seed);
+                    if (seed > 0.45) continue; // keep mottling sparse, not every tile
+                    let mr = HEX_SIZE * (0.3 + seed * 0.4);
+                    let pulse = 0.5 + 0.5 * Math.sin(voidT / 1800 + lt.x * 0.01 + lt.y * 0.01);
+                    ctx.fillStyle = `rgba(40,8,12,${0.18 + 0.18 * pulse})`;
+                    ctx.beginPath(); ctx.ellipse(lt.x + (seed - 0.5) * HEX_SIZE, lt.y + (((seed * 53) % 1) - 0.5) * HEX_SIZE, mr, mr * 0.7, 0, 0, Math.PI * 2); ctx.fill();
                 }
                 ctx.restore();
             }
@@ -4256,6 +4507,8 @@
                     // drawGlitchPopupDecor).
                     if (player.color === 'glitch') {
                         drawGlitchPopupDecor(d, breezeX);
+                    } else if (player.color === 'void') {
+                        drawVoidDecor(d, breezeX);
                     } else {
                         ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
                         if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
@@ -4356,6 +4609,10 @@
                     // Galaxy: every tree renders as a glowing alien plant instead of its usual
                     // foliage, all the time (not just ones the player's bumped).
                     if (player.color === 'galaxy') { drawAlienPlant(t.x, t.y, t.radius, t.seed || 0); return; }
+                    // Void: every tree renders as a dark tentacle bent toward the player by
+                    // the player's own gravity, all the time (not just ones the player's
+                    // bumped).
+                    if (player.color === 'void') { drawVoidTentacle(t.x, t.y, t.radius, t.seed || 0); return; }
                     let variant = t.variant || 0; let sway = (currentTheme.name === 'Desert' ? 0 : Math.sin(Date.now()/1400 + (t.seed||0)) * 0.05) + breezeX;
                     if (t.type === 'tree' && currentTheme.name !== 'Desert' && currentTheme.name !== 'Snow') {
                         if (Math.abs(player.vx) + Math.abs(player.vy) > 12 && Math.random() < 0.06 && dist(player.worldX, player.worldY, t.x, t.y) < 600) {
@@ -4441,6 +4698,10 @@
                     // Galaxy: every rock renders as a cratered moon rock instead of its usual
                     // theme art, all the time.
                     if (player.color === 'galaxy') { drawMoonRock(r.x, r.y, r.radius); return; }
+                    // Void: every rock renders as an oozing mass of red flesh instead of its
+                    // usual theme art, all the time - kept in full color while the rest of
+                    // the map desaturates (see drawFleshRock).
+                    if (player.color === 'void') { drawFleshRock(r.x, r.y, r.radius); return; }
                     let variant = r.variant || 0;
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(r.x, r.y + r.radius*0.18, r.radius*1.05, r.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (r.golden) {
@@ -4637,6 +4898,9 @@
                 }
                 else if (item.type === 'player') {
                     let p = item.obj;
+                    // Void: the player's own slime (and its powerup effects/orbiting items)
+                    // stays in full color - only the map desaturates, not the character.
+                    if (player.color === 'void') { ctx.save(); voidGrayscaleActive = false; }
                     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(pdrawX, pdrawY + p.radius, p.radius * 0.9, p.radius * 0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (p.activePowerup === 'rampage') {
                         ctx.save();
@@ -4688,6 +4952,7 @@
                             }
                         }
                     }
+                    if (player.color === 'void') { ctx.restore(); voidGrayscaleActive = true; }
                 }
                 
                 if (isWaterObj) { ctx.restore(); }

@@ -44,6 +44,30 @@
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         #hazard-warning { position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%); display: none; background: rgba(0, 0, 0, 0.7); color: #ff477e; padding: 10px 20px; border-radius: 30px; border: 2px solid #ff477e; font-size: 1.5rem; font-weight: bold; text-shadow: 0 0 5px #000; z-index: 10; pointer-events: none; animation: pulse 0.5s infinite; }
+
+        /* Secret "Corrupted Data" glitch slime — unlocked via 20 consecutive Remove Hat clicks.
+           #gameCanvas is the only inverted element (UI/HUD divs sit outside the canvas), so
+           equipping the skin flips the world's colors without breaking HUD readability. */
+        #gameCanvas.color-inverted { filter: invert(1) hue-rotate(180deg); }
+
+        #secret-unlock-toast {
+            position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.7);
+            z-index: 70; pointer-events: none; opacity: 0;
+            background: #000; color: #39ff14; padding: 18px 26px; border-radius: 4px;
+            border: 2px solid #39ff14; text-align: center; font-size: 0.75rem; line-height: 1.7;
+            box-shadow: 0 0 25px rgba(57,255,20,0.6), 0 0 8px rgba(255,0,60,0.6) inset;
+        }
+        #secret-unlock-toast .glitch-title { color: #ff003c; font-size: 0.95rem; display: block; margin-bottom: 8px; animation: glitchFlicker 0.15s steps(2) infinite; }
+        @keyframes glitchFlicker { 0% { color: #ff003c; } 50% { color: #39ff14; } 100% { color: #ff003c; } }
+        #secret-unlock-toast.show { animation: secretUnlockPop 3.2s ease-out forwards; }
+        @keyframes secretUnlockPop {
+            0% { opacity: 0; transform: translate(-50%, -50%) scale(0.7); filter: none; }
+            6% { opacity: 1; transform: translate(-51%, -49%) scale(1.03); }
+            8% { transform: translate(-49%, -51%) scale(1); }
+            10% { transform: translate(-50%, -50%) scale(1); }
+            85% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+            100% { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+        }
         #hazard-vignette {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
             pointer-events: none; z-index: 8; opacity: 0;
@@ -248,6 +272,7 @@
 
 
     <div id="item-toast"><img class="icon-img" id="item-toast-icon" style="width:1.4em;height:1.4em;" alt=""> <span id="item-toast-text"></span></div>
+    <div id="secret-unlock-toast"><span class="glitch-title">// GLITCH DETECTED //</span>CORRUPTED DATA slime unlocked!<br>Equip it in the Skins shop.</div>
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
@@ -647,6 +672,15 @@
             powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0, spikesTimer: 0
         };
 
+        // Applies/removes the screen-color-inversion effect tied to the secret Corrupted Data
+        // skin. Only #gameCanvas (the visible pixelated game view) gets inverted - HUD panels,
+        // buttons, and modals live in separate DOM layers, so they stay perfectly readable
+        // while equipped.
+        function syncColorInvertEffect() {
+            displayCanvas.classList.toggle('color-inverted', player.color === 'corrupted');
+        }
+        syncColorInvertEffect();
+
         let pointerScreenX = window.innerWidth / 2; 
         let pointerScreenY = window.innerHeight / 2;
         
@@ -737,6 +771,14 @@
             { id: "glitch", name: "Glitch", preview: "linear-gradient(90deg, #0ff, #f0f)", isAnimated: true },
             { id: "neon", name: "Neon Pulse", preview: "linear-gradient(45deg, #ff00ff, #00ffff)", isAnimated: true }
         ];
+
+        // Secret skins are never added to the gacha loot table (see rollGachaItem) - the only
+        // way to unlock one is the hidden trigger tied to it (see removeHatClickCount below).
+        // They're rendered in the Skins tab just like rareSkins, showing "???" until unlocked.
+        const secretSkins = [
+            { id: "corrupted", name: "Corrupted Data", preview: "repeating-linear-gradient(0deg, #000 0px, #000 4px, #39ff14 4px, #39ff14 6px, #ff003c 6px, #ff003c 8px)", isAnimated: true }
+        ];
+        const secretSkinsById = new Map(secretSkins.map(s => [s.id, s]));
 
         const hats = [
             { id: "cowboy", name: "Cowboy Hat" }, { id: "tophat", name: "Top Hat" },
@@ -952,6 +994,13 @@
                 osc.type = 'triangle'; osc.frequency.setValueAtTime(1200, t); osc.frequency.exponentialRampToValueAtTime(400, t + 0.4);
                 gain.gain.setValueAtTime(userSettings.sfxVol * 0.7, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.4);
                 osc.start(t); osc.stop(t + 0.4);
+            } else if (type === 'secret_unlock') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(90, t); osc.frequency.setValueAtTime(880, t + 0.06);
+                osc.frequency.setValueAtTime(60, t + 0.1); osc.frequency.setValueAtTime(1200, t + 0.16);
+                osc.frequency.setValueAtTime(200, t + 0.22); osc.frequency.exponentialRampToValueAtTime(1600, t + 0.5);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.5, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.55);
+                osc.start(t); osc.stop(t + 0.55);
             }
         }
 
@@ -1728,16 +1777,17 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
-            // Removing a hat also counts toward the hidden perf-overlay toggle: 20 CONSECUTIVE
-            // clicks on this specific button toggles the overlay. The streak is reset by the
-            // document-level click listener declared right below removeHatClickCount - any click
-            // on anything else breaks the streak back to 0.
+            // Removing a hat also counts toward two hidden 20-CONSECUTIVE-click toggles: the
+            // perf overlay, and the secret Corrupted Data glitch slime unlock. The streak is
+            // reset by the document-level click listener declared right below
+            // removeHatClickCount - any click on anything else breaks the streak back to 0.
             document.getElementById('btn-remove-hat').addEventListener('click', () => {
                 equipItem('hat', null);
                 removeHatClickCount++;
                 if (removeHatClickCount >= 20) {
                     removeHatClickCount = 0;
                     if (perfOverlay) perfOverlay.style.display = (perfOverlay.style.display === 'none') ? 'block' : 'none';
+                    unlockSecretGlitchSkin();
                 }
             });
             
@@ -2182,10 +2232,10 @@
             }
 
             if (skinsContainer) {
-                let allSkins = [...basicSkins, ...rareSkins];
+                let allSkins = [...basicSkins, ...rareSkins, ...secretSkins];
                 allSkins.forEach(s => {
                     let count = parseInt(storage.get('inv_' + s.id) || 0);
-                    let isRare = rareSkins.some(r => r.id === s.id);
+                    let isRare = rareSkins.some(r => r.id === s.id) || secretSkinsById.has(s.id);
                     let displayName = (count === 0 && isRare) ? "???" : s.name;
                     let div = document.createElement('div');
                     let isEquipped = player.color === s.id;
@@ -2202,10 +2252,31 @@
             }
         }
 
+        // Grants the secret "Corrupted Data" skin the first time 20 consecutive Remove Hat
+        // clicks are landed. Re-triggering after it's already unlocked just re-plays the toast
+        // (harmless, and confirms to a curious player that the streak still works) without
+        // stacking extra inventory count, since inv_corrupted is set to 1 rather than
+        // incremented like normal gacha pulls.
+        function unlockSecretGlitchSkin() {
+            let alreadyUnlocked = parseInt(storage.get('inv_corrupted') || 0) > 0;
+            storage.set('inv_corrupted', 1);
+            playSFX('secret_unlock');
+            showSecretUnlockToast();
+            if (!alreadyUnlocked) populateInventory();
+        }
+
+        function showSecretUnlockToast() {
+            let el = document.getElementById('secret-unlock-toast');
+            if (!el) return;
+            el.classList.remove('show');
+            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+        }
+
         function equipItem(type, id) {
             if (type === 'skin') {
                 player.color = id;
                 storage.set('landSlidersSkin', id);
+                syncColorInvertEffect();
             } else if (type === 'hat') {
                 player.hat = id;
                 if (id) storage.set('landSlidersHat', id);
@@ -3045,14 +3116,17 @@
             else if (colorId === 'sparkle') { fillColor = '#ffb6c1'; drawSpecial = 'sparkle'; }
             else if (colorId === 'glitch') { fillColor = Math.random() > 0.8 ? '#0ff' : (Math.random() > 0.5 ? '#f0f' : '#fff'); drawSpecial = 'glitch'; }
             else if (colorId === 'neon') { fillColor = `hsl(${(t / 2) % 360}, 100%, 70%)`; drawSpecial = 'neon'; }
+            // Secret skin: dark corrupted-video-signal palette (near-black/toxic-green/error-red),
+            // deliberately distinct from the cyan/magenta/white 'glitch' rare skin above.
+            else if (colorId === 'corrupted') { fillColor = Math.random() > 0.9 ? '#ff003c' : (Math.random() > 0.5 ? '#001a00' : '#0d0d0d'); drawSpecial = 'corrupted'; }
 
             c.save(); c.translate(x, renderY); c.scale(stretchX / stretchY, stretchY / stretchX);
             let r = radius;
 
             // Soft outer glow behind especially flashy rare skins
-            if (drawSpecial === 'neon' || drawSpecial === 'void' || drawSpecial === 'toxic') {
+            if (drawSpecial === 'neon' || drawSpecial === 'void' || drawSpecial === 'toxic' || drawSpecial === 'corrupted') {
                 c.save();
-                let glowColor = drawSpecial === 'neon' ? fillColor : (drawSpecial === 'toxic' ? '#39ff14' : '#8e44ad');
+                let glowColor = drawSpecial === 'neon' ? fillColor : (drawSpecial === 'toxic' ? '#39ff14' : (drawSpecial === 'corrupted' ? '#ff003c' : '#8e44ad'));
                 c.globalAlpha = 0.22 + Math.sin(t/200)*0.08;
                 c.fillStyle = glowColor;
                 c.beginPath(); c.arc(0, 0, r * 1.35, 0, Math.PI*2); c.fill();
@@ -3099,6 +3173,20 @@
                 c.save(); c.globalAlpha = 0.5; c.fillStyle = Math.random() > 0.5 ? '#0ff' : '#f0f';
                 c.translate((Math.random()-0.5)*6, (Math.random()-0.5)*6);
                 c.beginPath(); c.moveTo(-r, r * 0.5); c.lineTo(r, r*0.5); c.lineTo(0, -r); c.closePath(); c.fill(); c.restore();
+            } else if (drawSpecial === 'corrupted') {
+                // Horizontal datamosh scan-lines that jitter position/color every frame, rather
+                // than glitch's single displaced triangle - reads as "signal corruption" instead
+                // of a simple color-swap flicker.
+                c.save(); c.beginPath(); c.ellipse(0, 0, r * 1.05, r * 1.1, 0, 0, Math.PI * 2); c.clip();
+                for (let i = 0; i < 4; i++) {
+                    let sliceY = (Math.random() - 0.5) * r * 2;
+                    let sliceH = 1.5 + Math.random() * 4;
+                    let offset = (Math.random() - 0.5) * 16;
+                    c.globalAlpha = 0.6;
+                    c.fillStyle = Math.random() > 0.5 ? '#39ff14' : '#ff003c';
+                    c.fillRect(-r * 1.2 + offset, sliceY, r * 2.4, sliceH);
+                }
+                c.restore();
             } else if (drawSpecial === 'rainbow') {
                 c.globalAlpha = 0.3; c.fillStyle = '#fff';
                 c.beginPath(); c.ellipse(0, 0, r*0.9, r*0.3, Math.sin(t/400)*0.5, 0, Math.PI*2); c.fill(); c.globalAlpha = 1;
@@ -3111,7 +3199,7 @@
             // Eyes & Face
             let eyeOffsetX = Math.max(-8, Math.min(8, (vx / 10) * 4 + leanX * 0.15)) * (radius/22);
             let eyeOffsetY = Math.max(-8, Math.min(8, (vy / 10) * 4 + leanY * 0.15)) * (radius/22);
-            let eyeColor = (colorId === 'black' || colorId === 'void' || colorId === 'galaxy') ? '#fff' : '#1a1a2e'; c.fillStyle = eyeColor;
+            let eyeColor = (colorId === 'black' || colorId === 'void' || colorId === 'galaxy' || colorId === 'corrupted') ? '#fff' : '#1a1a2e'; c.fillStyle = eyeColor;
             c.beginPath(); c.arc(-8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.fill(); 
             c.beginPath(); c.arc(8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.fill();
             

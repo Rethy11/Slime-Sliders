@@ -420,11 +420,6 @@
             set: (key, val) => { memoryStorage[key] = val; try { localStorage.setItem(key, val); } catch(e) {} }
         };
 
-        // DEV BUILD: The Void skin comes pre-unlocked for testing - remove this block for a
-        // normal release build. Only sets it if the player doesn't already own it, so it
-        // won't stomp a real save that's already unlocked (or bought extra copies of) Void.
-        if (parseInt(storage.get('inv_void') || 0) < 1) storage.set('inv_void', 1);
-
         // Cached DOM references for the HUD, so the hot game loop never has to call
         // getElementById repeatedly (that lookup + the layout writes below it were a major
         // source of frame hitches, especially while a powerup was active).

@@ -1875,16 +1875,17 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
-            // Removing a hat also counts toward two hidden 20-CONSECUTIVE-click toggles: the
-            // perf overlay, and the secret Corrupted Data glitch slime unlock. The streak is
-            // reset by the document-level click listener declared right below
-            // removeHatClickCount - any click on anything else breaks the streak back to 0.
+            // Removing a hat also counts toward a hidden 20-CONSECUTIVE-click streak that
+            // unlocks the secret Corrupted Data glitch slime. The streak is reset by the
+            // document-level click listener declared right below removeHatClickCount - any
+            // click on anything else breaks the streak back to 0. (The perf overlay used to
+            // piggyback on this same streak; it now toggles with equipping/unequipping
+            // Corrupted Data itself - see syncPerfOverlay.)
             document.getElementById('btn-remove-hat').addEventListener('click', () => {
                 equipItem('hat', null);
                 removeHatClickCount++;
                 if (removeHatClickCount >= 20) {
                     removeHatClickCount = 0;
-                    if (perfOverlay) perfOverlay.style.display = (perfOverlay.style.display === 'none') ? 'block' : 'none';
                     unlockSecretGlitchSkin();
                 }
             });
@@ -2351,16 +2352,16 @@
         }
 
         // Grants the secret "Corrupted Data" skin the first time 20 consecutive Remove Hat
-        // clicks are landed. Re-triggering after it's already unlocked just re-plays the toast
-        // (harmless, and confirms to a curious player that the streak still works) without
-        // stacking extra inventory count, since inv_corrupted is set to 1 rather than
-        // incremented like normal gacha pulls.
+        // clicks are landed. Re-triggering the streak after it's already unlocked is a no-op -
+        // the "GLITCH DETECTED" unlock screen is a one-time reveal, not a repeatable easter egg,
+        // so it neither replays nor stacks extra inventory count.
         function unlockSecretGlitchSkin() {
             let alreadyUnlocked = parseInt(storage.get('inv_corrupted') || 0) > 0;
+            if (alreadyUnlocked) return;
             storage.set('inv_corrupted', 1);
             playSFX('secret_unlock');
             showSecretUnlockToast();
-            if (!alreadyUnlocked) populateInventory();
+            populateInventory();
         }
 
         function showSecretUnlockToast() {
@@ -2375,6 +2376,7 @@
                 player.color = id;
                 storage.set('landSlidersSkin', id);
                 syncColorInvertEffect();
+                syncPerfOverlay();
             } else if (type === 'hat') {
                 player.hat = id;
                 if (id) storage.set('landSlidersHat', id);
@@ -2591,7 +2593,7 @@
                 let facing = (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) ? Math.atan2(player.vy, player.vx) : player.facing;
                 if (Math.random() < 0.9) {
                     let a = facing + (Math.random() - 0.5) * (Math.PI / 3); let spd = 5 + Math.random() * 3;
-                    flameParticles.push({ x: player.worldX + Math.cos(facing)*player.radius*0.6, y: player.worldY + Math.sin(facing)*player.radius*0.6, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd, life: 2, maxLife: 2, size: 8 + Math.random()*8 });
+                    flameParticles.push({ x: player.worldX + Math.cos(facing)*player.radius*0.6, y: player.worldY + Math.sin(facing)*player.radius*0.6, vx: Math.cos(a)*spd, vy: Math.sin(a)*spd, life: 2, maxLife: 2, size: 8 + Math.random()*8, source: 'firecone' });
                 }
                 if (Math.random() < 0.1) playSFX('fire');
             }
@@ -3035,6 +3037,16 @@
             // Glitch: the sky is replaced entirely by old-TV static - skips the gradient/sun/
             // cloud/bird layers below altogether while equipped.
             if (player.color === 'glitch') { drawTVStatic(); return; }
+            // Corrupted Data: the sky is a flat hot-pink fill - same early-return pattern as
+            // Glitch above, skipping the gradient/sun/cloud/bird layers entirely.
+            if (player.color === 'corrupted') {
+                ctx.save();
+                ctx.translate(camera.x, camera.y);
+                ctx.fillStyle = '#ff1493';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+                return;
+            }
             // PERF: both gradients below used to be rebuilt from scratch every single frame,
             // unconditionally, with camera.x/y baked directly into their coordinates. A
             // CanvasGradient's control points are evaluated against whatever transform is
@@ -3464,7 +3476,8 @@
         // type label, the way a debug hitbox overlay would render them. Color is the only
         // thing that distinguishes what kind of hitbox it is: red for anything that can hurt
         // the player (enemies, enemy projectiles), green for static obstacle collision
-        // (trees/rocks), cyan for the player's own projectiles.
+        // (trees/rocks/fences), cyan for the player's own attacks (projectiles, fire breath,
+        // lightning, shuriken), gold for collectible pickups (coins/gems).
         function drawHitboxCircle(x, y, radius, color, label) {
             ctx.save();
             ctx.globalAlpha = 0.18; ctx.fillStyle = color;
@@ -3478,6 +3491,42 @@
             if (label) {
                 ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
                 ctx.fillText(label, x, y - radius - 8);
+            }
+            ctx.restore();
+        }
+
+        // Corrupted Data: same debug-hitbox treatment as drawHitboxCircle above, but for
+        // segment-shaped collision - fences (static, solid line obstacles) and the lightning
+        // power-up's beam (a thin capsule of hurt-radius `thickness` running player->target).
+        function drawHitboxLine(x1, y1, x2, y2, thickness, color, label) {
+            ctx.save();
+            let midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
+            let angle = Math.atan2(y2 - y1, x2 - x1);
+            let len = Math.hypot(x2 - x1, y2 - y1);
+            ctx.translate(midX, midY); ctx.rotate(angle);
+            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
+            ctx.fillRect(-len / 2, -thickness / 2, len, thickness);
+            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
+            ctx.strokeRect(-len / 2, -thickness / 2, len, thickness);
+            ctx.beginPath(); ctx.moveTo(-len / 2, 0); ctx.lineTo(len / 2, 0); ctx.stroke();
+            if (label) {
+                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+                ctx.fillText(label, 0, -thickness / 2 - 8);
+            }
+            ctx.restore();
+        }
+
+        // Corrupted Data: same debug-hitbox treatment, but for the fire breath power-up's cone
+        // hit-check (a pie slice of `radius` centered on `facing`, spanning +/- `halfAngle`).
+        function drawHitboxCone(x, y, radius, facing, halfAngle, color, label) {
+            ctx.save();
+            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, radius, facing - halfAngle, facing + halfAngle); ctx.closePath(); ctx.fill();
+            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, radius, facing - halfAngle, facing + halfAngle); ctx.closePath(); ctx.stroke();
+            if (label) {
+                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+                ctx.fillText(label, x + Math.cos(facing) * radius * 0.5, y + Math.sin(facing) * radius * 0.5 - 8);
             }
             ctx.restore();
         }
@@ -3610,6 +3659,9 @@
             // Glitch: hazard pockets turn solid black with a green matrix-digit edge -
             // drawHazardHoles fills them with scrolling digit rain instead of the usual texture.
             if (player.color === 'glitch') return { type: currentTheme.hazard.type, color: '#000000', edge: '#00ff41' };
+            // Corrupted Data: hazard pockets turn hot pink instead of the theme's usual water/
+            // lava/ice - keeps the usual drawHazardTexture pattern on top, just recolored.
+            if (player.color === 'corrupted') return { type: currentTheme.hazard.type, color: '#ff1493', edge: '#ff8fd1' };
             return currentTheme.hazard;
         }
 
@@ -3922,6 +3974,9 @@
             // Glitch: while equipped, the entire visible floor renders solid black - overrides
             // the theme ground color set just above, same clip already active.
             if (player.color === 'glitch') { ctx.fillStyle = '#000'; ctx.fill(); }
+            // Corrupted Data: while equipped, the entire visible floor renders blank white -
+            // same override pattern as Glitch above, same clip already active.
+            if (player.color === 'corrupted') { ctx.fillStyle = '#ffffff'; ctx.fill(); }
             // Galaxy: while equipped, the floor becomes cratered lunar regolith - a pale grey
             // base with a scatter of shaded craters (each with a soft rim highlight) and a
             // fine dust speckle. Craters/speckle come from a stable per-tile hash (same trick
@@ -4095,7 +4150,7 @@
             for (let i = 0; i < items.length; i++) { let c = items[i]; if (!c.collected && isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) pushRQ(c.type, c, c.y + (c.radius || 0)); }
             for (let i = 0; i < projectiles.length; i++) { let p = projectiles[i]; if (isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('projectile', p, p.y + (p.radius || 0)); }
             for (let i = 0; i < icicles.length; i++) { let ic = icicles[i]; if (isOnScreen(ic.x + tiltX, ic.y + tiltY, cullBuffer)) pushRQ('icicle', ic, ic.y + (ic.radius || 0)); }
-            for (let i = 0; i < flameParticles.length; i++) { let f = flameParticles[i]; if (isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) pushRQ('flame', f, f.y + (f.radius || 0)); }
+            for (let i = 0; i < flameParticles.length; i++) { let f = flameParticles[i]; if (player.color === 'corrupted' && f.source === 'firecone') continue; if (isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) pushRQ('flame', f, f.y + (f.radius || 0)); }
             for (let i = 0; i < leaves.length; i++) { let l = leaves[i]; if (isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) pushRQ('leaf', l, l.y + (l.radius || 0)); }
             for (let i = 0; i < splashes.length; i++) { let s = splashes[i]; if (isOnScreen(s.x + tiltX, s.y + tiltY, cullBuffer)) pushRQ('splash', s, s.y + (s.radius || 0)); }
             for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
@@ -4243,6 +4298,9 @@
                     // to match that edge. Fences don't occupy a hex's single-element slot, so
                     // these draw independently of whatever tree/rock/coin/chest sits at center.
                     let f = item.obj;
+                    // Corrupted Data: fences are solid collision same as trees/rocks, so they
+                    // render as their raw hitbox line instead of the usual post-and-rail art.
+                    if (player.color === 'corrupted') { drawHitboxLine(f.x1, f.y1, f.x2, f.y2, fenceThickness, '#39ff14', 'FENCE'); return; }
                     let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
                     let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
                     ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
@@ -4271,7 +4329,10 @@
                     // dispatch pattern as window.EnemySprites for enemies (SECTION 8 below)
                     // and window.IconSprites for UI icons (SECTION 4).
                     let c = item.obj;
-                    if (window.LootSprites && window.LootSprites[item.type]) window.LootSprites[item.type](ctx, c);
+                    // Corrupted Data: coins/gems render as their raw pickup-radius hitbox
+                    // (gold - the one category here that's neither hazard nor obstacle).
+                    if (player.color === 'corrupted') { drawHitboxCircle(c.x, c.y, c.radius, '#ffd700', item.type.toUpperCase().slice(0, 6)); }
+                    else if (window.LootSprites && window.LootSprites[item.type]) window.LootSprites[item.type](ctx, c);
                 }
                 else if (item.type === 'powerup') {
                     let p = item.obj; let pu = powerupTypesById.get(p.typeId); let bob = Math.sin(Date.now()/260 + (p.spawnSeed||0)) * 6; let spin = (Date.now()/450) % (Math.PI*2);
@@ -4418,7 +4479,23 @@
                     }
                     if (p.activePowerup === 'lightning') {
                         let target = getLightningTargetWorld();
-                        drawLightningBolt(pdrawX, pdrawY, target.x, target.y);
+                        // Corrupted Data: the beam's actual kill-check is a capsule of radius
+                        // pu.radius around the player->target segment, so render that hitbox
+                        // instead of the usual jagged bolt art.
+                        if (player.color === 'corrupted') {
+                            let pu = powerupTypesById.get('lightning');
+                            drawHitboxLine(pdrawX, pdrawY, target.x, target.y, (pu ? pu.radius : 34) * 2, '#00e5ff', 'BOLT');
+                        } else {
+                            drawLightningBolt(pdrawX, pdrawY, target.x, target.y);
+                        }
+                    }
+                    // Corrupted Data: the fire breath cone's actual kill-check is a pie slice of
+                    // pu.radius spanning +/- PI/2.1 around facing (see applyPowerupEffect), so
+                    // render that hitbox instead of letting the flame particles stand in for it.
+                    if (p.activePowerup === 'fire' && player.color === 'corrupted') {
+                        let pu = powerupTypesById.get('fire');
+                        let facing = (Math.abs(p.vx) + Math.abs(p.vy) > 0.3) ? Math.atan2(p.vy, p.vx) : p.facing;
+                        drawHitboxCone(pdrawX, pdrawY, pu ? pu.radius : 150, facing, Math.PI / 2.1, '#00e5ff', 'FIRE');
                     }
                     drawCharacterModel(pdrawX, pdrawY, p.vx, p.vy, p.radius, p.color, Math.abs(p.jiggleForceX) + Math.abs(p.jiggleForceY) > 0, p.hat);
                     // Roguelite: Shuriken item - orbiting blades drawn around the player
@@ -4429,9 +4506,16 @@
                             let ang = shurikenSpin + (s / shurikenStacksDraw) * Math.PI * 2;
                             let sx = pdrawX + Math.cos(ang) * orbitRadius;
                             let sy = pdrawY + Math.sin(ang) * orbitRadius;
-                            ctx.save(); ctx.translate(sx, sy); ctx.rotate(shurikenSpin * 4);
-                            drawPixelIcon('shuriken', ctx, 0, 0, 33);
-                            ctx.restore();
+                            // Corrupted Data: shurikens hit enemies/deflect bullets within an
+                            // 11px radius of their orbit position (see the roguelite update
+                            // loop), so render that hitbox instead of the spinning blade icon.
+                            if (player.color === 'corrupted') {
+                                drawHitboxCircle(sx, sy, 11, '#00e5ff', 'SHRK');
+                            } else {
+                                ctx.save(); ctx.translate(sx, sy); ctx.rotate(shurikenSpin * 4);
+                                drawPixelIcon('shuriken', ctx, 0, 0, 33);
+                                ctx.restore();
+                            }
                         }
                     }
                 }
@@ -4555,13 +4639,18 @@
 
 
         // ---- TEMPORARY PERF OVERLAY (v2 — clock/timestamp diagnostic) ----
-        // Hidden by default now. Click the "Remove Hat" button in the shop's Hats tab 20 times
-        // in a row to toggle it on/off (see removeHatClickCount in SECTION 6).
+        // Hidden by default. Tied to the secret Corrupted Data skin: shows automatically while
+        // it's equipped, hides again the moment it's unequipped (see syncPerfOverlay, called
+        // from equipItem). No longer toggled by the Remove Hat click streak.
         const perfOverlay = document.createElement('div');
         perfOverlay.id = 'perf-overlay';
         perfOverlay.style.cssText = 'display:none;position:fixed;top:4px;left:4px;z-index:9999;background:rgba(0,0,0,0.75);color:#0f0;font-family:monospace;font-size:11px;padding:4px 6px;border-radius:4px;pointer-events:none;white-space:pre;line-height:1.4;';
         perfOverlay.innerText = 'perf: warming up...';
         document.body.appendChild(perfOverlay);
+        // Sets (not toggles) the overlay's visibility to match whether Corrupted Data is
+        // currently equipped - safe to call as often as needed, e.g. on every skin equip.
+        function syncPerfOverlay() { perfOverlay.style.display = (player.color === 'corrupted') ? 'block' : 'none'; }
+        syncPerfOverlay();
 
         let perfStats = {
             update: 0, draw: 0, pixelate: 0, frames: 0, catchUpHits: 0,

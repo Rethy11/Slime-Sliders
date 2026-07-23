@@ -3376,20 +3376,47 @@
         // on a repeating cycle, and a bright thin event-horizon ring. Purely a function of
         // time/position like drawMatrixRain, so it never needs any persistent state and reads
         // consistently within whatever clip is already active (see drawHazardHoles).
+        // PERF: the 3 band gradients + 1 core gradient below depend only on `span` (which is
+        // always HEX_SIZE - every hazard hole is the same size) and the fixed per-band hue, not
+        // on tile position - they're identical for every hazard tile, every frame. This used to
+        // call createLinearGradient/createRadialGradient (4 allocations, each with 2-3
+        // addColorStop calls) once per tile per frame; on a level with several hazard holes in
+        // view under the Galaxy skin, the perf report's single ~6.7s frame lines up with exactly
+        // this kind of per-frame allocation churn. Built once here in *local* (post-translate)
+        // coordinates and cached - same pattern as flameGradientCache elsewhere in this file.
+        // (Building them in local space also fixes a pre-existing bug: the old code created the
+        // band gradients using world cx/cy *before* translating into the tile's local frame, so
+        // the gradient's positioning never actually matched the ellipse it was painted on.)
+        let blackHoleGradCache = null;
+        function getBlackHoleGradients(span) {
+            if (blackHoleGradCache && blackHoleGradCache.span === span) return blackHoleGradCache;
+            let bands = [];
+            for (let i = 0; i < 3; i++) {
+                let bandR = span * (0.5 + i * 0.16);
+                let bandGrad = ctx.createLinearGradient(-bandR, 0, bandR, 0);
+                let hue = i % 2 === 0 ? 'rgba(255,138,61,' : 'rgba(157,78,221,';
+                bandGrad.addColorStop(0, hue + '0)'); bandGrad.addColorStop(0.5, hue + '0.6)'); bandGrad.addColorStop(1, hue + '0)');
+                bands.push(bandGrad);
+            }
+            let coreR = span * 0.34;
+            let coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR);
+            coreGrad.addColorStop(0, '#000000'); coreGrad.addColorStop(0.75, '#050208'); coreGrad.addColorStop(1, 'rgba(5,2,8,0)');
+            blackHoleGradCache = { span, bands, coreGrad };
+            return blackHoleGradCache;
+        }
+
         function drawBlackHoleSwirl(cx, cy, span) {
             ctx.save();
             let t = Date.now() / 1000;
             let coreR = span * 0.34;
+            let grads = getBlackHoleGradients(span);
 
             // Rotating accretion disk bands, drawn as thick partial-ellipse strokes so they
             // read as matter smeared around the core rather than solid rings.
             for (let i = 0; i < 3; i++) {
                 let ang = t * (1.1 + i * 0.35) + i * 2.4;
                 let bandR = span * (0.5 + i * 0.16);
-                let bandGrad = ctx.createLinearGradient(cx - bandR, cy, cx + bandR, cy);
-                let hue = i % 2 === 0 ? 'rgba(255,138,61,' : 'rgba(157,78,221,';
-                bandGrad.addColorStop(0, hue + '0)'); bandGrad.addColorStop(0.5, hue + '0.6)'); bandGrad.addColorStop(1, hue + '0)');
-                ctx.strokeStyle = bandGrad; ctx.lineWidth = 3 - i * 0.5;
+                ctx.strokeStyle = grads.bands[i]; ctx.lineWidth = 3 - i * 0.5;
                 ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
                 ctx.beginPath(); ctx.ellipse(0, 0, bandR, bandR * 0.32, 0, 0, Math.PI * 1.4); ctx.stroke();
                 ctx.restore();
@@ -3411,12 +3438,12 @@
 
             // Near-black core with a soft inner falloff, then a crisp bright event-horizon
             // ring right at its edge.
-            let coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-            coreGrad.addColorStop(0, '#000000'); coreGrad.addColorStop(0.75, '#050208'); coreGrad.addColorStop(1, 'rgba(5,2,8,0)');
-            ctx.fillStyle = coreGrad;
-            ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fill();
+            ctx.save(); ctx.translate(cx, cy);
+            ctx.fillStyle = grads.coreGrad;
+            ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
 
             ctx.restore();
         }
@@ -3733,8 +3760,10 @@
         // Draws the animated water/lava/ice noise texture within a square region roughly `span`
         // wide, respecting whatever clip is already active on ctx. Shared by the small hazard
         // pockets that fill hex holes.
-        function drawHazardTexture(cx, cy, span) {
-            let hz = getActiveHazardTheme();
+        // PERF: hz is now passed in from drawHazardHoles, which already computed it once for
+        // the whole batch of hazard tiles this frame - previously this recomputed the same
+        // getActiveHazardTheme() result on every single tile.
+        function drawHazardTexture(cx, cy, span, hz) {
             ctx.save();
             ctx.strokeStyle = hz.edge; ctx.fillStyle = hz.edge;
             if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; }
@@ -3782,6 +3811,11 @@
                 camera.x - buf, camera.y - buf,
                 camera.x + canvas.width + buf, camera.y + canvas.height + buf
             );
+            // PERF: hz.edge/lineWidth are the same for every hazard tile this frame - set once
+            // here instead of inside a second per-tile save/restore below (was 2 save/restore
+            // pairs per tile; now 1). The fill+clip save/restore below still has to stay
+            // per-tile since ctx.clip() must not leak between tiles.
+            ctx.lineWidth = 4; ctx.strokeStyle = hz.edge;
             for (let ti = 0; ti < candidates.length; ti++) {
                 let tile = candidates[ti];
                 if (!isOnScreen(tile.x, tile.y, buf)) continue;
@@ -3795,13 +3829,10 @@
                 } else if (player.color === 'glitch') {
                     drawMatrixRain(tile.x, tile.y, HEX_SIZE);
                 } else {
-                    drawHazardTexture(tile.x, tile.y, HEX_SIZE);
+                    drawHazardTexture(tile.x, tile.y, HEX_SIZE, hz);
                 }
                 ctx.restore();
-                ctx.save();
-                ctx.lineWidth = 4; ctx.strokeStyle = hz.edge;
                 ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath(); ctx.stroke();
-                ctx.restore();
             }
         }
 

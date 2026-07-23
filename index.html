@@ -640,6 +640,11 @@
         // regular sky gradient so switching skins doesn't need to rebuild either one.
         let voidSkyGradientCache = null;
         let voidSkyGradientCacheH = -1;
+        // Galaxy skin: deep-space gradient (near-black through nebula purple/magenta) behind
+        // the starfield/nebula clouds/shooting stars, replacing the normal daytime blue -
+        // cached the same way as the void/regular sky gradients above.
+        let galaxySkyGradientCache = null;
+        let galaxySkyGradientCacheH = -1;
         let sunGradientCache = null;
 
         let gameState = 'title';
@@ -3052,7 +3057,13 @@
                 voidSkyGradientCache.addColorStop(0, '#050510'); voidSkyGradientCache.addColorStop(0.55, '#1a0e2e'); voidSkyGradientCache.addColorStop(1, '#3d1f57');
                 voidSkyGradientCacheH = canvas.height;
             }
-            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : skyGradientCache;
+            if (!galaxySkyGradientCache || galaxySkyGradientCacheH !== canvas.height) {
+                galaxySkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                galaxySkyGradientCache.addColorStop(0, '#05020f'); galaxySkyGradientCache.addColorStop(0.4, '#1b0c3d');
+                galaxySkyGradientCache.addColorStop(0.7, '#3a1361'); galaxySkyGradientCache.addColorStop(1, '#6a2f8f');
+                galaxySkyGradientCacheH = canvas.height;
+            }
+            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : skyGradientCache);
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
@@ -3069,18 +3080,24 @@
             ctx.restore();
 
             // Galaxy: a faint twinkling starfield drifts across the sky, fixed in world space
-            // like the sun glow above. Rainbow: a soft multi-band arch does the same.
-            if (player.color === 'galaxy') { drawGalaxyStars(); drawShootingStars(); }
+            // like the sun glow above, backed by soft drifting nebula clouds and a couple of
+            // distant ringed planets. Rainbow: a soft multi-band arch does the same.
+            if (player.color === 'galaxy') { drawNebulaClouds(); drawDistantPlanets(); drawGalaxyStars(); drawShootingStars(); }
             else if (player.color === 'rainbow') drawRainbowArcs();
             ctx.restore();
 
             const driftSpeed = 8;
             let drift = (Date.now() / 1000) * driftSpeed;
 
-            // Dim, slower-drifting back layer for parallax depth.
+            // Dim, slower-drifting back layer for parallax depth. Galaxy: large tumbling
+            // asteroids drift here instead of clouds.
             ctx.save();
-            ctx.fillStyle = 'rgba(255,255,255,0.45)';
-            drawCloudLayer(600, 340, drift * 0.4, 18, 16, 9.13);
+            if (player.color === 'galaxy') {
+                drawAsteroidLayer(900, 560, drift * 0.4, 32, 22, 9.13, '150,142,132', 0.5);
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,0.45)';
+                drawCloudLayer(600, 340, drift * 0.4, 18, 16, 9.13);
+            }
             ctx.restore();
 
             // Sparse distant birds, far enough apart that they read as ambient detail.
@@ -3090,10 +3107,15 @@
             drawBirdLayer(drift);
             ctx.restore();
 
-            // Main puffy cloud layer, closest and brightest.
+            // Main puffy cloud layer, closest and brightest. Galaxy: large tumbling asteroids
+            // drift here instead, bigger and brighter than the back layer for parallax depth.
             ctx.save();
-            ctx.fillStyle = 'rgba(255,255,255,0.85)';
-            drawCloudLayer(420, 260, drift, 30, 26, 0);
+            if (player.color === 'galaxy') {
+                drawAsteroidLayer(760, 520, drift, 46, 34, 0, '190,180,166', 0.85);
+            } else {
+                ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                drawCloudLayer(420, 260, drift, 30, 26, 0);
+            }
             ctx.restore();
         }
         // Shared by both cloud layers (drawSkyBackground). Cloud identity (seed) comes from a
@@ -3147,6 +3169,114 @@
             ctx.ellipse(cx - size * 0.65, cy + size * 0.18, size * 0.62, size * 0.4, 0, 0, Math.PI * 2);
             ctx.ellipse(cx + size * 0.65, cy + size * 0.12, size * 0.68, size * 0.42, 0, 0, Math.PI * 2);
             ctx.fill();
+        }
+
+        // Galaxy skin: large tumbling asteroids drift across the sky in place of the normal
+        // puffy clouds. Tiled the same stable-seed way as drawCloudLayer (identity comes from
+        // the integer tile index, only the final draw position depends on drift) so they glide
+        // smoothly rather than morphing, but each one also spins continuously at its own
+        // independent rate/phase derived from its seed, so a whole field of them never spins
+        // in lockstep.
+        function drawAsteroidLayer(spacingX, spacingY, drift, sizeBase, sizeVar, seedOffset, colorRGB, alpha) {
+            let iStart = Math.floor((camera.x - drift) / spacingX) - 1;
+            let iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
+            let jStart = Math.floor(camera.y / spacingY) - 1;
+            let jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + seedOffset) * 43758.5453);
+                    seed -= Math.floor(seed);
+                    let cx = i * spacingX + seed * 140 + drift;
+                    let cy = j * spacingY + ((seed * 71) % 1) * 120;
+                    drawAsteroidPuff(cx, cy, sizeBase + seed * sizeVar, seed, colorRGB, alpha);
+                }
+            }
+        }
+        // Draws one tumbling asteroid: a lumpy, irregular rock silhouette (fixed shape per
+        // seed) with a few shaded craters, continuously rotated at a seed-derived rate/phase.
+        function drawAsteroidPuff(cx, cy, size, seed, colorRGB, alpha) {
+            ctx.save();
+            ctx.translate(cx, cy);
+            let spinSpeed = 0.15 + seed * 0.35;
+            ctx.rotate((Date.now() / 1000) * spinSpeed + seed * 20);
+            ctx.fillStyle = `rgba(${colorRGB},${alpha})`;
+            const pts = 9;
+            ctx.beginPath();
+            for (let k = 0; k <= pts; k++) {
+                let a = (k / pts) * Math.PI * 2;
+                let wob = 0.7 + 0.3 * Math.sin(a * 3 + seed * 40) + 0.15 * Math.sin(a * 7 + seed * 13);
+                let rad = size * wob;
+                let px = Math.cos(a) * rad, py = Math.sin(a) * rad * 0.85;
+                if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = `rgba(40,36,32,${alpha * 0.55})`;
+            for (let c = 0; c < 3; c++) {
+                let ca = seed * 30 + c * 2.4;
+                let cr = size * (0.18 + ((seed * (c + 3)) % 1) * 0.12);
+                let ccx = Math.cos(ca) * size * 0.35, ccy = Math.sin(ca) * size * 0.3;
+                ctx.beginPath(); ctx.ellipse(ccx, ccy, cr, cr * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // Galaxy skin: soft, slow-drifting nebula clouds behind the starfield - tiled the same
+        // stable-seed way as the cloud layers so identity doesn't shift frame to frame, only
+        // the drift position and a gentle pulse do. Each puff is a large, very translucent
+        // radial gradient blob so overlapping puffs blend into wispy nebula color.
+        function drawNebulaClouds() {
+            const spacingX = 520, spacingY = 480;
+            let drift = (Date.now() / 1000) * 3;
+            let iStart = Math.floor((camera.x - drift) / spacingX) - 1, iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
+            let jStart = Math.floor(camera.y / spacingY) - 1, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
+            const palette = ['rgba(255,64,158,0.16)', 'rgba(100,120,255,0.16)', 'rgba(64,220,220,0.13)', 'rgba(180,80,255,0.16)'];
+            ctx.save();
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 17.13 + j * 55.71 + 8.6) * 33851.2); seed -= Math.floor(seed);
+                    if (seed > 0.55) continue; // keep nebula patches sparse
+                    let nx = i * spacingX + seed * 220 + drift, ny = j * spacingY + ((seed * 61) % 1) * 220;
+                    let size = 160 + seed * 180;
+                    let pulse = 0.85 + 0.15 * Math.sin(Date.now() / 2400 + seed * 30);
+                    let grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, size * pulse);
+                    let col = palette[Math.floor(seed * palette.length) % palette.length];
+                    grad.addColorStop(0, col); grad.addColorStop(1, 'rgba(0,0,0,0)');
+                    ctx.fillStyle = grad;
+                    ctx.beginPath(); ctx.arc(nx, ny, size * pulse, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            ctx.restore();
+        }
+
+        // Galaxy skin: a couple of distant ringed/cratered planets, fixed in world space like
+        // the sun glow, drifting past very slowly for a sense of scale behind the starfield.
+        function drawDistantPlanets() {
+            const spacingX = 2200, spacingY = 1900;
+            let drift = (Date.now() / 1000) * 1.2;
+            let iStart = Math.floor((camera.x - drift) / spacingX) - 1, iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
+            let jStart = Math.floor(camera.y / spacingY) - 1, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
+            ctx.save();
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 63.7 + j * 11.3 + 3.2) * 19483.7); seed -= Math.floor(seed);
+                    if (seed > 0.35) continue; // one planet per several tiles, at most
+                    let px = i * spacingX + seed * 500 + drift, py = j * spacingY + ((seed * 37) % 1) * 500;
+                    let pr = 26 + seed * 34;
+                    let ringed = seed > 0.18;
+                    let bodyColor = seed > 0.27 ? '#e08a4b' : (seed > 0.09 ? '#7a5cff' : '#4fb8b0');
+                    if (ringed) {
+                        ctx.save(); ctx.translate(px, py); ctx.rotate(-0.35);
+                        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = pr * 0.16;
+                        ctx.beginPath(); ctx.ellipse(0, 0, pr * 1.7, pr * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
+                        ctx.restore();
+                    }
+                    let bodyGrad = ctx.createRadialGradient(px - pr * 0.3, py - pr * 0.3, pr * 0.1, px, py, pr);
+                    bodyGrad.addColorStop(0, '#fff'); bodyGrad.addColorStop(0.15, bodyColor); bodyGrad.addColorStop(1, 'rgba(10,5,20,0.9)');
+                    ctx.fillStyle = bodyGrad;
+                    ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
+                }
+            }
+            ctx.restore();
         }
 
         // Galaxy skin: sparse twinkling stars tiled the same way as the cloud/bird layers above
@@ -3229,6 +3359,56 @@
             ctx.restore();
         }
 
+        // Galaxy: hazard pockets are miniature black holes - a near-black core, a rotating
+        // multi-band accretion disk (orange/violet), a scatter of particles spiraling inward
+        // on a repeating cycle, and a bright thin event-horizon ring. Purely a function of
+        // time/position like drawMatrixRain, so it never needs any persistent state and reads
+        // consistently within whatever clip is already active (see drawHazardHoles).
+        function drawBlackHoleSwirl(cx, cy, span) {
+            ctx.save();
+            let t = Date.now() / 1000;
+            let coreR = span * 0.34;
+
+            // Rotating accretion disk bands, drawn as thick partial-ellipse strokes so they
+            // read as matter smeared around the core rather than solid rings.
+            for (let i = 0; i < 3; i++) {
+                let ang = t * (1.1 + i * 0.35) + i * 2.4;
+                let bandR = span * (0.5 + i * 0.16);
+                let bandGrad = ctx.createLinearGradient(cx - bandR, cy, cx + bandR, cy);
+                let hue = i % 2 === 0 ? 'rgba(255,138,61,' : 'rgba(157,78,221,';
+                bandGrad.addColorStop(0, hue + '0)'); bandGrad.addColorStop(0.5, hue + '0.6)'); bandGrad.addColorStop(1, hue + '0)');
+                ctx.strokeStyle = bandGrad; ctx.lineWidth = 3 - i * 0.5;
+                ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
+                ctx.beginPath(); ctx.ellipse(0, 0, bandR, bandR * 0.32, 0, 0, Math.PI * 1.4); ctx.stroke();
+                ctx.restore();
+            }
+
+            // Particles spiraling inward on a repeating cycle (golden-ratio spacing keeps
+            // them from clumping), fading in from the rim and vanishing at the core.
+            ctx.fillStyle = '#fff';
+            for (let p = 0; p < 9; p++) {
+                let seed = (p * 0.618034) % 1;
+                let cycle = (t * 0.5 + seed) % 1;
+                let rad = span * (1 - cycle) * 0.95;
+                let ang2 = seed * Math.PI * 2 + cycle * Math.PI * 7;
+                let px = cx + Math.cos(ang2) * rad, py = cy + Math.sin(ang2) * rad * 0.55;
+                ctx.globalAlpha = Math.min(1, cycle * 2) * (1 - cycle * 0.3);
+                ctx.beginPath(); ctx.arc(px, py, 1.3, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // Near-black core with a soft inner falloff, then a crisp bright event-horizon
+            // ring right at its edge.
+            let coreGrad = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
+            coreGrad.addColorStop(0, '#000000'); coreGrad.addColorStop(0.75, '#050208'); coreGrad.addColorStop(1, 'rgba(5,2,8,0)');
+            ctx.fillStyle = coreGrad;
+            ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, Math.PI * 2); ctx.stroke();
+
+            ctx.restore();
+        }
+
         // Glitch: every tree renders as this "broken image" placeholder instead of its usual
         // art - a bright pink box with a torn corner and the classic broken-picture glyph.
         function drawMissingImageBox(x, y, radius) {
@@ -3278,6 +3458,81 @@
             ctx.restore();
         }
 
+        // Galaxy: every rock renders as a cratered chunk of moon rock instead of its usual
+        // theme art - pale lunar grey with a handful of shaded craters, a soft rim highlight
+        // on each, and an occasional glinting mineral fleck.
+        function drawMoonRock(x, y, radius) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+            let baseGrad = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
+            baseGrad.addColorStop(0, '#e2ded6'); baseGrad.addColorStop(0.5, '#aca69c'); baseGrad.addColorStop(1, '#6d675e');
+            ctx.fillStyle = baseGrad;
+            ctx.beginPath(); ctx.arc(x, y, radius, Math.PI, 0, false);
+            ctx.lineTo(x + radius * 0.9, y + radius * 0.18);
+            ctx.quadraticCurveTo(x, y + radius * 0.35, x - radius * 0.9, y + radius * 0.18);
+            ctx.closePath(); ctx.fill();
+            // A few fixed-relative craters (stable per-rock since they're expressed purely as
+            // fractions of x/y/radius, not random each frame).
+            const craters = [[-0.32, -0.28, 0.22], [0.26, -0.12, 0.15], [0.02, 0.12, 0.13], [-0.08, -0.5, 0.09]];
+            ctx.fillStyle = 'rgba(68,64,58,0.55)';
+            for (let i = 0; i < craters.length; i++) {
+                let cr = craters[i];
+                ctx.beginPath(); ctx.ellipse(x + cr[0] * radius, y + cr[1] * radius, radius * cr[2], radius * cr[2] * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
+            for (let i = 0; i < craters.length; i++) {
+                let cr = craters[i];
+                ctx.beginPath(); ctx.ellipse(x + cr[0] * radius, y + cr[1] * radius - radius * cr[2] * 0.15, radius * cr[2], radius * cr[2] * 0.72, 0, Math.PI, Math.PI * 2); ctx.stroke();
+            }
+            // Rare glinting mineral fleck, timed off position so it isn't perfectly synced
+            // across every rock on screen.
+            if (Math.sin(Date.now() / 500 + x * 0.05) > 0.9) {
+                ctx.fillStyle = 'rgba(190,225,255,0.9)';
+                ctx.beginPath(); ctx.arc(x + radius * 0.3, y - radius * 0.35, 1.6, 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(x - radius * 0.3, y - radius * 0.75); ctx.lineTo(x + radius * 0.15, y - radius * 0.55); ctx.stroke();
+            ctx.restore();
+        }
+
+        // Galaxy: every tree renders as a bioluminescent alien plant instead of its usual
+        // foliage - a dark stalk rising from a mound of alien soil, a cluster of curling
+        // tendrils tipped with pulsing glow-pods, and a larger glowing bud at the top. Sways
+        // gently the same way trees do, keyed off the tree's own seed so neighboring plants
+        // don't pulse in lockstep.
+        function drawAlienPlant(x, y, radius, seed) {
+            ctx.save();
+            let t = Date.now();
+            let sway = Math.sin(t / 1400 + seed) * 0.08;
+            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#241537'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.25, radius * 0.55, radius * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#3d2461'; ctx.lineWidth = radius * 0.22; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(x, y + radius * 0.15); ctx.quadraticCurveTo(x + sway * radius * 2, y - radius * 0.6, x + sway * radius * 3, y - radius * 1.3); ctx.stroke();
+            const tendrilCount = 3;
+            for (let i = 0; i < tendrilCount; i++) {
+                let a = (i / tendrilCount) * Math.PI * 2 + seed * 3;
+                let tx = x + Math.cos(a) * radius * 0.5, ty = y + radius * 0.05 + Math.sin(a) * radius * 0.15;
+                let tipX = tx + Math.cos(a + sway * 2) * radius * 0.9, tipY = ty - radius * 0.9 + Math.sin(a) * radius * 0.2;
+                ctx.strokeStyle = '#4a2f73'; ctx.lineWidth = radius * 0.1;
+                ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(a) * radius * 0.4, ty - radius * 0.5, tipX, tipY); ctx.stroke();
+                let glow = 0.6 + 0.4 * Math.sin(t / 300 + i * 2 + seed * 5);
+                let pulseR = radius * 0.16 * (0.85 + 0.15 * glow);
+                let glowColor = i % 2 === 0 ? '100,255,220' : '255,110,220';
+                let grad = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, pulseR * 2.2);
+                grad.addColorStop(0, `rgba(${glowColor},${0.9 * glow})`); grad.addColorStop(1, `rgba(${glowColor},0)`);
+                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(tipX, tipY, pulseR * 2.2, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = i % 2 === 0 ? '#7dffe0' : '#ff8ce0';
+                ctx.beginPath(); ctx.arc(tipX, tipY, pulseR * 0.55, 0, Math.PI * 2); ctx.fill();
+            }
+            let mx = x + Math.sin(sway * 3) * radius * 0.3, my = y - radius * 1.15;
+            let mainGlow = 0.7 + 0.3 * Math.sin(t / 260 + seed * 4);
+            let mgrad = ctx.createRadialGradient(mx, my, 0, mx, my, radius * 0.6 * mainGlow);
+            mgrad.addColorStop(0, `rgba(190,140,255,${0.85 * mainGlow})`); mgrad.addColorStop(1, 'rgba(190,140,255,0)');
+            ctx.fillStyle = mgrad; ctx.beginPath(); ctx.arc(mx, my, radius * 0.6 * mainGlow, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#c9a3ff'; ctx.beginPath(); ctx.arc(mx, my, radius * 0.28, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+        }
+
         // Rainbow skin: a soft, translucent multi-band arch fixed in world space (same "drifts
         // past as the camera moves" convention as the sun glow), lighting up the sky while
         // equipped.
@@ -3324,9 +3579,10 @@
         // untouched - purely a visual override consumed by drawHazardHoles/drawHazardTexture.
         function getActiveHazardTheme() {
             if (player.color === 'void') return { type: currentTheme.hazard.type, color: '#0d0621', edge: '#4b0082' };
-            // Galaxy: hazard pockets become miniature starfields instead of the theme's usual
-            // water/lava/ice - drawHazardHoles sprinkles twinkling stars on top of this base.
-            if (player.color === 'galaxy') return { type: currentTheme.hazard.type, color: '#0a0e2e', edge: '#7597de' };
+            // Galaxy: hazard pockets become miniature black holes instead of the theme's usual
+            // water/lava/ice - drawHazardHoles paints a swirling accretion disk on top of this
+            // near-black base, with the edge doubling as the glowing accretion-disk color.
+            if (player.color === 'galaxy') return { type: currentTheme.hazard.type, color: '#020103', edge: '#ff8a3d' };
             // Glitch: hazard pockets turn solid black with a green matrix-digit edge -
             // drawHazardHoles fills them with scrolling digit rain instead of the usual texture.
             if (player.color === 'glitch') return { type: currentTheme.hazard.type, color: '#000000', edge: '#00ff41' };
@@ -3351,17 +3607,7 @@
                 ctx.fillStyle = hz.color; ctx.fill();
                 ctx.clip();
                 if (player.color === 'galaxy') {
-                    // Little starfield swirl instead of the usual water/lava/ice noise - the
-                    // hazard pocket becomes a tiny patch of open space.
-                    for (let si = 0; si < 6; si++) {
-                        let sa = (si / 6) * Math.PI * 2 + Date.now()/2000;
-                        let sr = HEX_SIZE * (0.2 + (si % 3) * 0.25);
-                        let sxp = tile.x + Math.cos(sa) * sr, syp = tile.y + Math.sin(sa) * sr;
-                        ctx.globalAlpha = 0.4 + 0.4 * Math.sin(Date.now()/300 + si*10);
-                        ctx.fillStyle = '#fff';
-                        ctx.beginPath(); ctx.arc(sxp, syp, 1.4, 0, Math.PI*2); ctx.fill();
-                    }
-                    ctx.globalAlpha = 1;
+                    drawBlackHoleSwirl(tile.x, tile.y, HEX_SIZE);
                 } else if (player.color === 'glitch') {
                     drawMatrixRain(tile.x, tile.y, HEX_SIZE);
                 } else {
@@ -3652,6 +3898,35 @@
             // Glitch: while equipped, the entire visible floor renders solid black - overrides
             // the theme ground color set just above, same clip already active.
             if (player.color === 'glitch') { ctx.fillStyle = '#000'; ctx.fill(); }
+            // Galaxy: while equipped, the floor becomes cratered lunar regolith - a pale grey
+            // base with a scatter of shaded craters (each with a soft rim highlight) and a
+            // fine dust speckle. Craters/speckle come from a stable per-tile hash (same trick
+            // as drawGalaxyStars) so the terrain reads as fixed ground, not noise that
+            // reshuffles every frame.
+            if (player.color === 'galaxy') {
+                ctx.fillStyle = '#c7c2ba'; ctx.fill();
+                ctx.save();
+                for (let li = 0; li < visLand.length; li++) {
+                    let lt = visLand[li];
+                    for (let ci = 0; ci < 2; ci++) {
+                        let seed = Math.abs(Math.sin(lt.x * 12.9898 + lt.y * 78.233 + ci * 37.7) * 43758.5453); seed -= Math.floor(seed);
+                        if (seed > 0.55) continue; // keep craters sparse, not every tile
+                        let ccx = lt.x + (seed - 0.5) * HEX_SIZE * 1.3;
+                        let ccy = lt.y + (((seed * 53) % 1) - 0.5) * HEX_SIZE * 1.3;
+                        let cr = HEX_SIZE * (0.12 + seed * 0.16);
+                        ctx.fillStyle = 'rgba(90,86,80,0.35)';
+                        ctx.beginPath(); ctx.ellipse(ccx, ccy, cr, cr * 0.75, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.ellipse(ccx, ccy - cr * 0.15, cr, cr * 0.75, 0, Math.PI, Math.PI * 2); ctx.stroke();
+                    }
+                    let dseed = Math.abs(Math.sin(lt.x * 3.7 + lt.y * 9.1) * 5871.3); dseed -= Math.floor(dseed);
+                    if (dseed < 0.5) {
+                        ctx.fillStyle = 'rgba(120,115,108,0.4)';
+                        ctx.beginPath(); ctx.arc(lt.x + (dseed - 0.5) * HEX_SIZE, lt.y + (((dseed * 17) % 1) - 0.5) * HEX_SIZE, 1.4, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+                ctx.restore();
+            }
             // Glacier ("ice") skin: hexes the player has slid over stay snow-frosted, still
             // clipped to the land shape above so it never bleeds past the honeycomb edge.
             if (iceFrostedTiles.size) {
@@ -3830,6 +4105,9 @@
                     // instead of its normal art, all the time (not just ones the player's
                     // bumped) - the sky/hazard/floor takeover happens elsewhere in draw().
                     if (player.color === 'glitch') { drawMissingImageBox(t.x, t.y, t.radius); return; }
+                    // Galaxy: every tree renders as a glowing alien plant instead of its usual
+                    // foliage, all the time (not just ones the player's bumped).
+                    if (player.color === 'galaxy') { drawAlienPlant(t.x, t.y, t.radius, t.seed || 0); return; }
                     let variant = t.variant || 0; let sway = (currentTheme.name === 'Desert' ? 0 : Math.sin(Date.now()/1400 + (t.seed||0)) * 0.05) + breezeX;
                     if (t.type === 'tree' && currentTheme.name !== 'Desert' && currentTheme.name !== 'Snow') {
                         if (Math.abs(player.vx) + Math.abs(player.vy) > 12 && Math.random() < 0.06 && dist(player.worldX, player.worldY, t.x, t.y) < 600) {
@@ -3909,6 +4187,9 @@
                     // Glitch: every rock renders as a garish pop-up ad box instead of its
                     // normal art, all the time.
                     if (player.color === 'glitch') { drawPopupAdBox(r.x, r.y, r.radius); return; }
+                    // Galaxy: every rock renders as a cratered moon rock instead of its usual
+                    // theme art, all the time.
+                    if (player.color === 'galaxy') { drawMoonRock(r.x, r.y, r.radius); return; }
                     let variant = r.variant || 0;
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(r.x, r.y + r.radius*0.18, r.radius*1.05, r.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (r.golden) {

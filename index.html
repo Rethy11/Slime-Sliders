@@ -3470,6 +3470,114 @@
             ctx.restore();
         }
 
+        // Glitch: every coin/gem renders as a spinning rainbow "wheel of death" (the classic
+        // OS beachball/busy-spinner) instead of its usual loot-sprite art, all the time.
+        function drawRainbowWheelOfDeath(x, y, radius) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + radius*0.6, radius*0.8, radius*0.32, 0, 0, Math.PI*2); ctx.fill();
+            let segs = 8;
+            let spin = (Date.now() / 220) % (Math.PI * 2);
+            ctx.translate(x, y); ctx.rotate(spin);
+            for (let i = 0; i < segs; i++) {
+                let a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
+                ctx.fillStyle = `hsl(${Math.round((i / segs) * 360)}, 90%, 55%)`;
+                ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, radius, a0, a1); ctx.closePath(); ctx.fill();
+            }
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI*2); ctx.stroke();
+            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, radius * 0.2, 0, Math.PI*2); ctx.fill();
+            ctx.restore();
+        }
+
+        // Glitch: every fence renders as a blazing brick "firewall" instead of the usual
+        // post-and-rail art - hazard stripes along the top, flame licks, and a warning label
+        // on segments long enough to fit one (playing on both senses of "firewall").
+        function drawFirewallSegment(f) {
+            let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
+            let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
+            ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
+            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-len/2, 8, len, 5);
+            // Brick wall body
+            let brickGrad = ctx.createLinearGradient(0, -16, 0, 10);
+            brickGrad.addColorStop(0, '#7a2a12'); brickGrad.addColorStop(1, '#3d1408');
+            ctx.fillStyle = brickGrad; ctx.fillRect(-len/2, -16, len, 26);
+            // Hazard stripes along the top edge
+            ctx.save(); ctx.beginPath(); ctx.rect(-len/2, -16, len, 6); ctx.clip();
+            for (let sx = -len/2 - 10; sx < len/2 + 10; sx += 12) {
+                ctx.fillStyle = (Math.floor((sx + len/2) / 12) % 2 === 0) ? '#ffcc00' : '#1a1a1a';
+                ctx.beginPath(); ctx.moveTo(sx, -16); ctx.lineTo(sx + 6, -16); ctx.lineTo(sx - 4, 10); ctx.lineTo(sx - 10, 10); ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+            // Flame licks along the top edge
+            let t = Date.now() / 150;
+            for (let fx = -len/2 + 6; fx < len/2 - 4; fx += 10) {
+                let flick = Math.sin(t + fx) * 3;
+                let fh = 10 + Math.abs(Math.sin(t * 1.3 + fx * 0.7)) * 8;
+                let flameGrad = ctx.createLinearGradient(fx, -16, fx, -16 - fh);
+                flameGrad.addColorStop(0, '#ff7a00'); flameGrad.addColorStop(0.6, '#ffcf33'); flameGrad.addColorStop(1, 'rgba(255,240,150,0)');
+                ctx.fillStyle = flameGrad;
+                ctx.beginPath(); ctx.moveTo(fx - 3, -16); ctx.quadraticCurveTo(fx + flick, -16 - fh*0.6, fx, -16 - fh); ctx.quadraticCurveTo(fx - flick, -16 - fh*0.6, fx + 3, -16); ctx.closePath(); ctx.fill();
+            }
+            // Mortar lines and outline
+            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1;
+            for (let by = -12; by < 10; by += 7) { ctx.beginPath(); ctx.moveTo(-len/2, by); ctx.lineTo(len/2, by); ctx.stroke(); }
+            ctx.strokeStyle = '#ff4500'; ctx.lineWidth = 2; ctx.strokeRect(-len/2, -16, len, 26);
+            if (len > 46) { ctx.fillStyle = '#ffcf33'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FIREWALL', 0, -2); }
+            ctx.restore();
+        }
+
+        // Glitch: every grass/flower/leaf speck (normally a 3-8px dot/blade/curl) renders at
+        // roughly 4x that size as a small annoying pop-up glyph instead - a mini ad window
+        // with titlebar dots and fake body text, a mini gradient-filled warning-triangle
+        // alert, or a mini chat/notification bubble with an unread badge, cycled by speck
+        // type (d.type 0/1/2, same as the normal-skin foliage variants).
+        function drawGlitchPopupDecor(d, breezeX) {
+            if (d.type === 0) {
+                let w = 32, h = 26;
+                ctx.save(); ctx.translate(d.x, d.y - 6);
+                ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-w/2 + 2, -h/2 + 3, w, h);
+                ctx.fillStyle = '#f4f6fb'; ctx.fillRect(-w/2, -h/2, w, h);
+                ctx.fillStyle = d.color; ctx.fillRect(-w/2, -h/2, w, h * 0.3);
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-w/2 + 5 + i * 6, -h/2 + h*0.15, 1.5, 0, Math.PI*2); ctx.fill(); }
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.fillRect(-w/2 + 3, -h*0.05, w * 0.6, 3);
+                ctx.fillRect(-w/2 + 3, h*0.12, w * 0.4, 3);
+                ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w/2 - 5, -h/2 + 5, 4, 0, Math.PI*2); ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
+                ctx.beginPath(); ctx.moveTo(w/2 - 7, -h/2 + 3); ctx.lineTo(w/2 - 3, -h/2 + 7);
+                ctx.moveTo(w/2 - 3, -h/2 + 3); ctx.lineTo(w/2 - 7, -h/2 + 7); ctx.stroke();
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(-w/2, -h/2, w, h);
+                ctx.restore();
+            } else if (d.type === 1) {
+                let size = 30, bx = breezeX * 6;
+                ctx.save(); ctx.translate(d.x + bx, d.y);
+                ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                ctx.beginPath(); ctx.moveTo(2, -size + 3); ctx.lineTo(-size*0.42 + 2, 3); ctx.lineTo(size*0.42 + 2, 3); ctx.closePath(); ctx.fill();
+                let grad = ctx.createLinearGradient(0, -size, 0, 0);
+                grad.addColorStop(0, '#ffe066'); grad.addColorStop(1, d.color);
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(-size*0.42, 0); ctx.lineTo(size*0.42, 0); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = '#3d2b00'; ctx.lineWidth = 2; ctx.stroke();
+                ctx.fillStyle = '#1a1200'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('!', 0, -size*0.36);
+                ctx.restore();
+            } else {
+                let w = 26, h = 16, bx = breezeX * 10;
+                ctx.save(); ctx.translate(d.x + bx, d.y - 10);
+                ctx.fillStyle = 'rgba(0,0,0,0.22)';
+                ctx.beginPath(); ctx.roundRect(-w/2 + 1, -h/2 + 2, w, h, 5); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 5); ctx.fill();
+                ctx.strokeStyle = d.color; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 5); ctx.stroke();
+                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-4, h/2 - 1); ctx.lineTo(-8, h/2 + 5); ctx.lineTo(0, h/2 - 1); ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = d.color; ctx.beginPath(); ctx.moveTo(-4, h/2 - 1); ctx.lineTo(-8, h/2 + 5); ctx.stroke();
+                ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.6;
+                ctx.beginPath(); ctx.moveTo(-w/2 + 4, -1); ctx.lineTo(w/2 - 4, -1); ctx.stroke();
+                ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w/2 - 2, -h/2 - 1, 4, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('1', w/2 - 2, -h/2 - 1);
+                ctx.restore();
+            }
+        }
+
         // Corrupted Data (secret skin): strips enemies, trees, rocks, and both enemy and
         // player projectiles down to their raw collision circles instead of their usual art -
         // a faint translucent fill, a stroked outline, a small center crosshair, and a short
@@ -4111,10 +4219,18 @@
             for (let di = 0; di < decorCandidates.length; di++) {
                 let d = decorCandidates[di];
                 if(isOnScreen(d.x + tiltX, d.y + tiltY, cullBuffer)) {
-                    ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
-                    if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
-                    else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
-                    else { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX*5, d.y - 6, d.x + breezeX*10, d.y - 12); ctx.stroke(); }
+                    // Glitch: every grass/flower/leaf speck renders as an annoying pop-up
+                    // glyph instead of its usual foliage art - a mini ad window, a mini alert
+                    // badge, or a mini notification bubble, cycled by speck type (see
+                    // drawGlitchPopupDecor).
+                    if (player.color === 'glitch') {
+                        drawGlitchPopupDecor(d, breezeX);
+                    } else {
+                        ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
+                        if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
+                        else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
+                        else { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX*5, d.y - 6, d.x + breezeX*10, d.y - 12); ctx.stroke(); }
+                    }
                 }
             }
             ctx.restore(); 
@@ -4164,13 +4280,32 @@
                 let isLocked = goal.collected < goal.required; let pulse = isLocked ? 0 : Math.sin(Date.now() / 150) * 8;
                 ctx.save(); ctx.translate(goal.x, goal.y);
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.beginPath(); ctx.ellipse(0, 15, goal.radius, goal.radius * 0.5, 0, 0, Math.PI*2); ctx.fill();
-                ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = isLocked ? 'rgba(136, 136, 136, 0.2)' : 'rgba(255, 207, 51, 0.3)'; ctx.fill();
-                ctx.beginPath(); ctx.arc(0, 0, goal.radius, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#555' : '#ffcf33'; ctx.fill();
-                ctx.lineWidth = 4; ctx.strokeStyle = isLocked ? '#888' : '#fff'; ctx.stroke();
-                ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.7, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#444' : '#f1c40f'; ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                if (isLocked) { drawPixelIcon('lock', ctx, 0, -8, 26); ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 15); } 
-                else { ctx.font = 'bold 20px sans-serif'; ctx.fillText('GOAL', 0, 0); }
+                if (player.color === 'glitch') {
+                    // Glitch: the goal renders as a ring surrounding a miniature Blue Screen
+                    // of Death instead of the usual yellow flag, all the time.
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = isLocked ? 'rgba(136, 136, 136, 0.2)' : 'rgba(0, 120, 215, 0.35)'; ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#333' : '#0078d7'; ctx.fill();
+                    ctx.lineWidth = 4; ctx.strokeStyle = isLocked ? '#888' : '#fff'; ctx.stroke();
+                    ctx.save(); ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.78, 0, Math.PI*2); ctx.clip();
+                    ctx.fillStyle = isLocked ? '#222' : '#0078d7'; ctx.fillRect(-goal.radius, -goal.radius, goal.radius*2, goal.radius*2);
+                    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    if (isLocked) { ctx.font = 'bold 12px monospace'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 0); }
+                    else {
+                        ctx.font = 'bold 22px sans-serif'; ctx.fillText(':(', 0, -goal.radius*0.28);
+                        ctx.font = '7px monospace';
+                        ctx.fillText('A fatal exception has', 0, goal.radius*0.05);
+                        ctx.fillText('occurred at SLIME.EXE', 0, goal.radius*0.22);
+                    }
+                    ctx.restore();
+                } else {
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = isLocked ? 'rgba(136, 136, 136, 0.2)' : 'rgba(255, 207, 51, 0.3)'; ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#555' : '#ffcf33'; ctx.fill();
+                    ctx.lineWidth = 4; ctx.strokeStyle = isLocked ? '#888' : '#fff'; ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.7, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#444' : '#f1c40f'; ctx.fill();
+                    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    if (isLocked) { drawPixelIcon('lock', ctx, 0, -8, 26); ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 15); } 
+                    else { ctx.font = 'bold 20px sans-serif'; ctx.fillText('GOAL', 0, 0); }
+                }
                 ctx.restore();
             }
 
@@ -4301,6 +4436,9 @@
                     // Corrupted Data: fences are solid collision same as trees/rocks, so they
                     // render as their raw hitbox line instead of the usual post-and-rail art.
                     if (player.color === 'corrupted') { drawHitboxLine(f.x1, f.y1, f.x2, f.y2, fenceThickness, '#39ff14', 'FENCE'); return; }
+                    // Glitch: every fence renders as a blazing "firewall" barrier instead of
+                    // the usual post-and-rail art, all the time.
+                    if (player.color === 'glitch') { drawFirewallSegment(f); return; }
                     let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
                     let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
                     ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
@@ -4332,6 +4470,7 @@
                     // Corrupted Data: coins/gems render as their raw pickup-radius hitbox
                     // (gold - the one category here that's neither hazard nor obstacle).
                     if (player.color === 'corrupted') { drawHitboxCircle(c.x, c.y, c.radius, '#ffd700', item.type.toUpperCase().slice(0, 6)); }
+                    else if (player.color === 'glitch') { drawRainbowWheelOfDeath(c.x, c.y, c.radius); }
                     else if (window.LootSprites && window.LootSprites[item.type]) window.LootSprites[item.type](ctx, c);
                 }
                 else if (item.type === 'powerup') {
@@ -4532,9 +4671,21 @@
                     let radius = Math.min(canvas.width / 2, canvas.height / 2) - 40;
                     ctx.save();
                     ctx.translate(canvas.width / 2 + Math.cos(angle) * radius, canvas.height / 2 + Math.sin(angle) * radius); ctx.rotate(angle);
-                    ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#ffcf33'; ctx.strokeStyle = goal.collected < goal.required ? '#666666' : '#d4a017';
-                    ctx.lineWidth = 3;
-                    ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 15); ctx.lineTo(-5, 0); ctx.lineTo(-15, -15); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
+                    if (player.color === 'glitch') {
+                        // Glitch: the off-screen goal pointer renders as a classic OS mouse
+                        // cursor, tip aimed toward the goal, instead of the usual arrowhead.
+                        ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#fff'; ctx.strokeStyle = '#000';
+                        ctx.lineWidth = 2; ctx.lineJoin = 'round';
+                        ctx.beginPath();
+                        ctx.moveTo(19, 0); ctx.lineTo(-9, -9); ctx.lineTo(-4, -3); ctx.lineTo(-15, -3);
+                        ctx.lineTo(-15, 3); ctx.lineTo(-4, 3); ctx.lineTo(-9, 9); ctx.closePath();
+                        ctx.fill(); ctx.stroke();
+                    } else {
+                        ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#ffcf33'; ctx.strokeStyle = goal.collected < goal.required ? '#666666' : '#d4a017';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 15); ctx.lineTo(-5, 0); ctx.lineTo(-15, -15); ctx.closePath(); ctx.fill(); ctx.stroke();
+                    }
+                    ctx.restore();
                 }
             }
             

@@ -3458,6 +3458,30 @@
             ctx.restore();
         }
 
+        // Corrupted Data (secret skin): strips enemies, trees, rocks, and both enemy and
+        // player projectiles down to their raw collision circles instead of their usual art -
+        // a faint translucent fill, a stroked outline, a small center crosshair, and a short
+        // type label, the way a debug hitbox overlay would render them. Color is the only
+        // thing that distinguishes what kind of hitbox it is: red for anything that can hurt
+        // the player (enemies, enemy projectiles), green for static obstacle collision
+        // (trees/rocks), cyan for the player's own projectiles.
+        function drawHitboxCircle(x, y, radius, color, label) {
+            ctx.save();
+            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
+            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x - radius * 0.35, y); ctx.lineTo(x + radius * 0.35, y);
+            ctx.moveTo(x, y - radius * 0.35); ctx.lineTo(x, y + radius * 0.35);
+            ctx.stroke();
+            if (label) {
+                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
+                ctx.fillText(label, x, y - radius - 8);
+            }
+            ctx.restore();
+        }
+
         // Galaxy: every rock renders as a cratered chunk of moon rock instead of its usual
         // theme art - pale lunar grey with a handful of shaded craters, a soft rim highlight
         // on each, and an occasional glinting mineral fleck.
@@ -4105,6 +4129,9 @@
                     // instead of its normal art, all the time (not just ones the player's
                     // bumped) - the sky/hazard/floor takeover happens elsewhere in draw().
                     if (player.color === 'glitch') { drawMissingImageBox(t.x, t.y, t.radius); return; }
+                    // Corrupted Data: every tree renders as its raw collision circle instead
+                    // of any art at all.
+                    if (player.color === 'corrupted') { drawHitboxCircle(t.x, t.y, t.radius, '#39ff14', 'TREE'); return; }
                     // Galaxy: every tree renders as a glowing alien plant instead of its usual
                     // foliage, all the time (not just ones the player's bumped).
                     if (player.color === 'galaxy') { drawAlienPlant(t.x, t.y, t.radius, t.seed || 0); return; }
@@ -4187,6 +4214,9 @@
                     // Glitch: every rock renders as a garish pop-up ad box instead of its
                     // normal art, all the time.
                     if (player.color === 'glitch') { drawPopupAdBox(r.x, r.y, r.radius); return; }
+                    // Corrupted Data: every rock renders as its raw collision circle instead
+                    // of any art at all.
+                    if (player.color === 'corrupted') { drawHitboxCircle(r.x, r.y, r.radius, '#39ff14', 'ROCK'); return; }
                     // Galaxy: every rock renders as a cratered moon rock instead of its usual
                     // theme art, all the time.
                     if (player.color === 'galaxy') { drawMoonRock(r.x, r.y, r.radius); return; }
@@ -4299,11 +4329,19 @@
                 }
                 else if (item.type === 'projectile') {
                     let p = item.obj;
-                    ctx.fillStyle = p.deflected ? '#ff477e' : '#ff0055'; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
-                    ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x-2, p.y-2, p.radius*0.4, 0, Math.PI*2); ctx.fill();
+                    // Corrupted Data: enemy projectiles render as their raw collision circle.
+                    if (player.color === 'corrupted') { drawHitboxCircle(p.x, p.y, p.radius, '#ff003c', 'PRJ'); }
+                    else {
+                        ctx.fillStyle = p.deflected ? '#ff477e' : '#ff0055'; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x-2, p.y-2, p.radius*0.4, 0, Math.PI*2); ctx.fill();
+                    }
                 }
                 else if (item.type === 'icicle') {
                     let ic = item.obj;
+                    // Corrupted Data: the player's own projectiles (icicles) render as their
+                    // raw collision circle too, distinguished by color from hostile hitboxes.
+                    if (player.color === 'corrupted') { drawHitboxCircle(ic.x, ic.y, ic.radius, '#00e5ff', 'PPRJ'); }
+                    else {
                     ctx.save(); ctx.translate(ic.x, ic.y); ctx.rotate(ic.angle);
                     // PERF: this gradient is drawn entirely in local (post-translate/rotate)
                     // space with fixed coordinates (-14,0)-(10,0) and fixed color stops - it is
@@ -4318,6 +4356,7 @@
                     ctx.fillStyle = icicleGradientCache;
                     ctx.beginPath(); ctx.moveTo(-14, -3); ctx.lineTo(8, -1.5); ctx.lineTo(12, 0); ctx.lineTo(8, 1.5); ctx.lineTo(-14, 3); ctx.closePath(); ctx.fill();
                     ctx.strokeStyle = '#0a2e44'; ctx.lineWidth = 0.6; ctx.stroke(); ctx.restore();
+                    }
                 }
                 else if (item.type === 'flame') {
                     let f = item.obj; let alpha = Math.max(0, f.life / f.maxLife);
@@ -4352,7 +4391,10 @@
                         e.y = e.prevY + (realEY - e.prevY) * renderAlpha;
                     }
                     let sprite = window.EnemySprites && window.EnemySprites[e.type];
-                    if (sprite) sprite(ctx, e, player);
+                    // Corrupted Data: skip the enemy's usual sprite art entirely and draw its
+                    // raw collision circle instead, labeled with its type.
+                    if (player.color === 'corrupted') { drawHitboxCircle(e.x, e.y, e.radius, '#ff003c', (e.type || 'ENEMY').toUpperCase().slice(0, 6)); }
+                    else if (sprite) sprite(ctx, e, player);
                     e.x = realEX; e.y = realEY;
                 }
                 else if (item.type === 'companion') {

@@ -76,7 +76,8 @@
         body.onebit-page-filter #secret-unlock-toast,
         body.onebit-page-filter .corner-icon,
         body.onebit-page-filter .inv-item,
-        body.onebit-page-filter .shop-tab {
+        body.onebit-page-filter .shop-tab,
+        body.onebit-page-filter #fishing-dialogue {
             box-shadow: 0 0 0 2px #fff, 0 0 0 5px #000 !important;
         }
         body.onebit-page-filter #title-screen *,
@@ -90,6 +91,8 @@
         body.onebit-page-filter #secret-unlock-toast,
         body.onebit-page-filter #secret-unlock-toast *,
         body.onebit-page-filter #time-countdown,
+        body.onebit-page-filter #fishing-dialogue,
+        body.onebit-page-filter #fishing-dialogue *,
         body.onebit-page-filter button {
             color: #ffffff !important;
             text-shadow: 1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000, 0 0 4px #000 !important;
@@ -187,6 +190,14 @@
         .item-badge.rarity-legendary { border-color: #ffcf33; box-shadow: 0 0 6px rgba(255,207,51,0.6); }
         .item-count { position: absolute; bottom: -5px; right: -5px; background: #ff477e; color: #fff; font-size: 0.5rem; padding: 1px 4px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.5); min-width: 12px; text-align: center; line-height: 1.3; }
         #item-toast { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%) scale(0); background: #2b2d42; color: #fff; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 56; pointer-events: none; opacity: 0; box-shadow: 0 10px 20px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.3); font-size: 0.7rem; display: flex; align-items: center; gap: 8px; }
+
+        /* Fishing-scene story dialogue: a classic two-tap RPG textbox. Sits above everything
+           (including the paused game world behind it) and captures its own taps to advance -
+           gameState is set to 'paused' for the duration, same as the shop/settings/almanac
+           modals, so player dragging is disabled without needing any extra input guarding. */
+        #fishing-dialogue { display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: calc(100% - 48px); max-width: 460px; background: rgba(10, 15, 20, 0.88); border: 3px solid #fff; border-radius: 10px; padding: 16px 20px; z-index: 60; box-shadow: 0 8px 0 rgba(0,0,0,0.35); cursor: pointer; }
+        #fishing-dialogue-text { color: #fff; font-size: 0.62rem; line-height: 1.9; white-space: pre-wrap; }
+        #fishing-dialogue-hint { display: block; text-align: right; margin-top: 10px; font-size: 0.5rem; color: rgba(255,255,255,0.65); animation: pulse 1s infinite; }
 
         @keyframes unlockAnim {
             0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
@@ -321,6 +332,8 @@
 
     <div id="item-toast"><img class="icon-img" id="item-toast-icon" style="width:1.4em;height:1.4em;" alt=""> <span id="item-toast-text"></span></div>
     <div id="secret-unlock-toast"><span class="glitch-title">// GLITCH DETECTED //</span>CORRUPTED DATA slime unlocked!<br>Equip it in the Skins shop.</div>
+
+    <div id="fishing-dialogue"><span id="fishing-dialogue-text"></span><span id="fishing-dialogue-hint">tap to continue</span></div>
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
@@ -873,6 +886,10 @@
         let items = []; let enemies = []; let trees = []; let hives = [];
         let projectiles = []; let icicles = []; let flameParticles = []; let leaves = [];
         let splashes = []; let decorations = []; let powerups = []; let chest = null;
+        // Very rare ambient vignette: a man and boy sitting at the water's edge, fishing (see
+        // the spawn logic in generateLevel and drawFishingScene below). At most one per level,
+        // and only ever beside a genuine water-type hazard - lava/ice themes never get one.
+        let fishingScene = null;
 
         // Roguelite run-items state: items acquired from chests/mimics that persist and stack
         // for the duration of a run (cleared on resetGame(), re-applied fresh each level).
@@ -903,6 +920,62 @@
         
         let goal = { x: 0, y: 0, radius: 45, active: true, required: 5, collected: 0 };
         const gridSize = 120; let isDragging = false; let lastX = 0, lastY = 0;
+
+        // Story told two sentences at a time by the rare fishing-scene vignette (see
+        // generateLevel for the spawn logic and triggerFishingDialogue below for how it's
+        // played back). fishingStoryIndex is the sentence the NEXT encounter starts at,
+        // persisted across levels and sessions so the story keeps advancing from wherever the
+        // player last left off; it wraps back to the start once the story runs out.
+        const fishingStorySentences = [
+            "A man and a boy sat fishing.",
+            "The lake was reflective glass and the stars above flickered, because they needed a new set of bulbs.",
+            "The man was the boys father, though he was not related to him, nor did he share any memories with the boy, nor was he legally bound to the boy.",
+            "So the man was not the boys father.",
+            "Nevertheless, he still was.",
+            "The peace of the moment was disrupted by a commotion.",
+            "An enforcer who was a dolphin, went forth to arrest the man.",
+            "\"Your crimes are most grave,” he stated.",
+            "“You have achieved nothing for a full pentacentennial.\"",
+            "Following this grave accusation, the enforcer took him to a courthouse to have a proper sentence administered.",
+            "The man did not resist, for he was hardly a man at all, but yet, he was.",
+            "The boy of course came along to watch the hearing, but also left and was inside of a room filled with computer monitors.",
+            "The court hearing began, but nothing was discussed.",
+            "The room’s floors were covered in brown shag carpet and stunk of the color yellow, which was odd seeing as the boy could distinctly remember them being something… different.",
+            "The court hearing began to repeat, with accusations of inactivity for a pentacentennial being mentioned every 5 minutes, which was not an accident.",
+            "The boy was sitting at the third monitor from the back, he is always sitting at the third monitor from the back.",
+            "The court began to get louder with every successive loop, though the loud noise did not bother the boys ears.",
+            "The boy began to type characters into the keyboard, in this order \nΓo        h    n    fᎬ\nηΥ  θ       nL   a γ",
+            "The boys mother (who did not share blood, legal or sentimental relationship to the child, but remained his mother) who was in her house along with the boys ears, began to become distressed, insisting that a virus would be installed on her computer, though the computer was not hers.",
+            "The court hearing now ended, as always, in an execution, so the boy left, and ceased to be.",
+            "Meanwhile, the boy entered the computer room for the first time and observed that chairs had replaced the desks and were now placed so that the boy had to walk around all of them to sit in any one of them.",
+            "The boy sighed and walked around to the opening on the other side, only to discover that the chairs were actually arranged in the opposite manner, with the entrance facing the direction he had begun at.",
+            "And so the boy walked around once more, and entered the 11-sided figure, after passing though, the desks had returned and the boy sat at his computer monitor and logged on, all the while being badgered by the woman to leave her computer alone.",
+            "Without further use this boy ceased as well, and was forgotten.",
+            "Now the boy saw his mother for the first time, she had dark brown hair, hazel eyes and an olive green colored turtleneck.",
+            "Her skin was a soft, rosy shade of peach.",
+            "The room they were in was bright and exiting, and being inside of it seemed underlyingly blissful.",
+            "The boy stayed in it for a short period of time, but a hand appeared at the door to the room and when the boy approached it he was dragged outside.",
+            "The warm feeling stopped instantaneously, and the boy recognized the man who was his father.",
+            "The house was dark and sad, lichen covered some of the walls and gave the house a green hue.",
+            "The boy noticed two dogs on the brink of death, and immediately began cupping water from the functional, but empty refrigerator into the mouth of the larger brownish dog.",
+            "The dog regained life almost instantly and so the boy began focusing on a way to retrieve his mother from the room that altered his emotions.",
+            "There was a carcass of a dog long dead in one of the corners of the house.",
+            "The boy and the man tried to resist entering the room to get her and help her regain her senses, but eventually the boy had to enter for a few seconds to call out to her.",
+            "Pulling back out of the room after doing so the boy looked around for the dog, but only spotted a second carcass, he called for his father to assist him in helping his mother but was greeted with a startling and terrifying reality as he became aware of the fact that his father was, and had always been nothing more than the bones of a man held together with ancient, cracked clay and a rotten stick.",
+            "The stick once served the purpose of supporting the spine of the creature, it poked out behind the neck, black spidery veins of mold branching out from the stick.",
+            "Then he spotted the woman, her glamorous guise no longer concealing her.",
+            "Her olive green shirt now raggedy and moth-eaten, creaking bones exposed where holes allowed.",
+            "They began to lumber towards him, grabbing him by his shoulders.",
+            "He was petrified with fear as dragged him back into the terrible, wonderful room the woman had spent most of her time in.",
+            "The boy sat with a man he did not recognize, fishing in a lake that was made of glass with stars above that did not seem quite right.",
+            "But nothing seemed amiss."
+        ];
+        let fishingStoryIndex = parseInt(storage.get('landSlidersFishingIndex')) || 0;
+        if (!Number.isFinite(fishingStoryIndex) || fishingStoryIndex < 0 || fishingStoryIndex >= fishingStorySentences.length) fishingStoryIndex = 0;
+        // The pair of sentences currently on screen, and which of the two (0 or 1) is showing -
+        // null when the dialogue box is closed.
+        let fishingDialogueSentences = null;
+        let fishingDialogueStep = 0;
 
         // Configurations
         const themes = [
@@ -1696,7 +1769,7 @@
 
         function generateLevel() {
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
-            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null;
+            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null;
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             safeGridCache.clear();
@@ -1813,6 +1886,38 @@
                 for (let i = 0; i < numHives; i++) {
                     let hTile = pickLandHex(250);
                     if (hTile) { hives.push({ x: hTile.x, y: hTile.y, radius: 25 }); hTile.element = { type: 'hive' }; }
+                }
+            }
+
+            // Very rare ambient vignette: a man and boy sitting at the edge of the water,
+            // fishing. Only ever appears next to a genuine water-type hazard (lava/ice themes
+            // never roll one), and only on a land hex edge that actually borders a hazard hole,
+            // found via the same fenceCandidateDirs the fence pass just computed. The chosen
+            // tile gets an element so the scatter pass below skips it (no tree/rock/coin
+            // spawning on top of the pair), and hexEdgeCorners gives the exact edge midpoint to
+            // face the figures toward, the same helper fences use to orient themselves.
+            if (currentTheme.hazard.type === 'water') {
+                let waterEdges = [];
+                for (let tile of borderHexList) {
+                    if (tile.element) continue;
+                    for (let dirIdx of tile.fenceCandidateDirs) {
+                        let d = HEX_DIRS[dirIdx];
+                        let nb = hexTiles.get(hexKey(tile.q + d.q, tile.r + d.r));
+                        if (nb && nb.type === 'hole') waterEdges.push({ tile, dirIdx });
+                    }
+                }
+                if (waterEdges.length && Math.random() < 0.06) {
+                    let pick = waterEdges[Math.floor(Math.random() * waterEdges.length)];
+                    let d = HEX_DIRS[pick.dirIdx];
+                    let [p1, p2] = hexEdgeCorners(pick.tile, d.q, d.r);
+                    let edgeMidX = (p1.x + p2.x) / 2, edgeMidY = (p1.y + p2.y) / 2;
+                    let angle = Math.atan2(edgeMidY - pick.tile.y, edgeMidX - pick.tile.x);
+                    fishingScene = {
+                        x: pick.tile.x + Math.cos(angle) * HEX_SIZE * 0.25,
+                        y: pick.tile.y + Math.sin(angle) * HEX_SIZE * 0.25,
+                        angle, seed: Math.random() * 1000, triggered: false
+                    };
+                    pick.tile.element = { type: 'fishingScene' };
                 }
             }
 
@@ -2551,6 +2656,43 @@
             gameState = 'playing'; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; generateLevel();
         }
 
+        // Fills in the currently-showing half of the two-sentence encounter (see
+        // triggerFishingDialogue/advanceFishingDialogue below).
+        function showFishingDialogueStep() {
+            document.getElementById('fishing-dialogue-text').innerText = fishingDialogueSentences[fishingDialogueStep];
+        }
+
+        // Called once when the player physically touches the rare fishing scene. Pauses the
+        // game (same convention as the shop/settings/almanac modals) and pulls the next two
+        // sentences of the story off wherever fishingStoryIndex left off, then persists the
+        // advanced index immediately so the player keeps their place even if they quit right
+        // after reading - the story wraps back to the beginning once it runs out.
+        function triggerFishingDialogue() {
+            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
+            let total = fishingStorySentences.length;
+            let idx = fishingStoryIndex % total;
+            fishingDialogueSentences = [fishingStorySentences[idx], fishingStorySentences[(idx + 1) % total]];
+            fishingDialogueStep = 0;
+            fishingStoryIndex = (idx + 2) % total;
+            storage.set('landSlidersFishingIndex', fishingStoryIndex);
+            showFishingDialogueStep();
+            document.getElementById('fishing-dialogue').style.display = 'block';
+        }
+
+        // Advances to the second sentence on the first tap, then closes the box and hands
+        // control back to the game on the second tap.
+        function advanceFishingDialogue() {
+            if (!fishingDialogueSentences) return;
+            fishingDialogueStep++;
+            if (fishingDialogueStep >= fishingDialogueSentences.length) {
+                document.getElementById('fishing-dialogue').style.display = 'none';
+                fishingDialogueSentences = null;
+                if (gameState === 'paused') gameState = previousState;
+                return;
+            }
+            showFishingDialogueStep();
+        }
+
         function updateHUD() {
             domRefs.levelDisplay.innerText = level;
             domRefs.coinDisplay.innerText = totalCoins;
@@ -2650,6 +2792,9 @@
         document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); if (musicGainMaster) musicGainMaster.gain.value = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
+        // Tap/click anywhere on the fishing-scene story box to advance it - first tap reveals
+        // the second sentence, second tap closes it and hands control back to the game.
+        document.getElementById('fishing-dialogue').addEventListener('click', advanceFishingDialogue);
         syncSettingsUI();
         function handleStart(e) {
             initAudio();
@@ -2865,6 +3010,14 @@
                         for(let i=0; i<20; i++) spawnLoot(chest.x, chest.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                         grantRoguelikeItem(rollRoguelikeItem());
                         updateHUD(); markCoinsDirty();
+                    }
+
+                    // Rare fishing scene: purely decorative, but physically touching the pair
+                    // pops the next two lines of their story - only fires once per spawn (a
+                    // fresh scene only ever appears again on a later level).
+                    if (fishingScene && !fishingScene.triggered && dist(player.worldX, player.worldY, fishingScene.x, fishingScene.y) < player.radius + 34) {
+                        fishingScene.triggered = true;
+                        triggerFishingDialogue();
                     }
 
                     // Roguelite: Magnet item pulls nearby coins/gems toward the player.
@@ -4553,6 +4706,121 @@
             }
         }
 
+        // Draws one seated figure of a fishing pair, in a local space already translated/rotated
+        // so +x faces the water: legs stretch out over the edge in +x, torso/head sit back over
+        // the shore in -x. `scale` shrinks the whole figure for the boy; `bobSeed` staggers the
+        // idle leg-swing so the two figures don't move in lockstep.
+        function drawSeatedFisher(ox, oy, scale, shirtColor, hairColor, wearsHat, bobSeed) {
+            ctx.save();
+            ctx.translate(ox, oy); ctx.scale(scale, scale);
+            let legSwing = Math.sin(Date.now() / 700 + bobSeed) * 2;
+            ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 5; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(20, 5 + legSwing); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-2, 4); ctx.lineTo(18, 11 - legSwing); ctx.stroke();
+            ctx.fillStyle = '#5a4632';
+            ctx.beginPath(); ctx.ellipse(19, 6 + legSwing, 4, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(17, 12 - legSwing, 4, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
+            // Torso, leaning slightly forward toward the water.
+            ctx.fillStyle = shirtColor;
+            ctx.beginPath(); ctx.ellipse(-6, -8, 9, 12, -0.15, 0, Math.PI * 2); ctx.fill();
+            // Head + hair.
+            ctx.fillStyle = '#f0c090';
+            ctx.beginPath(); ctx.arc(-10, -22, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = hairColor;
+            ctx.beginPath(); ctx.arc(-10, -24.5, 7.2, Math.PI, Math.PI * 2); ctx.fill();
+            if (wearsHat) {
+                ctx.fillStyle = '#7a5c3e';
+                ctx.beginPath(); ctx.ellipse(-9, -27, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(-9, -30, 6, Math.PI, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // 1-Bit: same seated pose as drawSeatedFisher, but as a flat black silhouette instead
+        // of themed shirt/skin/hair colors - torso+head as one blob, legs as a white-haloed
+        // black line (white stroked wider underneath, black stroked narrower on top) so they
+        // read against either black or white checker tile, matching the double-tone trick
+        // used throughout the rest of the 1-Bit skin (trees, houses, chests).
+        function drawOnebitSeatedFisher(ox, oy, scale, bobSeed) {
+            ctx.save();
+            ctx.translate(ox, oy); ctx.scale(scale, scale);
+            let legSwing = Math.sin(Date.now() / 700 + bobSeed) * 2;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 7;
+            ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(20, 5 + legSwing); ctx.moveTo(-2, 4); ctx.lineTo(18, 11 - legSwing); ctx.stroke();
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(20, 5 + legSwing); ctx.moveTo(-2, 4); ctx.lineTo(18, 11 - legSwing); ctx.stroke();
+            ctx.fillStyle = '#000000';
+            ctx.beginPath(); ctx.ellipse(-6, -8, 9, 12, -0.15, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-10, -22, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.ellipse(-6, -8, 9, 12, -0.15, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(-10, -22, 7, 0, Math.PI * 2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // 1-Bit: same rod/line/float layout as drawFishingScene, redrawn in flat black/white
+        // instead of the themed wood/red-and-white palette - white-haloed black rod and line,
+        // and a black/white split float so it stays legible on either checker tone.
+        function drawOnebitFishingScene(x, y, angle, seed) {
+            ctx.save();
+            ctx.translate(x, y); ctx.rotate(angle);
+            drawGroundShadow(ctx, 6, 6, 30, 11);
+            let bob = Math.sin(Date.now() / 500 + seed) * 2;
+            let rodTipX = 46, rodTipY = -30;
+            let floatX = 68, floatY = 4 + bob;
+            ctx.lineCap = 'round';
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 5;
+            ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(floatX, floatY); ctx.stroke();
+            let ripplePhase = (Date.now() / 900 + seed * 0.01) % 1;
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.globalAlpha = 1 - ripplePhase;
+            ctx.beginPath(); ctx.arc(floatX, floatY, 4 + ripplePhase * 14, 0, Math.PI * 2); ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, Math.PI, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, 0, Math.PI); ctx.fill();
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, 0, Math.PI * 2); ctx.stroke();
+            drawOnebitSeatedFisher(-14, -2, 1.0, seed);
+            drawOnebitSeatedFisher(10, 6, 0.68, seed + 40);
+            ctx.restore();
+        }
+
+        // Very rare ambient vignette (see the spawn logic in generateLevel): a man and boy
+        // sitting on the shore at a water hazard's edge, a fishing line cast out into the
+        // water with a bobbing red-and-white float. Oriented so the pair always faces the
+        // water regardless of which hex edge they landed on, the same way fences orient to
+        // their edge. Purely decorative - no collision, nothing to interact with.
+        function drawFishingScene(x, y, angle, seed) {
+            // 1-Bit: flat black/white silhouettes instead of the themed color palette below,
+            // the same override pattern used for trees/rocks/chests under this skin.
+            if (player.color === 'onebit') { drawOnebitFishingScene(x, y, angle, seed); return; }
+            ctx.save();
+            ctx.translate(x, y); ctx.rotate(angle);
+            drawGroundShadow(ctx, 6, 6, 30, 11);
+            // Rod held by the man, arcing out over the water, with a taut line down to the float.
+            let bob = Math.sin(Date.now() / 500 + seed) * 2;
+            let rodTipX = 46, rodTipY = -30;
+            let floatX = 68, floatY = 4 + bob;
+            ctx.strokeStyle = '#6b4a2b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(floatX, floatY); ctx.stroke();
+            // Small ripple rings pulsing outward from the float.
+            ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
+            let ripplePhase = (Date.now() / 900 + seed * 0.01) % 1;
+            ctx.beginPath(); ctx.arc(floatX, floatY, 4 + ripplePhase * 14, 0, Math.PI * 2); ctx.globalAlpha = 1 - ripplePhase; ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, Math.PI, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, 0, Math.PI); ctx.fill();
+            // The pair, side by side - man closer to the rod, boy tucked beside him.
+            drawSeatedFisher(-14, -2, 1.0, '#3a6ea5', '#4a3524', true, seed);
+            drawSeatedFisher(10, 6, 0.68, '#d98e3a', '#2e2115', false, seed + 40);
+            ctx.restore();
+        }
+
         function draw() {
             let shakeX = 0; let shakeY = 0;
             if (screenShake > 0) { shakeX = (Math.random() - 0.5) * screenShake; shakeY = (Math.random() - 0.5) * screenShake; screenShake *= 0.85; if (screenShake < 0.5) screenShake = 0; }
@@ -4816,6 +5084,7 @@
             for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
             for (let i = 0; i < companions.length; i++) { let cs = companions[i]; if (isOnScreen(cs.x + tiltX, cs.y + tiltY, cullBuffer)) pushRQ('companion', cs, cs.y + (cs.radius || 0)); }
             if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
+            if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
             pushRQ('player', player, player.worldY + (player.radius || 0));
             renderQueue.length = rqCount;
             renderQueue.sort(rqSortCompare);
@@ -5112,6 +5381,10 @@
                         ctx.fillStyle = '#8b4513'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.fill();
                         ctx.fillStyle = '#3a1c08'; ctx.fillRect(c.x - c.radius + 3, c.y - c.radius*0.5 + 3, c.radius*2 - 6, c.radius*1.5 - 10);
                     }
+                }
+                else if (item.type === 'fishingScene') {
+                    let fs = item.obj;
+                    drawFishingScene(fs.x, fs.y, fs.angle, fs.seed);
                 }
                 else if (item.type === 'leaf') {
                     let l = item.obj;

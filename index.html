@@ -4527,6 +4527,30 @@
             c.restore();
         }
 
+        // Ground-contact shadow for moving entities (player, companion slimes, and anything
+        // else that casts one directly beneath itself). Normally a soft translucent-black
+        // ellipse, which is how every other shadow in this file works - but under 1-Bit that
+        // same translucent black is nearly invisible on the mode's own black checker tiles,
+        // and barely reads on the white ones either once the page-wide grayscale/contrast
+        // filter (body.onebit-page-filter) collapses it further. Reuses the same double-tone
+        // trick already used for 1-Bit chests/powerups above: an opaque black fill plus a
+        // white ring around it, so whichever checker tile the shadow lands on, at least one of
+        // the two tones - the white ring against black tiles, or the black fill against white
+        // ones - always contrasts against it.
+        function drawGroundShadow(c, x, y, rx, ry) {
+            if (player.color === 'onebit') {
+                c.save();
+                c.fillStyle = '#000000';
+                c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fill();
+                c.strokeStyle = '#ffffff'; c.lineWidth = 1.5;
+                c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.stroke();
+                c.restore();
+            } else {
+                c.fillStyle = 'rgba(0,0,0,0.3)';
+                c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2); c.fill();
+            }
+        }
+
         function draw() {
             let shakeX = 0; let shakeY = 0;
             if (screenShake > 0) { shakeX = (Math.random() - 0.5) * screenShake; shakeY = (Math.random() - 0.5) * screenShake; screenShake *= 0.85; if (screenShake < 0.5) screenShake = 0; }
@@ -5001,7 +5025,7 @@
                 }
                 else if (item.type === 'hive') {
                     let h = item.obj;
-                    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(h.x, h.y + h.radius, h.radius, h.radius*0.5, 0, 0, Math.PI*2); ctx.fill();
+                    drawGroundShadow(ctx, h.x, h.y + h.radius, h.radius, h.radius*0.5);
                     ctx.fillStyle = '#d35400'; ctx.beginPath(); ctx.arc(h.x, h.y, h.radius, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(h.x, h.y - 10, h.radius*0.8, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = '#f39c12'; ctx.beginPath(); ctx.arc(h.x, h.y - 20, h.radius*0.6, 0, Math.PI*2); ctx.fill();
@@ -5021,7 +5045,7 @@
                 }
                 else if (item.type === 'powerup') {
                     let p = item.obj; let pu = powerupTypesById.get(p.typeId); let bob = Math.sin(Date.now()/260 + (p.spawnSeed||0)) * 6; let spin = (Date.now()/450) % (Math.PI*2);
-                    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + p.radius*0.9, p.radius*0.9, p.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
+                    drawGroundShadow(ctx, p.x, p.y + p.radius*0.9, p.radius*0.9, p.radius*0.4);
                     if (player.color === 'onebit') {
                         // 1-Bit: flat black disc with a thick white ring and white icon glyph -
                         // pu.color varies per powerup type and was collapsing to the same tone
@@ -5038,7 +5062,7 @@
                 else if (item.type === 'chest') {
                     let c = item.obj;
                     if (!c.collected) { ctx.save(); ctx.globalAlpha = 0.15 + 0.1*Math.sin(Date.now()/400); ctx.fillStyle = player.color === 'onebit' ? '#ffffff' : '#ffd700'; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius*1.8, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
-                    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + c.radius, c.radius, c.radius*0.5, 0, 0, Math.PI*2); ctx.fill();
+                    drawGroundShadow(ctx, c.x, c.y + c.radius, c.radius, c.radius*0.5);
                     if (player.color === 'onebit') {
                         // 1-Bit chest: flat black/white box with a banded lid and a solid lock
                         // instead of the usual brown wood palette - open state swaps which half
@@ -5173,7 +5197,7 @@
                     let cs = item.obj;
                     let ccx = cs.prevX !== undefined ? cs.prevX + (cs.x - cs.prevX) * renderAlpha : cs.x;
                     let ccy = cs.prevY !== undefined ? cs.prevY + (cs.y - cs.prevY) * renderAlpha : cs.y;
-                    ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(ccx, ccy + cs.radius*0.8, cs.radius*0.8, cs.radius*0.35, 0, 0, Math.PI*2); ctx.fill();
+                    drawGroundShadow(ctx, ccx, ccy + cs.radius*0.8, cs.radius*0.8, cs.radius*0.35);
                     drawCharacterModel(ccx, ccy, 0, 0, cs.radius, cs.colorId, false, null);
                 }
                 else if (item.type === 'player') {
@@ -5181,7 +5205,7 @@
                     // Void: the player's own slime (and its powerup effects/orbiting items)
                     // stays in full color - only the map desaturates, not the character.
                     if (player.color === 'void') { ctx.save(); voidGrayscaleActive = false; }
-                    ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(pdrawX, pdrawY + p.radius, p.radius * 0.9, p.radius * 0.4, 0, 0, Math.PI*2); ctx.fill();
+                    drawGroundShadow(ctx, pdrawX, pdrawY + p.radius, p.radius * 0.9, p.radius * 0.4);
                     if (p.activePowerup === 'rampage') {
                         ctx.save();
                         ctx.translate(pdrawX, pdrawY);

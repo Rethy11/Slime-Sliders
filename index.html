@@ -21,7 +21,7 @@
             --accent: #ff477e;
         }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
-        html, body { user-select: none !important; -webkit-user-select: none !important; }
+        html, body { user-select: none !important; -webkit-user-select: none !important; height: 100%; }
         body { background-color: var(--bg-color); overflow: hidden; font-family: 'Press Start 2P', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; transition: background-color 0.5s; }
         canvas { display: block; }
         canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
@@ -61,7 +61,16 @@
            contrast collapses every remaining shade toward pure black or white instead of just
            removing hue (which is all Void's per-pixel canvas desaturation does). Applied to
            <body> rather than #gameCanvas alone, so it reaches every sibling on the page too -
-           the HUD panels, menus, shop/gacha overlays, title screen - not just the game world. */
+           the HUD panels, menus, shop/gacha overlays, title screen - not just the game world.
+           NOTE: putting `filter` on <body> also makes <body> the containing block for every
+           position:absolute/fixed descendant that doesn't have a nearer positioned ancestor
+           (corner icons, #timer-container, .modal, etc.) - normally those anchor to the
+           viewport instead. That's harmless as long as <body>'s box is exactly the viewport
+           size, which is why `html, body { height: 100% }` above is required: without it,
+           body's height is "auto" (sized by content) and any tiny mismatch between that and
+           the viewport - e.g. right after load, before resize() has sized the canvas - shows
+           up as the bottom-anchored UI being shifted down by the difference the moment this
+           skin is equipped (or preselected from storage on load). */
         body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08); }
 
         /* 1-Bit skin (cont.): the threshold filter above collapses lots of close-luminance
@@ -6190,6 +6199,8 @@
             if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
             checkAchievements();
             }
+            document.getElementById('go-level').innerText = level;
+            document.getElementById('go-best').innerText = highestLevel;
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
             else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
             }

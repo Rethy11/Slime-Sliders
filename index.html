@@ -799,19 +799,9 @@
             let skin = player.color;
             let moving = (Math.abs(player.vx) + Math.abs(player.vy)) > 3;
 
-            // Glacier ("ice"): the ground the player slides across turns to snow for good.
-            if (skin === 'ice') {
-                let h = pixelToAxial(player.worldX, player.worldY);
-                let tile = hexTiles.get(hexKey(h.q, h.r));
-                if (tile && tile.type === 'land') iceFrostedTiles.add(tile);
-            }
-            // Magma ("lava"): the ground the player slides across stays charred and cracked
-            // forever - same permanent-scar pattern as Glacier's frost, plus embers still drift
-            // up from the trail while moving.
-            else if (skin === 'lava') {
-                let h = pixelToAxial(player.worldX, player.worldY);
-                let tile = hexTiles.get(hexKey(h.q, h.r));
-                if (tile && tile.type === 'land') lavaScorchedTiles.add(tile);
+            // Magma ("lava"): embers still drift up from the trail while moving, but the
+            // ground itself no longer gets permanently scorched.
+            if (skin === 'lava') {
                 if (moving && Math.random() < 0.5) {
                     flameParticles.push({ x: player.worldX + (Math.random()-0.5)*14, y: player.worldY + (Math.random()-0.5)*14, vx: (Math.random()-0.5)*1.2, vy: -0.4 - Math.random()*0.6, life: 0.7, maxLife: 0.7, size: 3 + Math.random()*4 });
                 }
@@ -1794,6 +1784,11 @@
             goal.required = Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
             
             currentTheme = themes[(level - 1) % themes.length];
+            // Magma always plays its levels with the Volcano (stage 4) design, and Glacier
+            // always plays its levels with the Snow (stage 3) design, regardless of the level
+            // number's usual place in the theme rotation above.
+            if (player.color === 'lava') currentTheme = themes[3];
+            else if (player.color === 'ice') currentTheme = themes[2];
             // Restart the background music for the new level (matches the old sequencer's
             // per-level resync), cycling through the same theme order.
             playMusicTrack((level - 1) % musicFiles.length);
@@ -3157,8 +3152,12 @@
                             player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
                             // Pure Gold: whatever the player bumps into stays gilded for good.
                             if (player.color === 'gold' && !t.golden) { t.golden = true; playSFX('coin', 0.7); }
+                            // Magma: bumped rocks turn to coal for good.
+                            else if (player.color === 'lava' && t.type === 'rock' && !t.coal) { t.coal = true; playSFX('coin', 0.5); }
                             // Magma: bumped trees stay scorched/on fire for good.
-                            else if (player.color === 'lava' && !t.onFire) { t.onFire = true; playSFX('coin', 0.5); }
+                            else if (player.color === 'lava' && t.type === 'tree' && !t.onFire) { t.onFire = true; playSFX('coin', 0.5); }
+                            // Glacier: bumped rocks and trees stay encased in a block of ice for good.
+                            else if (player.color === 'ice' && !t.frozen) { t.frozen = true; playSFX('coin', 0.5); }
                             // Toxic Sludge: bumped trees stay wilted/sickly for good.
                             else if (player.color === 'toxic' && !t.wilted) { t.wilted = true; playSFX('coin', 0.5); }
                             // Fairy Dust: bumped trees stay in bloom for good.
@@ -5171,9 +5170,9 @@
                     if (t.golden) { goldGrad = ctx.createLinearGradient(t.x - t.radius, t.y - t.radius, t.x + t.radius, t.y + t.radius); goldGrad.addColorStop(0, '#fff7c2'); goldGrad.addColorStop(0.5, '#ffcc00'); goldGrad.addColorStop(1, '#8a5a00'); }
                     // Magma/Toxic: bumped trees (see the tree-collision check in update()) get a
                     // permanent scorched or wilted base palette, same override pattern as gold.
-                    let treeBaseColor = t.golden ? '#8a5a00' : t.onFire ? '#2b1a12' : t.wilted ? '#4a3a2a' : currentTheme.treeBase;
-                    let treeTopColor = t.golden ? goldGrad : t.onFire ? '#3d1f0a' : t.wilted ? '#5c6b3f' : currentTheme.treeTop;
-                    let treeAccentColor = t.golden ? '#fff7c2' : t.onFire ? '#ff6b1a' : t.wilted ? '#8a9a5f' : (currentTheme.name === "Snow" ? "#fff" : "#388e3c");
+                    let treeBaseColor = t.golden ? '#8a5a00' : t.onFire ? '#2b1a12' : t.wilted ? '#4a3a2a' : t.frozen ? '#4a6f8a' : currentTheme.treeBase;
+                    let treeTopColor = t.golden ? goldGrad : t.onFire ? '#3d1f0a' : t.wilted ? '#5c6b3f' : t.frozen ? '#bfe9f7' : currentTheme.treeTop;
+                    let treeAccentColor = t.golden ? '#fff7c2' : t.onFire ? '#ff6b1a' : t.wilted ? '#8a9a5f' : t.frozen ? '#e8f7fc' : (currentTheme.name === "Snow" ? "#fff" : "#388e3c");
                     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(t.x, t.y + t.radius * 0.5, t.radius * 0.85, t.radius * 0.38, 0, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = treeBaseColor; ctx.fillRect(t.x - t.radius*0.2, t.y - t.radius*0.1, t.radius*0.4, t.radius*0.9);
                     ctx.save(); ctx.translate(t.x, t.y - t.radius*0.1); ctx.rotate(sway); ctx.translate(-t.x, -(t.y - t.radius*0.1));
@@ -5220,6 +5219,17 @@
                         ctx.restore();
                         if (Math.random() < 0.05) splashes.push({ x: t.x + (Math.random()-0.5)*t.radius, y: t.y + t.radius*0.4, vx: 0, vy: 0, life: 1, maxLife: 1.1, type: 'drop', color: '#39ff14' });
                     }
+                    // Glacier: frozen trees stay encased in a translucent, glinting block of ice.
+                    else if (t.frozen) {
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(191, 233, 247, 0.5)';
+                        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.ellipse(t.x, t.y - t.radius * 0.35, t.radius * 1.05, t.radius * 1.35, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                        let glint = 0.5 + Math.sin(Date.now()/400 + (t.seed||0)*10) * 0.3;
+                        ctx.fillStyle = `rgba(255,255,255,${glint})`;
+                        ctx.beginPath(); ctx.arc(t.x - t.radius*0.35, t.y - t.radius*0.75, t.radius*0.14, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    }
                     // Fairy Dust: blossomed trees stay ringed with tiny permanent flowers.
                     else if (t.blossomed) {
                         ctx.save();
@@ -5257,6 +5267,12 @@
                         let rockGoldGrad = ctx.createLinearGradient(r.x - r.radius, r.y - r.radius, r.x + r.radius, r.y + r.radius);
                         rockGoldGrad.addColorStop(0, '#fff7c2'); rockGoldGrad.addColorStop(0.5, '#ffcc00'); rockGoldGrad.addColorStop(1, '#8a5a00');
                         ctx.fillStyle = rockGoldGrad;
+                    }
+                    // Magma: bumped rocks stay turned to coal for good.
+                    else if (r.coal) {
+                        let coalGrad = ctx.createLinearGradient(r.x - r.radius, r.y - r.radius, r.x + r.radius, r.y + r.radius);
+                        coalGrad.addColorStop(0, '#3a3a3a'); coalGrad.addColorStop(0.5, '#1a1a1a'); coalGrad.addColorStop(1, '#000000');
+                        ctx.fillStyle = coalGrad;
                     } else { ctx.fillStyle = currentTheme.rock; }
                     if (variant === 1) {
                         ctx.beginPath(); let pts = 7;
@@ -5268,6 +5284,17 @@
                         ctx.beginPath(); ctx.arc(r.x, r.y, r.radius, Math.PI, 0, false); ctx.lineTo(r.x + r.radius*0.9, r.y + r.radius*0.18); ctx.quadraticCurveTo(r.x, r.y + r.radius*0.35, r.x - r.radius*0.9, r.y + r.radius*0.18); ctx.closePath(); ctx.fill();
                     }
                     ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(r.x - r.radius*0.3, r.y - r.radius*0.15); ctx.lineTo(r.x + r.radius*0.15, r.y + r.radius*0.05); ctx.stroke();
+                    // Glacier: frozen rocks stay encased in a translucent, glinting block of ice.
+                    if (r.frozen) {
+                        ctx.save();
+                        ctx.fillStyle = 'rgba(191, 233, 247, 0.5)';
+                        ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.ellipse(r.x, r.y - r.radius * 0.15, r.radius * 1.15, r.radius * 1.1, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+                        let glint = 0.5 + Math.sin(Date.now()/400 + (r.seed||0)*10) * 0.3;
+                        ctx.fillStyle = `rgba(255,255,255,${glint})`;
+                        ctx.beginPath(); ctx.arc(r.x - r.radius*0.3, r.y - r.radius*0.4, r.radius*0.14, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    }
                 }
                 else if (item.type === 'fence') {
                     // A simple post-and-rail fence segment sitting along one hex edge, oriented

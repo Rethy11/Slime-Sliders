@@ -223,8 +223,8 @@
         .locked-entry { filter: grayscale(100%) brightness(0.5); opacity: 0.6; }
 
         /* Gacha & Inventory UI Styles */
-        .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 10px; }
-        .shop-tab { background: #6c7a89; border: none; padding: 8px 16px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; }
+        .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 8px; flex-wrap: wrap; }
+        .shop-tab { background: #6c7a89; border: none; padding: 8px 14px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; white-space: nowrap; }
         .shop-tab.active { background: var(--accent); transform: scale(1.05); }
         .gacha-container { position: relative; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; }
         
@@ -347,7 +347,7 @@
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
-    <div id="unlock-popup"><img class="icon-img" id="unlock-star-l" style="width:1em;height:1em;" alt=""> New Enemy Entry Unlocked! <img class="icon-img" id="unlock-star-r" style="width:1em;height:1em;" alt=""></div>
+    <div id="unlock-popup"><img class="icon-img" id="unlock-star-l" style="width:1em;height:1em;" alt=""> <span id="unlock-popup-text">New Enemy Entry Unlocked!</span> <img class="icon-img" id="unlock-star-r" style="width:1em;height:1em;" alt=""></div>
 
     <div id="shop-modal" class="modal">
         <div class="modal-header">
@@ -367,10 +367,15 @@
 
     <div id="almanac-modal" class="modal">
         <div class="modal-header">
-            <h2 style="color: #9b59b6;">Enemy Almanac</h2>
+            <h2 style="color: #9b59b6;">Almanac</h2>
             <button class="close-modal-btn">Close</button>
         </div>
-        <p style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Die to an enemy to learn its secrets.</p>
+        <div class="shop-tabs">
+            <button class="shop-tab active" id="tab-almanac-enemies">Enemies</button>
+            <button class="shop-tab" id="tab-almanac-items">Items</button>
+            <button class="shop-tab" id="tab-almanac-achievements">Achievements</button>
+        </div>
+        <p id="almanac-tab-hint" style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Die to an enemy to learn its secrets.</p>
         <div id="almanac-items"></div>
     </div>
 
@@ -956,12 +961,37 @@
         let shootingStarTimer = 0;
         let shurikenSpin = 0;
         const roguelikeItemDefs = {
-            magnet:      { id: 'magnet',      rarity: 'common',    name: 'Magnet' },
-            wings:       { id: 'wings',       rarity: 'common',    name: 'Wings' },
-            spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes' },
-            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad' },
-            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken' }
+            magnet:      { id: 'magnet',      rarity: 'common',    name: 'Magnet',      desc: 'Pulls nearby coins and gems toward you. Each stack widens the pull radius.' },
+            wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over a hazard longer before falling. Each stack adds more hover time.' },
+            spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Periodically unleashes an icy shockwave around you. Each stack makes it fire more often.' },
+            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.' },
+            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.' }
         };
+
+        // Achievement definitions. Each check() reads from persisted storage / in-memory state
+        // that already exists elsewhere (highestLevel, almanac_*, runitem_*, inv_*), so unlocking
+        // one never requires new gameplay tracking beyond the runitem_/gachaPullCount additions
+        // added alongside this system (see grantRoguelikeItem / pullGacha). checkAchievements()
+        // runs after any of those change and flips 'ach_<id>' to 'true' the first time check()
+        // passes; once set, an achievement stays unlocked even if the underlying stat regresses
+        // (e.g. spending coins) since checkAchievements() only ever sets the flag, never clears it.
+        const achievementDB = [
+            { id: 'level3',          name: 'First Steps',        desc: 'Reach Level 3.',                              check: () => highestLevel >= 3 },
+            { id: 'level10',         name: 'Deep Dive',          desc: 'Reach Level 10.',                             check: () => highestLevel >= 10 },
+            { id: 'level20',         name: 'Going the Distance', desc: 'Reach Level 20.',                             check: () => highestLevel >= 20 },
+            { id: 'bug_hunter',      name: 'Bug Hunter',         desc: 'Encounter 3 different enemies.',              check: () => Object.keys(enemyDB).filter(k => storage.get('almanac_' + k) === 'true').length >= 3 },
+            { id: 'bestiary',        name: 'Bestiary Complete',  desc: 'Encounter every enemy in the game.',          check: () => Object.keys(enemyDB).every(k => storage.get('almanac_' + k) === 'true') },
+            { id: 'centurion',       name: 'Centurion',          desc: 'Defeat 100 enemies.',                         check: () => (parseInt(storage.get('totalEnemyKills')) || 0) >= 100 },
+            { id: 'loadout_ready',   name: 'Loadout Ready',      desc: 'Find every run item at least once.',         check: () => Object.keys(roguelikeItemDefs).every(id => storage.get('runitem_' + id) === 'true') },
+            { id: 'legendary_find',  name: 'Legendary Find',     desc: 'Pick up a Shuriken.',                          check: () => storage.get('runitem_shuriken') === 'true' },
+            { id: 'my_slime',        name: 'My Slime',           desc: 'Recruit a Slime Squad companion.',            check: () => storage.get('runitem_slimefriend') === 'true' },
+            { id: 'cult_leader',     name: 'Cult Leader',        desc: 'Have 5 Slime Squad companions at once.',      check: () => (parseInt(storage.get('maxSlimefriendStack')) || 0) >= 5 },
+            { id: 'gacha_addict',    name: 'Gacha Addict',       desc: 'Pull the gacha crane 10 times.',              check: () => (parseInt(storage.get('gachaPullCount') || 0)) >= 10 },
+            { id: 'rare_collector',  name: 'Rare Collector',     desc: 'Unlock all 10 rare skins.',                   check: () => rareSkins.every(s => parseInt(storage.get('inv_' + s.id) || 0) > 0) },
+            { id: 'hatalogue',       name: 'Hatalogue',          desc: 'Unlock all 10 hats.',                         check: () => hats.every(h => parseInt(storage.get('inv_' + h.id) || 0) > 0) },
+            { id: 'glitch_hunter',   name: 'Glitch Hunter',      desc: 'Discover the secret Corrupted Data skin.',    check: () => parseInt(storage.get('inv_corrupted') || 0) > 0 },
+            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length }
+        ];
         
         let goal = { x: 0, y: 0, radius: 45, active: true, required: 5, collected: 0 };
         const gridSize = 120; let isDragging = false; let lastX = 0, lastY = 0;
@@ -1708,9 +1738,15 @@
 
         function grantRoguelikeItem(id) {
             runItems[id] = (runItems[id] || 0) + 1;
-            if (id === 'slimefriend') syncCompanionsToStack();
+            if (id === 'slimefriend') {
+                syncCompanionsToStack();
+                let best = parseInt(storage.get('maxSlimefriendStack')) || 0;
+                if (runItems.slimefriend > best) storage.set('maxSlimefriendStack', runItems.slimefriend);
+            }
             updateItemsHUD();
             showItemToast(id);
+            if (storage.get('runitem_' + id) !== 'true') storage.set('runitem_' + id, 'true');
+            checkAchievements();
         }
 
         // Renders the icon-only badges (with a small count number for stacks > 1) into the
@@ -1762,6 +1798,8 @@
             if (coinRange[1] > 0) playSFX('enemy_hit');
             if (e.type === 'mimic') grantRoguelikeItem(rollRoguelikeItem());
             enemies.splice(idx, 1); screenShake = Math.max(screenShake, 6);
+            storage.set('totalEnemyKills', (parseInt(storage.get('totalEnemyKills')) || 0) + 1);
+            checkAchievements();
         }
 
         // Builds every land hex that has at least one neighbor which is a hole or is missing
@@ -2760,6 +2798,8 @@
         function pullGacha() {
             if (totalCoins < 100 || crane.state !== 'idle' || gachaSlimes.length === 0) return;
             totalCoins -= 100; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
+            storage.set('gachaPullCount', (parseInt(storage.get('gachaPullCount') || 0)) + 1);
+            checkAchievements();
 
             let revealOverlay = document.getElementById('gacha-reveal-overlay');
             if (revealOverlay) revealOverlay.style.display = 'none';
@@ -2784,6 +2824,7 @@
             let count = parseInt(storage.get(invKey) || 0);
             let isNew = count === 0;
             storage.set(invKey, count + 1);
+            checkAchievements();
 
             if (revealCanvas) {
                 let rctx = revealCanvas.getContext('2d');
@@ -2874,6 +2915,7 @@
             playSFX('secret_unlock');
             showSecretUnlockToast();
             populateInventory();
+            checkAchievements();
         }
 
         function showSecretUnlockToast() {
@@ -2909,7 +2951,7 @@
             initAudio();
         }
 
-        function populateAlmanac() {
+        function populateEnemyAlmanac() {
             const container = document.getElementById('almanac-items');
             container.innerHTML = '';
             Object.keys(enemyDB).forEach(key => {
@@ -2921,6 +2963,39 @@
             });
         }
 
+        function populateItemsAlmanac() {
+            const container = document.getElementById('almanac-items');
+            container.innerHTML = '';
+            Object.keys(roguelikeItemDefs).forEach(key => {
+                let isUnlocked = storage.get('runitem_' + key) === 'true'; let data = roguelikeItemDefs[key];
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let iconSrc = iconDataURL(isUnlocked ? key : 'lock', 40);
+                div.innerHTML = `<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? data.name : 'Unknown Item'}</div><div class="enemy-desc">${isUnlocked ? data.desc : 'Find this item during a run to unlock its details.'}</div></div>`;
+                container.appendChild(div);
+            });
+        }
+
+        function populateAchievements() {
+            const container = document.getElementById('almanac-items');
+            container.innerHTML = '';
+            achievementDB.forEach(a => {
+                let isUnlocked = storage.get('ach_' + a.id) === 'true';
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let iconSrc = iconDataURL(isUnlocked ? 'star' : 'lock', 40);
+                div.innerHTML = `<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? a.name : '???'}</div><div class="enemy-desc">${a.desc}</div></div>`;
+                container.appendChild(div);
+            });
+        }
+
+        function switchAlmanacTab(tab) {
+            document.querySelectorAll('#almanac-modal .shop-tab').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('tab-almanac-' + tab).classList.add('active');
+            const hint = document.getElementById('almanac-tab-hint');
+            if (tab === 'enemies') { hint.innerText = 'Die to an enemy to learn its secrets.'; populateEnemyAlmanac(); }
+            else if (tab === 'items') { hint.innerText = 'Find an item during a run to learn what it does.'; populateItemsAlmanac(); }
+            else if (tab === 'achievements') { hint.innerText = 'Complete challenges to unlock achievements.'; populateAchievements(); }
+        }
+
         function toggleAlmanac() {
             // Don't allow Almanac to open on top of Settings - it has to be closed first.
             if (document.getElementById('settings-modal').style.display === 'block') return;
@@ -2928,7 +3003,7 @@
             gameState = 'paused'; }
             else if (gameState !== 'paused') { previousState = gameState;
             gameState = 'paused'; }
-            document.getElementById('almanac-modal').style.display = 'block'; populateAlmanac(); initAudio();
+            document.getElementById('almanac-modal').style.display = 'block'; switchAlmanacTab('enemies'); initAudio();
         }
 
         function toggleSettings() {
@@ -2966,6 +3041,9 @@
             fishingDialogueStep = 0;
             fishingStoryIndex = (idx + 2) % total;
             storage.set('landSlidersFishingIndex', fishingStoryIndex);
+            let seen = (parseInt(storage.get('landSlidersStorySeen')) || 0) + 2;
+            storage.set('landSlidersStorySeen', seen);
+            checkAchievements();
             showFishingDialogueStep();
             document.getElementById('fishing-dialogue').style.display = 'block';
         }
@@ -3069,6 +3147,9 @@
         document.getElementById('go-shop-btn').addEventListener('click', toggleShop);
         document.getElementById('level-continue-btn').addEventListener('click', nextLevel);
         document.getElementById('almanac-corner-btn').addEventListener('click', toggleAlmanac);
+        document.getElementById('tab-almanac-enemies').addEventListener('click', () => switchAlmanacTab('enemies'));
+        document.getElementById('tab-almanac-items').addEventListener('click', () => switchAlmanacTab('items'));
+        document.getElementById('tab-almanac-achievements').addEventListener('click', () => switchAlmanacTab('achievements'));
         document.getElementById('title-settings-btn').addEventListener('click', toggleSettings);
         document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
@@ -3482,7 +3563,7 @@
                     }
                     if (goal.active && goal.collected >= goal.required && dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius - 10) {
                         gameState = 'level_end';
-                        if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); }
+                        if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); checkAchievements(); }
                         let levelTitleEl = document.getElementById('level-title');
                         if (levelTitleEl) levelTitleEl.innerText = isSurvivalLevel ? 'You Survived!' : 'Level Complete!';
                         updateHUD(); playSFX('powerup_pickup'); document.getElementById('level-modal').style.display = 'block';
@@ -6017,8 +6098,8 @@
             setMusicDanger(false);
             updateHazardVignette(0);
             if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
+            checkAchievements();
             }
-            document.getElementById('go-level').innerText = level; document.getElementById('go-best').innerText = highestLevel;
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
             else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
             }
@@ -6029,14 +6110,38 @@
         }
 
 
+        // Generic version of the pop-in used by unlockAlmanacEntry - lets achievement unlocks
+        // reuse the same star-flanked popup with their own message instead of the hardcoded
+        // "New Enemy Entry Unlocked!" text.
+        function showUnlockPopup(text) {
+            let popup = document.getElementById('unlock-popup');
+            let textEl = document.getElementById('unlock-popup-text');
+            if (textEl) textEl.innerText = text;
+            popup.classList.remove('pop-anim');
+            requestAnimationFrame(() => requestAnimationFrame(() => popup.classList.add('pop-anim')));
+        }
+
+        // Runs every achievement's check() and unlocks (persists + pops a toast for) any that
+        // just newly passed. Called after anything that could move one of their underlying
+        // stats: enemy encounters, run-item pickups, gacha pulls/reveals, level-ups, and the
+        // secret skin unlock.
+        function checkAchievements() {
+            achievementDB.forEach(a => {
+                let key = 'ach_' + a.id;
+                if (storage.get(key) !== 'true' && a.check()) {
+                    storage.set(key, 'true');
+                    showUnlockPopup(a.name + ' unlocked!');
+                }
+            });
+        }
+
         function unlockAlmanacEntry(enemyId) {
             let key = 'almanac_' + enemyId;
             if (storage.get(key) !== 'true') {
                 storage.set(key, 'true');
-                let popup = document.getElementById('unlock-popup');
-                popup.classList.remove('pop-anim');
-                requestAnimationFrame(() => requestAnimationFrame(() => popup.classList.add('pop-anim')));
+                showUnlockPopup('New Enemy Entry Unlocked!');
             }
+            checkAchievements();
         }
 
 

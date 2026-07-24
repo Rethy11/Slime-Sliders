@@ -826,6 +826,27 @@
                     leaves.push({ x: player.worldX + (Math.random()-0.5)*22, y: player.worldY + (Math.random()-0.5)*22, vx: (Math.random()-0.5), vy: -0.6 - Math.random()*0.6, life: 1.0, color: Math.random() > 0.5 ? '#fff' : '#ffb6c1', seed: Math.random() });
                 }
             }
+            // Pure Gold: everything Midas touches stays gilded. The ground the player slides
+            // across turns to permanent gold pavement, any decoration speck the player brushes
+            // against gilds in place, and any companion slime the player bumps gilds for good.
+            // (Obstacles - trees/rocks - are handled separately at the bump-resolution point in
+            // the tree-collision check, same reasoning as the comment above this function.)
+            else if (skin === 'gold') {
+                let h = pixelToAxial(player.worldX, player.worldY);
+                let tile = hexTiles.get(hexKey(h.q, h.r));
+                if (tile && tile.type === 'land') goldenTiles.add(tile);
+                let nearDecor = getDecorationsInView(player.worldX - 40, player.worldY - 40, player.worldX + 40, player.worldY + 40);
+                for (let i = 0; i < nearDecor.length; i++) {
+                    let d = nearDecor[i];
+                    if (!d.golden && dist(player.worldX, player.worldY, d.x, d.y) < player.radius + 10) d.golden = true;
+                }
+                for (let i = 0; i < companions.length; i++) {
+                    let comp = companions[i];
+                    if (comp.colorId !== 'gold' && dist(player.worldX, player.worldY, comp.x, comp.y) < player.radius + comp.radius) {
+                        comp.colorId = 'gold';
+                    }
+                }
+            }
             // Glitch: full-map TV static/matrix takeover lives in drawSkyBackground,
             // drawHazardHoles, and the tree/rock render branches - just a rare tiny screen
             // jitter here, "signal interference" on top of everything else.
@@ -895,6 +916,7 @@
         let lavaScorchedTiles = new Set();   // Magma: ground stays charred/cracked forever
         let toxicSludgeTiles = new Set();    // Toxic Sludge: ground stays pooled with ooze forever
         let fairyBloomTiles = new Set();     // Fairy Dust: ground blooms with flowers forever
+        let goldenTiles = new Set();         // Pure Gold: ground stays gilded forever
         // Shooting stars for the Galaxy skin - each is {x,y,vx,vy,life}, spawned on a timer in
         // updateSkinWorldEffects() and drawn in world space by drawSkyBackground.
         let shootingStars = [];
@@ -1775,7 +1797,7 @@
             companions = [];
             playerTrail = [];
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear();
+            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
             syncCompanionsToStack();
             
             let scaledLevel = Math.min(20, level);
@@ -4998,6 +5020,20 @@
                     ctx.restore();
                 }
             }
+            // Pure Gold: ground the player has slid over stays gilded forever - a shining gold
+            // fill with a soft shimmering highlight sweeping across it, same clip-to-land-shape
+            // approach as the other permanent ground overlays above.
+            if (goldenTiles.size) {
+                let goldenVisible = visLand.filter(t => goldenTiles.has(t));
+                if (goldenVisible.length) {
+                    ctx.save();
+                    pathHexUnion(ctx, goldenVisible);
+                    let shimmer = 0.75 + Math.sin(Date.now()/500) * 0.15;
+                    ctx.globalAlpha = shimmer; ctx.fillStyle = '#e6b800'; ctx.fill();
+                    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(255,247,194,0.8)'; ctx.lineWidth = 2; ctx.stroke();
+                    ctx.restore();
+                }
+            }
             // Glitch: the black floor very, very rarely flickers a column of scrolling green
             // matrix-style digits into view for a single frame - re-rolled fresh every frame
             // per visible tile, so it never lingers in one place like the other skins' trails.
@@ -5052,7 +5088,10 @@
                     } else if (player.color === 'onebit') {
                         drawOnebitDecor(d, breezeX);
                     } else {
-                        ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
+                        // Pure Gold: decorations the player has brushed against stay gilded
+                        // forever - same shapes, just swapped to a gold fill/stroke.
+                        let dcolor = d.golden ? '#ffcc00' : d.color;
+                        ctx.fillStyle = dcolor; ctx.strokeStyle = dcolor; ctx.lineWidth = 2;
                         if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
                         else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
                         else { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX*5, d.y - 6, d.x + breezeX*10, d.y - 12); ctx.stroke(); }
@@ -5650,7 +5689,7 @@
             splashes = []; leaves = []; screenShake = 0; hives = [];
             runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0;
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear();
+            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
             shootingStars = []; shootingStarTimer = 0;
             updateItemsHUD();
             document.getElementById('hazard-warning').style.display = 'none';

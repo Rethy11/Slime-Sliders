@@ -277,6 +277,13 @@
         .gacha-result { font-size: 1.3rem; font-weight: bold; min-height: 30px; text-shadow: 0 2px 5px #000; pointer-events: none; text-align: center; color: #fff; }
         .gacha-result span.duplicate { color: #ffcf33; font-size: 0.9rem; display: block; margin-top: 5px; }
 
+        .promo-code-row { display: flex; justify-content: center; gap: 14px; margin: 10px 0 20px 0; }
+        .promo-digit { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+        .promo-digit-value { font-family: 'Press Start 2P', sans-serif; font-size: 1.1rem; font-weight: bold; background: rgba(255,255,255,0.15); color: #ffcf33; width: 34px; height: 34px; border-radius: 6px; display: flex; align-items: center; justify-content: center; border: 2px solid rgba(255,255,255,0.2); }
+        .promo-digit-slider { writing-mode: vertical-lr; direction: rtl; width: 22px; height: 100px; cursor: pointer; accent-color: #ffcf33; }
+        #promo-code-btn { display: block; margin: 12px auto 0 auto; font-size: 0.5rem; padding: 6px 12px; background: transparent; color: #8d99ae; border: 1px solid #8d99ae; box-shadow: none; text-transform: none; letter-spacing: 0; opacity: 0.75; }
+        #promo-code-btn:active { transform: scale(0.95); }
+
         .inventory-container { display: none; }
         .inventory-section-title { text-align: left; margin: 15px 0 10px 5px; font-size: 1.1rem; color: #ffcf33; border-bottom: 2px solid rgba(255,255,255,0.1); padding-bottom: 5px; }
         .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 350px; overflow-y: auto; padding: 5px; }
@@ -357,6 +364,34 @@
         <div id="shop-items"></div>
     </div>
 
+    <div id="promo-modal" class="modal">
+        <div class="modal-header">
+            <h2 style="color: #fff;">Promo Code</h2>
+            <button class="close-modal-btn">Close</button>
+        </div>
+        <p style="font-size: 0.65rem; color: #ccc; margin-bottom: 15px; line-height: 1.6;">Slide each digit to enter a 4-digit code.</p>
+        <div class="promo-code-row">
+            <div class="promo-digit">
+                <div class="promo-digit-value" id="promo-digit-val-0">0</div>
+                <input type="range" class="promo-digit-slider" id="promo-digit-0" min="0" max="9" step="1" value="0">
+            </div>
+            <div class="promo-digit">
+                <div class="promo-digit-value" id="promo-digit-val-1">0</div>
+                <input type="range" class="promo-digit-slider" id="promo-digit-1" min="0" max="9" step="1" value="0">
+            </div>
+            <div class="promo-digit">
+                <div class="promo-digit-value" id="promo-digit-val-2">0</div>
+                <input type="range" class="promo-digit-slider" id="promo-digit-2" min="0" max="9" step="1" value="0">
+            </div>
+            <div class="promo-digit">
+                <div class="promo-digit-value" id="promo-digit-val-3">0</div>
+                <input type="range" class="promo-digit-slider" id="promo-digit-3" min="0" max="9" step="1" value="0">
+            </div>
+        </div>
+        <button id="promo-redeem-btn" class="menu-btn" style="background: #4caf50; min-width: 0; padding: 12px 28px; font-size: 0.7rem; margin-top: 5px;">Redeem</button>
+        <p id="promo-code-msg" style="font-size: 0.65rem; min-height: 1.4em; margin-top: 15px; line-height: 1.5;"></p>
+    </div>
+
     <div id="gacha-reveal-overlay">
         <div class="reveal-visual">
             <div class="sun-rays" id="gacha-rays"></div>
@@ -396,6 +431,7 @@
             <span style="font-weight:bold;">Controls</span>
             <button id="controls-toggle" class="toggle-btn">Regular</button>
         </div>
+        <button id="leave-game-btn" class="menu-btn" style="display:none; background:#e74c3c; width:100%; margin:15px 0 0 0; min-width:0; box-sizing:border-box;">Leave Game</button>
     </div>
 
     <div id="level-modal" class="modal">
@@ -2413,6 +2449,7 @@
 
                 <div id="skins-view" class="inventory-container" style="display: none;">
                     <div class="inventory-grid" id="inv-skins"></div>
+                    <button id="promo-code-btn">Promo Codes</button>
                 </div>
 
                 <div id="hats-view" class="inventory-container" style="display: none;">
@@ -2425,6 +2462,7 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
+            document.getElementById('promo-code-btn').addEventListener('click', openPromoModal);
             // Removing a hat also counts toward a hidden 20-CONSECUTIVE-click streak that
             // unlocks the secret Corrupted Data glitch slime. The streak is reset by the
             // document-level click listener declared right below removeHatClickCount - any
@@ -2918,6 +2956,42 @@
             checkAchievements();
         }
 
+        // Promo codes redeemable from the tiny "Promo Codes" button in the Skin Shop's Skins
+        // tab. Keyed by the 4-digit code entered via the slider widget; each entry grants one
+        // inventory copy of the given skin the same way unlockSecretGlitchSkin does.
+        const promoCodes = {
+            "8424": { id: "onebit", name: "1-Bit" }
+        };
+
+        function openPromoModal() {
+            document.getElementById('promo-modal').style.display = 'block';
+            document.getElementById('promo-code-msg').innerText = '';
+            initAudio();
+        }
+
+        function redeemPromoCode() {
+            let code = [0, 1, 2, 3].map(i => document.getElementById('promo-digit-' + i).value).join('');
+            let msgEl = document.getElementById('promo-code-msg');
+            let reward = promoCodes[code];
+            if (!reward) {
+                msgEl.style.color = '#e74c3c';
+                msgEl.innerText = 'Invalid code.';
+                return;
+            }
+            let alreadyOwned = parseInt(storage.get('inv_' + reward.id) || 0) > 0;
+            if (alreadyOwned) {
+                msgEl.style.color = '#f1c40f';
+                msgEl.innerText = `You already own the ${reward.name} skin.`;
+                return;
+            }
+            storage.set('inv_' + reward.id, 1);
+            playSFX('secret_unlock');
+            msgEl.style.color = '#2ecc71';
+            msgEl.innerText = `Unlocked the ${reward.name} skin! Equip it in the Skins tab.`;
+            populateInventory();
+            checkAchievements();
+        }
+
         function showSecretUnlockToast() {
             let el = document.getElementById('secret-unlock-toast');
             if (!el) return;
@@ -3014,6 +3088,7 @@
             else if (gameState !== 'paused') { previousState = gameState;
             gameState = 'paused'; }
             document.getElementById('settings-modal').style.display = 'block'; syncSettingsUI(); initAudio();
+            document.getElementById('leave-game-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
         }
 
         function nextLevel() {
@@ -3164,6 +3239,21 @@
         document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); if (musicGainMaster) musicGainMaster.gain.value = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
+        document.getElementById('leave-game-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').style.display = 'none';
+            document.getElementById('game-over-screen').style.display = 'none';
+            document.getElementById('ui-layer').style.display = 'none';
+            document.getElementById('title-screen').style.display = 'flex';
+            document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
+            resetGame();
+            gameState = 'title';
+        });
+        document.getElementById('promo-redeem-btn').addEventListener('click', redeemPromoCode);
+        [0, 1, 2, 3].forEach(i => {
+            document.getElementById('promo-digit-' + i).addEventListener('input', e => {
+                document.getElementById('promo-digit-val-' + i).innerText = e.target.value;
+            });
+        });
         // Tap/click anywhere on the fishing-scene story box to advance it - first tap reveals
         // the second sentence, second tap closes it and hands control back to the game.
         document.getElementById('fishing-dialogue').addEventListener('click', advanceFishingDialogue);

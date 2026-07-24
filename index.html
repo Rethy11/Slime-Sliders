@@ -50,6 +50,54 @@
            equipping the skin flips the world's colors without breaking HUD readability. */
         #gameCanvas.color-inverted { filter: invert(1) hue-rotate(180deg); }
 
+        /* 1-Bit skin: a page-wide monochrome threshold filter - grayscale first, then extreme
+           contrast collapses every remaining shade toward pure black or white instead of just
+           removing hue (which is all Void's per-pixel canvas desaturation does). Applied to
+           <body> rather than #gameCanvas alone, so it reaches every sibling on the page too -
+           the HUD panels, menus, shop/gacha overlays, title screen - not just the game world. */
+        body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08); }
+
+        /* 1-Bit skin (cont.): the threshold filter above collapses lots of close-luminance
+           pairs (colored button + white text, gold bg + gray border, etc.) into the same flat
+           tone, which is what was making shop/goal/HUD/button chrome go invisible. Pure black
+           and pure white sit at the opposite extremes of that filter, so forcing a black+white
+           double edge around chrome, and white text with a black outline, guarantees at least
+           one half of every pair still reads no matter what the element's own color collapses
+           to - and the two guaranteed colors always read against each other. */
+        body.onebit-page-filter button,
+        body.onebit-page-filter .modal,
+        body.onebit-page-filter .modal-header,
+        body.onebit-page-filter .hud-panel,
+        body.onebit-page-filter #timer-container,
+        body.onebit-page-filter #powerup-indicator,
+        body.onebit-page-filter #hazard-warning,
+        body.onebit-page-filter #unlock-popup,
+        body.onebit-page-filter #item-toast,
+        body.onebit-page-filter #secret-unlock-toast,
+        body.onebit-page-filter .corner-icon,
+        body.onebit-page-filter .inv-item,
+        body.onebit-page-filter .shop-tab {
+            box-shadow: 0 0 0 2px #fff, 0 0 0 5px #000 !important;
+        }
+        body.onebit-page-filter #title-screen *,
+        body.onebit-page-filter #game-over-screen *,
+        body.onebit-page-filter .modal *,
+        body.onebit-page-filter .hud-panel,
+        body.onebit-page-filter .hud-panel *,
+        body.onebit-page-filter #item-toast,
+        body.onebit-page-filter #item-toast *,
+        body.onebit-page-filter #unlock-popup,
+        body.onebit-page-filter #secret-unlock-toast,
+        body.onebit-page-filter #secret-unlock-toast *,
+        body.onebit-page-filter #time-countdown,
+        body.onebit-page-filter button {
+            color: #ffffff !important;
+            text-shadow: 1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000, 0 0 4px #000 !important;
+        }
+        body.onebit-page-filter .icon-img {
+            filter: drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000);
+        }
+
         #secret-unlock-toast {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.7);
             z-index: 70; pointer-events: none; opacity: 0;
@@ -804,6 +852,15 @@
         }
         syncColorInvertEffect();
 
+        // 1-Bit skin: toggles the page-wide monochrome threshold filter (see the
+        // body.onebit-page-filter CSS rule) on and off body-wide, so it picks up/drops the
+        // moment the skin is equipped or unequipped, same trigger pattern as
+        // syncColorInvertEffect above.
+        function syncOneBitFilterEffect() {
+            document.body.classList.toggle('onebit-page-filter', player.color === 'onebit');
+        }
+        syncOneBitFilterEffect();
+
         let pointerScreenX = window.innerWidth / 2; 
         let pointerScreenY = window.innerHeight / 2;
         
@@ -908,7 +965,7 @@
             { id: "void", name: "The Void", preview: "radial-gradient(circle, #8a0f1a, #0a0a0a)", isAnimated: true },
             { id: "sparkle", name: "Fairy Dust", preview: "#ffb6c1", isAnimated: true },
             { id: "glitch", name: "Glitch", preview: "linear-gradient(90deg, #0ff, #f0f)", isAnimated: true },
-            { id: "neon", name: "Neon Pulse", preview: "linear-gradient(45deg, #ff00ff, #00ffff)", isAnimated: true }
+            { id: "onebit", name: "1-Bit", preview: "radial-gradient(circle, #000 0%, #000 68%, #fff 68%, #fff 82%, #000 82%)", isAnimated: true }
         ];
 
         // Secret skins are never added to the gacha loot table (see rollGachaItem) - the only
@@ -2435,6 +2492,7 @@
                 player.color = id;
                 storage.set('landSlidersSkin', id);
                 syncColorInvertEffect();
+                syncOneBitFilterEffect();
                 syncPerfOverlay();
             } else if (type === 'hat') {
                 player.hat = id;
@@ -3116,6 +3174,16 @@
             // both gradients in local (0,0)-relative space instead makes them genuinely
             // constant (same colors, same fixed sun position/radius every time), so they can be
             // created once and reused forever; only a canvas resize invalidates them.
+            // 1-Bit: the sky is a flat black fill - no gradient, no sun glow - while the white
+            // puffy clouds below are left untouched, giving a stark two-tone silhouette instead
+            // of the usual daytime blue.
+            if (player.color === 'onebit') {
+                ctx.save();
+                ctx.translate(camera.x, camera.y);
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+            } else {
             ctx.save();
             ctx.translate(camera.x, camera.y);
             if (!skyGradientCache || skyGradientCacheH !== canvas.height) {
@@ -3161,6 +3229,7 @@
             if (player.color === 'galaxy') { drawNebulaClouds(); drawDistantPlanets(); drawGalaxyStars(); drawShootingStars(); }
             else if (player.color === 'rainbow') drawRainbowArcs();
             ctx.restore();
+            }
 
             const driftSpeed = 8;
             let drift = (Date.now() / 1000) * driftSpeed;
@@ -3177,8 +3246,10 @@
             ctx.restore();
 
             // Sparse distant birds, far enough apart that they read as ambient detail.
+            // 1-Bit: stroked white instead of dark gray so they stay visible against the flat
+            // black sky rather than disappearing into it.
             ctx.save();
-            ctx.strokeStyle = 'rgba(50,55,65,0.55)';
+            ctx.strokeStyle = player.color === 'onebit' ? 'rgba(255,255,255,0.7)' : 'rgba(50,55,65,0.55)';
             ctx.lineWidth = 2;
             drawBirdLayer(drift);
             ctx.restore();
@@ -3704,6 +3775,34 @@
             }
         }
 
+        // 1-Bit: every grass/flower/leaf speck renders as a small flat glyph instead of its
+        // usual colored foliage art - a tuft of blade dashes, a plus-shaped cluster of dots for
+        // flowers, or a crisp dash-pair for leaves/vines. Color (pure black or white) comes from
+        // a stable hash of the speck's fixed world position so it stays legible against either
+        // checker tile it happens to land on, rather than flickering or vanishing on one color.
+        function drawOnebitDecor(d, breezeX) {
+            let seed = Math.abs(Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453); seed -= Math.floor(seed);
+            let col = seed > 0.5 ? '#ffffff' : '#000000';
+            ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
+            if (d.type === 0) {
+                ctx.beginPath();
+                ctx.moveTo(d.x - 3, d.y + 2); ctx.lineTo(d.x - 2 + breezeX*2, d.y - 4);
+                ctx.moveTo(d.x, d.y + 2); ctx.lineTo(d.x + breezeX*2, d.y - 5);
+                ctx.moveTo(d.x + 3, d.y + 2); ctx.lineTo(d.x + 4 + breezeX*2, d.y - 4);
+                ctx.stroke();
+            } else if (d.type === 1) {
+                ctx.beginPath();
+                ctx.arc(d.x, d.y - 6, 1.6, 0, Math.PI*2); ctx.arc(d.x - 4, d.y - 3, 1.6, 0, Math.PI*2);
+                ctx.arc(d.x + 4, d.y - 3, 1.6, 0, Math.PI*2); ctx.arc(d.x, d.y, 1.6, 0, Math.PI*2);
+                ctx.fill();
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + breezeX*5, d.y - 6);
+                ctx.moveTo(d.x + 2, d.y - 2); ctx.lineTo(d.x + 2 + breezeX*5, d.y - 8);
+                ctx.stroke();
+            }
+        }
+
         // Corrupted Data (secret skin): strips enemies, trees, rocks, and both enemy and
         // player projectiles down to their raw collision circles instead of their usual art -
         // a faint translucent fill, a stroked outline, a small center crosshair, and a short
@@ -3842,6 +3941,86 @@
             ctx.beginPath(); ctx.arc(x + radius * 0.5, y + radius * 0.1 + dripLen, radius * 0.07, 0, Math.PI * 2); ctx.fill();
             ctx.restore();
             voidGrayscaleActive = true;
+        }
+
+        // 1-Bit: every tree renders as a flat black silhouette (one of three canopy shapes,
+        // picked the same way the normal tree art picks its variant) outlined in white so it
+        // reads against both light and dark checker tiles, with a stable stipple of white dots
+        // scattered inside via the golden angle (seed-keyed, so it never reshuffles frame to
+        // frame) standing in for foliage texture the way dithered pixel-art trees do it in two
+        // colors instead of a gradient.
+        function drawOnebitTree(x, y, radius, variant, seed) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#000000';
+            ctx.fillRect(x - radius * 0.12, y - radius * 0.1, radius * 0.24, radius * 0.85);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
+            ctx.strokeRect(x - radius * 0.12, y - radius * 0.1, radius * 0.24, radius * 0.85);
+            ctx.beginPath();
+            if (variant === 1) {
+                ctx.arc(x, y - radius * 0.55, radius * 0.85, 0, Math.PI * 2);
+            } else if (variant === 2) {
+                ctx.moveTo(x, y - radius * 1.5); ctx.lineTo(x + radius * 0.55, y - radius * 0.55); ctx.lineTo(x + radius * 0.3, y - radius * 0.55);
+                ctx.lineTo(x + radius * 0.75, y + radius * 0.1); ctx.lineTo(x - radius * 0.75, y + radius * 0.1);
+                ctx.lineTo(x - radius * 0.3, y - radius * 0.55); ctx.lineTo(x - radius * 0.55, y - radius * 0.55); ctx.closePath();
+            } else {
+                ctx.moveTo(x, y - radius * 1.4); ctx.lineTo(x + radius * 0.9, y + radius * 0.15); ctx.lineTo(x - radius * 0.9, y + radius * 0.15); ctx.closePath();
+            }
+            ctx.fillStyle = '#000000'; ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
+            ctx.save(); ctx.clip();
+            for (let i = 0; i < 16; i++) {
+                let a = (seed * 7 + i * 2.399963) % (Math.PI * 2); // golden-angle scatter - stable per tree, no per-frame flicker
+                let rr = radius * 0.8 * Math.sqrt((i * 0.6180339887) % 1);
+                let px = x + Math.cos(a) * rr, py = (y - radius * 0.5) + Math.sin(a) * rr * 0.85;
+                ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, py - 1, 2, 2);
+            }
+            ctx.restore();
+            ctx.restore();
+        }
+
+        // 1-Bit: every rock renders as a small monochrome house instead of theme rock art -
+        // three flat black/white cottage silhouettes (picked the same way rocks already pick a
+        // shape variant), each with a hash-picked window count/door so a cluster of houses
+        // doesn't look identically stamped.
+        function drawOnebitHouse(x, y, radius, variant, seed) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.85, radius * 1.05, radius * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+            let hash = Math.abs(Math.sin(seed * 12.9898) * 43758.5453); hash -= Math.floor(hash);
+            let w = radius * 1.7, h = radius * 1.35;
+            let baseY = y + radius * 0.72, topY = baseY - h;
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(x - w / 2, topY + h * 0.35, w, h * 0.65);
+            ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.5;
+            ctx.strokeRect(x - w / 2, topY + h * 0.35, w, h * 0.65);
+            ctx.beginPath();
+            if (variant === 1) {
+                ctx.moveTo(x - w * 0.6, topY + h * 0.4); ctx.lineTo(x - w * 0.25, topY); ctx.lineTo(x, topY + h * 0.12);
+                ctx.lineTo(x + w * 0.25, topY); ctx.lineTo(x + w * 0.6, topY + h * 0.4); ctx.closePath();
+            } else if (variant === 2) {
+                ctx.moveTo(x - w * 0.62, topY + h * 0.4); ctx.lineTo(x, topY - h * 0.15); ctx.lineTo(x + w * 0.62, topY + h * 0.4); ctx.closePath();
+            } else {
+                ctx.moveTo(x - w * 0.65, topY + h * 0.4); ctx.lineTo(x, topY - h * 0.05); ctx.lineTo(x + w * 0.65, topY + h * 0.4); ctx.closePath();
+            }
+            ctx.fillStyle = '#000000'; ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
+            let doorW = w * 0.22, doorH = h * 0.4;
+            ctx.fillStyle = '#000000'; ctx.fillRect(x - doorW / 2, baseY - doorH, doorW, doorH);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x - doorW / 2, baseY - doorH, doorW, doorH);
+            let winCount = 2 + Math.floor(hash * 2);
+            for (let wi = 0; wi < winCount; wi++) {
+                let wx = x - w * 0.32 + wi * (w * 0.64 / Math.max(1, winCount - 1));
+                if (Math.abs(wx - x) < doorW * 0.7) continue; // skip windows that would overlap the door
+                let wy = topY + h * 0.5;
+                ctx.fillStyle = '#000000'; ctx.fillRect(wx - 4, wy, 8, 8);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(wx - 4, wy, 8, 8);
+                ctx.beginPath(); ctx.moveTo(wx - 4, wy + 4); ctx.lineTo(wx + 4, wy + 4); ctx.moveTo(wx, wy); ctx.lineTo(wx, wy + 8); ctx.stroke();
+            }
+            if (variant === 2) {
+                ctx.fillStyle = '#000000'; ctx.fillRect(x + w * 0.28, topY - h * 0.08, w * 0.09, h * 0.26);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x + w * 0.28, topY - h * 0.08, w * 0.09, h * 0.26);
+            }
+            ctx.restore();
         }
 
         // Galaxy: every tree renders as a bioluminescent alien plant instead of its usual
@@ -3985,6 +4164,38 @@
         // getActiveHazardTheme() result on every single tile.
         function drawHazardTexture(cx, cy, span, hz) {
             ctx.save();
+            // 1-Bit water: staggered rows of short white dashes over the solid black base,
+            // wobbling per-row - the classic dithered ripple-line convention used for water in
+            // Game Boy and early Mac era monochrome tiles, instead of the game's usual bubble/
+            // arc texture (which reused as-is would just read as circle outlines, not water).
+            // Small blinking "+" glints are scattered on top for the sunlight-on-water sparkle
+            // that same era of tile art leaned on to sell "water" in only two colors.
+            if (player.color === 'onebit' && hz.type === 'water') {
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
+                let rowH = 10;
+                ctx.beginPath();
+                for (let y = cy - span; y < cy + span; y += rowH) {
+                    let rowIndex = Math.round((y - cy) / rowH);
+                    let phase = (Date.now()/500) + rowIndex * 0.6;
+                    let stagger = (rowIndex % 2 === 0) ? 0 : 6;
+                    for (let x = cx - span + stagger; x < cx + span; x += 12) {
+                        let wobble = Math.sin(x*0.05 + phase) * 1.5;
+                        ctx.moveTo(x, y + wobble); ctx.lineTo(x + 6, y + wobble);
+                    }
+                }
+                ctx.stroke();
+                ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 1;
+                for (let x = cx - span; x < cx + span; x += 40) {
+                    for (let y = cy - span; y < cy + span; y += 40) {
+                        let seed = Math.abs(Math.sin(x*0.13 + y*0.071) * 43758.5453); seed -= Math.floor(seed);
+                        if (seed > 0.15) continue; // sparse - only a few glints per tile
+                        if (Math.sin(Date.now()/300 + x + y) <= 0.6) continue; // blink on/off
+                        ctx.fillRect(x - 3, y, 7, 1); ctx.fillRect(x, y - 3, 1, 7);
+                    }
+                }
+                ctx.restore();
+                return;
+            }
             ctx.strokeStyle = hz.edge; ctx.fillStyle = hz.edge;
             if (hz.type === 'water') { ctx.globalAlpha = 0.3; ctx.lineWidth = 3; }
             else if (hz.type === 'lava') { ctx.globalAlpha = 0.4; }
@@ -4019,6 +4230,11 @@
             // Corrupted Data: hazard pockets turn hot pink instead of the theme's usual water/
             // lava/ice - keeps the usual drawHazardTexture pattern on top, just recolored.
             if (player.color === 'corrupted') return { type: currentTheme.hazard.type, color: '#ff1493', edge: '#ff8fd1' };
+            // 1-Bit: hazard pockets turn solid black with a white edge - water gets its own
+            // dedicated ripple/sparkle pattern below (drawHazardTexture), while lava/ice just
+            // inherit their existing per-type pattern, which already reads cleanly in mono
+            // now that hz.edge (the pattern color) is pure white instead of a themed hue.
+            if (player.color === 'onebit') return { type: currentTheme.hazard.type, color: '#000000', edge: '#ffffff' };
             return currentTheme.hazard;
         }
 
@@ -4089,7 +4305,7 @@
             else if (colorId === 'void') { fillColor = '#050505'; drawSpecial = 'void'; }
             else if (colorId === 'sparkle') { fillColor = '#ffb6c1'; drawSpecial = 'sparkle'; }
             else if (colorId === 'glitch') { fillColor = Math.random() > 0.8 ? '#0ff' : (Math.random() > 0.5 ? '#f0f' : '#fff'); drawSpecial = 'glitch'; }
-            else if (colorId === 'neon') { fillColor = `hsl(${(t / 2) % 360}, 100%, 70%)`; drawSpecial = 'neon'; }
+            else if (colorId === 'onebit') { fillColor = '#000000'; drawSpecial = 'onebit'; }
             // Secret skin: dark corrupted-video-signal palette (near-black/toxic-green/error-red),
             // deliberately distinct from the cyan/magenta/white 'glitch' rare skin above.
             else if (colorId === 'corrupted') { fillColor = Math.random() > 0.9 ? '#ff003c' : (Math.random() > 0.5 ? '#001a00' : '#0d0d0d'); drawSpecial = 'corrupted'; }
@@ -4098,17 +4314,16 @@
             let r = radius;
 
             // Soft outer glow behind especially flashy rare skins
-            if (drawSpecial === 'neon' || drawSpecial === 'void' || drawSpecial === 'toxic' || drawSpecial === 'corrupted') {
+            if (drawSpecial === 'void' || drawSpecial === 'toxic' || drawSpecial === 'corrupted') {
                 c.save();
-                let glowColor = drawSpecial === 'neon' ? fillColor : (drawSpecial === 'toxic' ? '#39ff14' : (drawSpecial === 'corrupted' ? '#ff003c' : '#8e44ad'));
+                let glowColor = drawSpecial === 'toxic' ? '#39ff14' : (drawSpecial === 'corrupted' ? '#ff003c' : '#8e44ad');
                 c.globalAlpha = 0.22 + Math.sin(t/200)*0.08;
                 c.fillStyle = glowColor;
                 c.beginPath(); c.arc(0, 0, r * 1.35, 0, Math.PI*2); c.fill();
                 c.restore();
             }
-            
             // Draw Main Slime Body
-            c.globalAlpha = 0.85; c.fillStyle = fillColor; c.beginPath(); c.moveTo(-r, r * 0.5);
+            c.globalAlpha = (drawSpecial === 'onebit') ? 1.0 : 0.85; c.fillStyle = fillColor; c.beginPath(); c.moveTo(-r, r * 0.5);
             c.bezierCurveTo(-r * 1.05, -r * 0.2, -r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, leanX, -r + leanY);
             c.bezierCurveTo(r * 0.7 + leanX * 0.6, -r * 0.95 + leanY * 0.6, r * 1.05, -r * 0.2, r, r * 0.5);
             c.bezierCurveTo(r, r * 1.05, r * 0.55, r * 1.15, 0, r * 1.15);
@@ -4161,6 +4376,19 @@
                     c.fillRect(-r * 1.2 + offset, sliceY, r * 2.4, sliceH);
                 }
                 c.restore();
+            } else if (drawSpecial === 'onebit') {
+                // Flat black body (already filled above) with a bold white outline traced
+                // around the same silhouette - the classic clean 1-bit sprite look, and one
+                // that (unlike the previous busy checkerboard fill) stays legible at gameplay
+                // size and guarantees a visible edge against any background under the filter.
+                c.save();
+                c.lineJoin = 'round'; c.lineWidth = Math.max(2.5, r * 0.14); c.strokeStyle = '#ffffff';
+                c.beginPath(); c.moveTo(-r, r * 0.5);
+                c.bezierCurveTo(-r * 1.05, -r * 0.2, -r * 0.7, -r * 0.95, 0, -r);
+                c.bezierCurveTo(r * 0.7, -r * 0.95, r * 1.05, -r * 0.2, r, r * 0.5);
+                c.bezierCurveTo(r, r * 1.05, r * 0.55, r * 1.15, 0, r * 1.15);
+                c.bezierCurveTo(-r * 0.55, r * 1.15, -r, r * 1.05, -r, r * 0.5); c.closePath(); c.stroke();
+                c.restore();
             } else if (drawSpecial === 'rainbow') {
                 c.globalAlpha = 0.3; c.fillStyle = '#fff';
                 c.beginPath(); c.ellipse(0, 0, r*0.9, r*0.3, Math.sin(t/400)*0.5, 0, Math.PI*2); c.fill(); c.globalAlpha = 1;
@@ -4182,6 +4410,13 @@
             if (gaspAmount < 0.15) { c.beginPath(); c.arc(mouthX, mouthY - 2*(radius/22), 5*(radius/22), 0.15 * Math.PI, 0.85 * Math.PI); c.stroke(); } 
             else { let mw = (3 + gaspAmount * 6)*(radius/22); let mh = (2 + gaspAmount * 9)*(radius/22); c.fillStyle = '#7a2035'; c.beginPath(); c.ellipse(mouthX, mouthY, mw, mh, 0, 0, Math.PI*2); c.fill(); }
             
+            if (colorId === 'onebit') {
+                c.save(); c.strokeStyle = '#ffffff'; c.lineWidth = 1.5 * (radius/22);
+                c.beginPath(); c.arc(-8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.stroke();
+                c.beginPath(); c.arc(8*(radius/22) + eyeOffsetX, -6*(radius/22) + eyeOffsetY, 4*(radius/22), 0, Math.PI*2); c.stroke();
+                c.restore();
+            }
+
             // Draw Hat Accessories (detailed with shading/gradients/trim)
             if (hatId) {
                 c.translate(leanX * 0.3, -r * 0.9 + leanY * 0.3); // Move to top of head and factor jiggle
@@ -4334,7 +4569,7 @@
             // honeycomb cell borders) then filled with the ground color and used as a clip so
             // grid-dust and decorations stay confined to land tiles - mirrors the old single
             // fill/stroke/clip-per-frame approach, just with hexagons standing in for circles.
-            ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = currentTheme.hazard.edge;
+            ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = player.color === 'onebit' ? '#ffffff' : currentTheme.hazard.edge;
             pathHexUnion(ctx, visLand); ctx.stroke();
             ctx.fillStyle = currentTheme.bg; ctx.fill(); ctx.clip();
             // Glitch: while equipped, the entire visible floor renders solid black - overrides
@@ -4343,6 +4578,23 @@
             // Corrupted Data: while equipped, the entire visible floor renders blank white -
             // same override pattern as Glitch above, same clip already active.
             if (player.color === 'corrupted') { ctx.fillStyle = '#ffffff'; ctx.fill(); }
+            // 1-Bit: the floor becomes a hard black/white checkerboard, one flat color per hex
+            // (alternating by axial coordinate) rather than a fine dither pattern redrawn across
+            // the whole visible floor every frame - cheap (one fill per hex, same cost as the
+            // plain ground fill it replaces) and reads immediately as classic 1-bit tiling.
+            if (player.color === 'onebit') {
+                ctx.save();
+                for (let li = 0; li < visLand.length; li++) {
+                    let lt = visLand[li];
+                    let dark = ((((lt.q + lt.r) % 2) + 2) % 2) === 0;
+                    ctx.fillStyle = dark ? '#000000' : '#ffffff';
+                    let c = cachedHexCorners(lt);
+                    ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y);
+                    for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y);
+                    ctx.closePath(); ctx.fill();
+                }
+                ctx.restore();
+            }
             // Galaxy: while equipped, the floor becomes cratered lunar regolith - a pale grey
             // base with a scatter of shaded craters (each with a soft rim highlight) and a
             // fine dust speckle. Craters/speckle come from a stable per-tile hash (same trick
@@ -4504,6 +4756,8 @@
                         drawGlitchPopupDecor(d, breezeX);
                     } else if (player.color === 'void') {
                         drawVoidDecor(d, breezeX);
+                    } else if (player.color === 'onebit') {
+                        drawOnebitDecor(d, breezeX);
                     } else {
                         ctx.fillStyle = d.color; ctx.strokeStyle = d.color; ctx.lineWidth = 2;
                         if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
@@ -4513,21 +4767,6 @@
                 }
             }
             ctx.restore(); 
-
-            // Neon Pulse skin: a glowing trail follows the player, reusing the same
-            // playerTrail history the roguelite companion slimes already track (SECTION 6).
-            if (player.color === 'neon' && playerTrail.length > 1) {
-                ctx.save();
-                let neonHue = (Date.now() / 4) % 360;
-                ctx.strokeStyle = `hsl(${neonHue}, 100%, 60%)`;
-                ctx.shadowColor = `hsl(${neonHue}, 100%, 60%)`; ctx.shadowBlur = 14;
-                ctx.lineWidth = 4; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.globalAlpha = 0.55;
-                let trailSteps = Math.min(50, playerTrail.length);
-                ctx.beginPath(); ctx.moveTo(playerTrail[0].x, playerTrail[0].y);
-                for (let i = 1; i < trailSteps; i++) ctx.lineTo(playerTrail[i].x, playerTrail[i].y);
-                ctx.stroke();
-                ctx.restore();
-            }
 
             rqCount = 0;
             // PERF: was a full trees.length scan checking isOnScreen on every tree every frame
@@ -4576,6 +4815,20 @@
                         ctx.fillText('occurred at SLIME.EXE', 0, goal.radius*0.22);
                     }
                     ctx.restore();
+                } else if (player.color === 'onebit') {
+                    // 1-Bit: flat black/white goal marker with a hard-swapped fill (white when
+                    // locked, black when unlocked) and the opposite color always used for the
+                    // ring/text, so there's a guaranteed high-contrast edge no matter which way
+                    // the monochrome filter would otherwise have collapsed the gold/gray palette.
+                    let ink = isLocked ? '#000000' : '#ffffff', paper = isLocked ? '#ffffff' : '#000000';
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = 'rgba(0,0,0,0.001)'; ctx.fill();
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius, 0, Math.PI*2); ctx.fillStyle = paper; ctx.fill();
+                    ctx.lineWidth = 4; ctx.strokeStyle = ink; ctx.stroke();
+                    ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.7, 0, Math.PI*2); ctx.fillStyle = paper; ctx.fill();
+                    ctx.lineWidth = 2; ctx.strokeStyle = ink; ctx.stroke();
+                    ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    if (isLocked) { ctx.font = 'bold 14px monospace'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 0); }
+                    else { ctx.font = 'bold 20px monospace'; ctx.fillText('GOAL', 0, 0); }
                 } else {
                     ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = isLocked ? 'rgba(136, 136, 136, 0.2)' : 'rgba(255, 207, 51, 0.3)'; ctx.fill();
                     ctx.beginPath(); ctx.arc(0, 0, goal.radius, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#555' : '#ffcf33'; ctx.fill();
@@ -4608,6 +4861,9 @@
                     // the player's own gravity, all the time (not just ones the player's
                     // bumped).
                     if (player.color === 'void') { drawVoidTentacle(t.x, t.y, t.radius, t.seed || 0); return; }
+                    // 1-Bit: every tree renders as a flat black/white silhouette instead of its
+                    // usual foliage, all the time.
+                    if (player.color === 'onebit') { drawOnebitTree(t.x, t.y, t.radius, t.variant || 0, t.seed || 0); return; }
                     let variant = t.variant || 0; let sway = (currentTheme.name === 'Desert' ? 0 : Math.sin(Date.now()/1400 + (t.seed||0)) * 0.05) + breezeX;
                     if (t.type === 'tree' && currentTheme.name !== 'Desert' && currentTheme.name !== 'Snow') {
                         if (Math.abs(player.vx) + Math.abs(player.vy) > 12 && Math.random() < 0.06 && dist(player.worldX, player.worldY, t.x, t.y) < 600) {
@@ -4697,6 +4953,9 @@
                     // usual theme art, all the time - kept in full color while the rest of
                     // the map desaturates (see drawFleshRock).
                     if (player.color === 'void') { drawFleshRock(r.x, r.y, r.radius); return; }
+                    // 1-Bit: every rock renders as a small monochrome house instead of theme
+                    // rock art, all the time.
+                    if (player.color === 'onebit') { drawOnebitHouse(r.x, r.y, r.radius, r.variant || 0, r.seed || 0); return; }
                     let variant = r.variant || 0;
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(r.x, r.y + r.radius*0.18, r.radius*1.05, r.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (r.golden) {
@@ -4763,15 +5022,41 @@
                 else if (item.type === 'powerup') {
                     let p = item.obj; let pu = powerupTypesById.get(p.typeId); let bob = Math.sin(Date.now()/260 + (p.spawnSeed||0)) * 6; let spin = (Date.now()/450) % (Math.PI*2);
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(p.x, p.y + p.radius*0.9, p.radius*0.9, p.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
-                    ctx.save(); ctx.globalAlpha = 0.2 + 0.15*Math.sin(Date.now()/250); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.radius*1.7, 0, Math.PI*2); ctx.fill(); ctx.restore();
-                    ctx.save(); ctx.translate(p.x, p.y + bob); ctx.rotate(spin); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
-                    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); ctx.rotate(-spin); drawPixelIcon(pu.id, ctx, 0, 1, p.radius*1.3); ctx.restore();
+                    if (player.color === 'onebit') {
+                        // 1-Bit: flat black disc with a thick white ring and white icon glyph -
+                        // pu.color varies per powerup type and was collapsing to the same tone
+                        // as its own white ring under the monochrome filter, hiding the pickup.
+                        ctx.save(); ctx.globalAlpha = 0.35 + 0.15*Math.sin(Date.now()/250); ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.radius*1.7, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                        ctx.save(); ctx.translate(p.x, p.y + bob); ctx.rotate(spin); ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.stroke(); ctx.rotate(-spin); drawPixelIcon(pu.id, ctx, 0, 1, p.radius*1.3); ctx.restore();
+                    } else {
+                        ctx.save(); ctx.globalAlpha = 0.2 + 0.15*Math.sin(Date.now()/250); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(p.x, p.y + bob, p.radius*1.7, 0, Math.PI*2); ctx.fill(); ctx.restore();
+                        ctx.save(); ctx.translate(p.x, p.y + bob); ctx.rotate(spin); ctx.fillStyle = pu.color; ctx.beginPath(); ctx.arc(0, 0, p.radius, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); ctx.rotate(-spin); drawPixelIcon(pu.id, ctx, 0, 1, p.radius*1.3); ctx.restore();
+                    }
                 }
                 else if (item.type === 'chest') {
                     let c = item.obj;
-                    if (!c.collected) { ctx.save(); ctx.globalAlpha = 0.15 + 0.1*Math.sin(Date.now()/400); ctx.fillStyle = '#ffd700'; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius*1.8, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+                    if (!c.collected) { ctx.save(); ctx.globalAlpha = 0.15 + 0.1*Math.sin(Date.now()/400); ctx.fillStyle = player.color === 'onebit' ? '#ffffff' : '#ffd700'; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius*1.8, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
                     ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(c.x, c.y + c.radius, c.radius, c.radius*0.5, 0, 0, Math.PI*2); ctx.fill();
-                    if (player.color === 'rainbow' && !c.collected) {
+                    if (player.color === 'onebit') {
+                        // 1-Bit chest: flat black/white box with a banded lid and a solid lock
+                        // instead of the usual brown wood palette - open state swaps which half
+                        // is black vs white so it still reads clearly against either.
+                        if (!c.collected) {
+                            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.fill();
+                            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.stroke();
+                            ctx.fillStyle = '#ffffff'; ctx.fillRect(c.x - c.radius, c.y, c.radius*2, 4);
+                            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(c.x, c.y + 2, 4, 0, Math.PI*2); ctx.fill();
+                            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.stroke();
+                        } else {
+                            ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*1.5, c.radius*2, c.radius, 5); ctx.fill();
+                            ctx.strokeStyle = '#000000'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*1.5, c.radius*2, c.radius, 5); ctx.stroke();
+                            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.fill();
+                            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.stroke();
+                            ctx.fillStyle = '#ffffff'; ctx.fillRect(c.x - c.radius + 3, c.y - c.radius*0.5 + 3, c.radius*2 - 6, c.radius*1.5 - 10);
+                        }
+                    } else if (player.color === 'rainbow' && !c.collected) {
                         // Rainbow skin: the chest becomes a pot of gold with a little rainbow
                         // arcing right down onto it.
                         const potBands = ['#ff3b3b', '#ff9f1c', '#ffe135', '#4caf50', '#3399ff', '#8e44ad'];
@@ -4971,6 +5256,10 @@
                         ctx.moveTo(19, 0); ctx.lineTo(-9, -9); ctx.lineTo(-4, -3); ctx.lineTo(-15, -3);
                         ctx.lineTo(-15, 3); ctx.lineTo(-4, 3); ctx.lineTo(-9, 9); ctx.closePath();
                         ctx.fill(); ctx.stroke();
+                    } else if (player.color === 'onebit') {
+                        ctx.fillStyle = '#000000'; ctx.strokeStyle = '#ffffff';
+                        ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 15); ctx.lineTo(-5, 0); ctx.lineTo(-15, -15); ctx.closePath(); ctx.fill(); ctx.stroke();
                     } else {
                         ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#ffcf33'; ctx.strokeStyle = goal.collected < goal.required ? '#666666' : '#d4a017';
                         ctx.lineWidth = 3;

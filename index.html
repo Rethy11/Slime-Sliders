@@ -4164,13 +4164,15 @@
         // getActiveHazardTheme() result on every single tile.
         function drawHazardTexture(cx, cy, span, hz) {
             ctx.save();
-            // 1-Bit water: staggered rows of short white dashes over the solid black base,
-            // wobbling per-row - the classic dithered ripple-line convention used for water in
-            // Game Boy and early Mac era monochrome tiles, instead of the game's usual bubble/
-            // arc texture (which reused as-is would just read as circle outlines, not water).
+            // 1-Bit: staggered rows of short white dashes over the solid black base, wobbling
+            // per-row - the classic dithered ripple-line convention used for water in Game Boy
+            // and early Mac era monochrome tiles, instead of the game's usual bubble/arc/line
+            // texture (which reused as-is would just read as themed outlines, not a unified
+            // 1-Bit look). Applied to every hazard type (water/lava/ice) so the whole skin
+            // reads as one consistent monochrome pattern rather than water alone changing.
             // Small blinking "+" glints are scattered on top for the sunlight-on-water sparkle
             // that same era of tile art leaned on to sell "water" in only two colors.
-            if (player.color === 'onebit' && hz.type === 'water') {
+            if (player.color === 'onebit') {
                 ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.globalAlpha = 0.9;
                 let rowH = 10;
                 ctx.beginPath();
@@ -4230,10 +4232,10 @@
             // Corrupted Data: hazard pockets turn hot pink instead of the theme's usual water/
             // lava/ice - keeps the usual drawHazardTexture pattern on top, just recolored.
             if (player.color === 'corrupted') return { type: currentTheme.hazard.type, color: '#ff1493', edge: '#ff8fd1' };
-            // 1-Bit: hazard pockets turn solid black with a white edge - water gets its own
-            // dedicated ripple/sparkle pattern below (drawHazardTexture), while lava/ice just
-            // inherit their existing per-type pattern, which already reads cleanly in mono
-            // now that hz.edge (the pattern color) is pure white instead of a themed hue.
+            // 1-Bit: hazard pockets turn solid black with a white edge - every hazard type
+            // (water/lava/ice) shares the same dedicated ripple/sparkle pattern below
+            // (drawHazardTexture) instead of its usual themed bubble/arc/line texture, so the
+            // whole skin reads as one consistent monochrome look rather than only water changing.
             if (player.color === 'onebit') return { type: currentTheme.hazard.type, color: '#000000', edge: '#ffffff' };
             return currentTheme.hazard;
         }

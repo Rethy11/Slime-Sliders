@@ -5852,7 +5852,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Generate the first level immediately so it's fully ready the moment the player taps
+        // Generate the  first level immediately so it's fully ready the moment the player taps
         // Play, instead of building it inside the click handler where any delay is felt as
         // input lag. gameState is still 'title' at this point and update() only advances real
         // gameplay logic (timer, enemies, spawns, etc.) once gameState === 'playing', so the

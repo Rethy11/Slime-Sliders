@@ -5743,6 +5743,7 @@
             if (isSurvivalLevel && enemyTelegraphs.length) {
                 ctx.save();
                 let blinkT = Date.now();
+                let isOnebit = player.color === 'onebit';
                 for (let i = 0; i < enemyTelegraphs.length; i++) {
                     let tg = enemyTelegraphs[i];
                     let tx = tg.x + tiltX, ty = tg.y + tiltY;
@@ -5750,10 +5751,14 @@
                     let blinkPhase = 0.5 + 0.5 * Math.sin(blinkT / 90);
                     let progress = 1 - Math.max(0, tg.timer) / tg.duration;
                     ctx.globalAlpha = 0.3 + 0.4 * blinkPhase;
-                    ctx.fillStyle = '#ff1e3c';
+                    // 1-Bit skin: the page-wide grayscale/contrast filter (see .onebit-page-filter)
+                    // crushes a translucent red down to roughly the same shade as a black tile, so
+                    // the warning circle disappears exactly when it matters most. White fill with
+                    // a black outline stays legible against either a black or white tile.
+                    ctx.fillStyle = isOnebit ? '#ffffff' : '#ff1e3c';
                     ctx.beginPath(); ctx.arc(tx, ty, tg.radius * (0.55 + progress * 0.45), 0, Math.PI * 2); ctx.fill();
                     ctx.globalAlpha = 0.85;
-                    ctx.lineWidth = 3; ctx.strokeStyle = '#ff0000';
+                    ctx.lineWidth = 3; ctx.strokeStyle = isOnebit ? '#000000' : '#ff0000';
                     ctx.beginPath(); ctx.arc(tx, ty, tg.radius, 0, Math.PI * 2); ctx.stroke();
                 }
                 ctx.restore();

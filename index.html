@@ -342,8 +342,9 @@
     <div id="title-screen">
         <h1>SLIME SLIDERS</h1>
         <p>Swipe to move. Collect coins to unlock the Goal!</p>
+        <p id="title-best-level" style="margin-top: -20px; margin-bottom: 25px; font-size: 0.65rem; color: #ffcf33;">Best: Level 1</p>
         <button id="play-btn" class="menu-btn" style="background: var(--accent)">Play</button>
-        <button id="title-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
+        <button id="title-gamemode-btn" class="menu-btn" style="background: #47a8ff;">Mode: Classic</button>
         <button id="title-settings-btn" class="menu-btn" style="background: #6c7a89;">Settings</button>
     </div>
 
@@ -846,6 +847,15 @@
         let score = 0;
         let totalCoins = parseInt(storage.get('landSlidersCoins')) || 0;
         let highestLevel = parseInt(storage.get('landSlidersBestLevel')) || 1;
+
+        // ---- Game Mode: Classic vs Endless Waves ----
+        // Classic is the normal procedural map mode (with its rare random Survival levels).
+        // Endless Waves replaces every single level with a Survival arena, back to back, and
+        // keeps its own separate "best level reached" record so grinding Endless progress never
+        // overwrites (or gets overwritten by) the player's Classic best. Persisted so the choice
+        // sticks between sessions, same convention as every other storage.get default below.
+        let gameMode = storage.get('landSlidersGameMode') || 'classic';
+        let bestEndlessLevel = parseInt(storage.get('landSlidersBestEndlessLevel')) || 1;
         
         let timeLeft = 30;
         let MAX_TIME = 30;
@@ -1080,7 +1090,13 @@
             // transient per-level state, so triggerGameOver() sets 'ach_sometimes_in_life'
             // directly instead of this check ever running. check() always returns false so
             // checkAchievements() never double-unlocks it once storage already has it.
-            { id: 'sometimes_in_life', name: 'Sometimes in Life', desc: 'Die in an unavoidable way.', check: () => false }
+            { id: 'sometimes_in_life', name: 'Sometimes in Life', desc: 'Die in an unavoidable way.', check: () => false },
+            // Endless Waves mode has its own best-level record (bestEndlessLevel), kept entirely
+            // separate from Classic's highestLevel above, so these can't be earned by Classic
+            // play and vice versa.
+            { id: 'endless_level3',  name: 'Wave Rider',         desc: 'Reach Level 3 in Endless Waves.',             check: () => bestEndlessLevel >= 3 },
+            { id: 'endless_level6',  name: 'Wave Breaker',       desc: 'Reach Level 6 in Endless Waves.',             check: () => bestEndlessLevel >= 6 },
+            { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             check: () => bestEndlessLevel >= 9 }
         ];
         
         let goal = { x: 0, y: 0, radius: 45, active: true, required: 5, collected: 0 };
@@ -2018,7 +2034,9 @@
             // twice in a row). If it hits, hand off to its own dedicated generator entirely -
             // it builds a simpler fixed arena instead of the usual procedural blob-chain map.
             enemyTelegraphs = [];
-            isSurvivalLevel = level > 1 && !lastLevelWasSurvival && Math.random() < SURVIVAL_LEVEL_CHANCE;
+            // Endless Waves: every level (including level 1) is a Survival arena, no rolling.
+            // Classic keeps the original rare-random-Survival-level behavior untouched.
+            isSurvivalLevel = (gameMode === 'endless') || (level > 1 && !lastLevelWasSurvival && Math.random() < SURVIVAL_LEVEL_CHANCE);
             if (isSurvivalLevel) { generateSurvivalLevel(); return; }
             lastLevelWasSurvival = false;
 
@@ -3129,6 +3147,33 @@
             populateInventory();
         }
 
+        // Flips between Classic and Endless Waves from the main menu, persists the choice, and
+        // refreshes the button label / best-level readout to match. Only callable from the title
+        // screen (the button only exists there), so there's no mid-run state to worry about.
+        function toggleGameMode() {
+            gameMode = (gameMode === 'classic') ? 'endless' : 'classic';
+            storage.set('landSlidersGameMode', gameMode);
+            playSFX('click');
+            updateGameModeButton();
+            // Level 1 may already have been pre-built for the mode this session started in (see
+            // levelPreGenerated at the bottom of this script) - invalidate that so startGame()
+            // builds a fresh level 1 matching whichever mode is actually selected when Play is
+            // tapped, instead of silently reusing a level built for the other mode.
+            levelPreGenerated = false;
+        }
+
+        function updateGameModeButton() {
+            let btn = document.getElementById('title-gamemode-btn');
+            let bestEl = document.getElementById('title-best-level');
+            if (gameMode === 'endless') {
+                if (btn) btn.innerText = 'Mode: Endless Waves';
+                if (bestEl) bestEl.innerText = 'Best: Level ' + bestEndlessLevel;
+            } else {
+                if (btn) btn.innerText = 'Mode: Classic';
+                if (bestEl) bestEl.innerText = 'Best: Level ' + highestLevel;
+            }
+        }
+
         function toggleShop() {
             if (gameState === 'playing') { previousState = gameState;
             gameState = 'paused'; }
@@ -3203,6 +3248,18 @@
             gameState = 'paused'; }
             document.getElementById('settings-modal').style.display = 'block'; syncSettingsUI(); initAudio();
             document.getElementById('leave-game-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
+        }
+
+        // Records a newly-reached level against whichever mode is currently active, persisting
+        // to that mode's own best-level slot so Classic and Endless Waves never clobber each
+        // other's progress. Called both on level-complete (mid-run) and on game-over (final
+        // level reached), matching the two places the old single-mode highestLevel check ran.
+        function recordLevelReached() {
+            if (gameMode === 'endless') {
+                if (level > bestEndlessLevel) { bestEndlessLevel = level; storage.set('landSlidersBestEndlessLevel', bestEndlessLevel); checkAchievements(); }
+            } else {
+                if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); checkAchievements(); }
+            }
         }
 
         function nextLevel() {
@@ -3332,7 +3389,8 @@
 
         // Setup Event Listeners
         document.getElementById('play-btn').addEventListener('click', () => { startGame(); });
-        document.getElementById('title-shop-btn').addEventListener('click', toggleShop);
+        document.getElementById('title-gamemode-btn').addEventListener('click', toggleGameMode);
+        updateGameModeButton();
         document.getElementById('go-shop-btn').addEventListener('click', toggleShop);
         document.getElementById('level-continue-btn').addEventListener('click', nextLevel);
         document.getElementById('almanac-corner-btn').addEventListener('click', toggleAlmanac);
@@ -3349,7 +3407,7 @@
             });
         });
         document.getElementById('go-play-again').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; resetGame(); startGame(); });
-        document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; });
+        document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; updateGameModeButton(); });
         document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); if (musicGainMaster) musicGainMaster.gain.value = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
@@ -3767,7 +3825,7 @@
                     }
                     if (goal.active && goal.collected >= goal.required && dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius - 10) {
                         gameState = 'level_end';
-                        if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel); checkAchievements(); }
+                        recordLevelReached();
                         // Survive stages don't scatter any coins to collect, so they always
                         // award exactly 2 roguelike items on completion instead - the level's
                         // one guaranteed reward, shown in the items-won row below.
@@ -6313,9 +6371,7 @@
             lastCountdownSecond = -1;
             setMusicDanger(false);
             updateHazardVignette(0);
-            if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
-            checkAchievements();
-            }
+            recordLevelReached();
             // "Sometimes in Life": the goal on this level was completely fenced off (see
             // goalUnreachable in generateLevel) and the player actually saw it before dying, so
             // there was truly no way to win this level - unlock regardless of death reason.
@@ -6324,7 +6380,7 @@
                 showAchievementPopup();
             }
             document.getElementById('go-level').innerText = level;
-            document.getElementById('go-best').innerText = highestLevel;
+            document.getElementById('go-best').innerText = (gameMode === 'endless') ? bestEndlessLevel : highestLevel;
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
             else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
             }

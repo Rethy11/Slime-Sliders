@@ -845,7 +845,18 @@
         // cached the same way as the void/regular sky gradients above.
         let galaxySkyGradientCache = null;
         let galaxySkyGradientCacheH = -1;
+        // Rainbow skin: soft pastel coloring-book sky (pink -> yellow -> mint -> sky blue)
+        // behind the rainbow arcs, replacing the normal daytime blue - cached the same way
+        // as the other sky gradients above.
+        let rainbowSkyGradientCache = null;
+        let rainbowSkyGradientCacheH = -1;
         let sunGradientCache = null;
+        // Rainbow skin: flat coloring-book palette used for trees/rocks/decorations, plus a
+        // softer pastel set used for the floor patchwork. Shared by every drawRainbow* helper
+        // below so the whole theme reads as one consistent crayon-box set of colors.
+        const RAINBOW_PALETTE = ['#ff4d6d', '#ff922b', '#ffd43b', '#69db7c', '#4dabf7', '#9775fa', '#f783ac'];
+        const RAINBOW_PASTELS = ['#ffe3ec', '#fff3c4', '#d9f7be', '#cdeffd', '#e0d4fa', '#ffe0c2'];
+        function rainbowHash(n) { let s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); }
 
         let gameState = 'title';
         let previousState = 'title';
@@ -1853,10 +1864,11 @@
 
         function spawnSplash(x, y) {
             playSFX('splash');
-            splashes.push({ x: x, y: y, vx: 0, vy: 0, life: 1, maxLife: 1, type: 'ripple', color: currentTheme.hazard.edge });
-            splashes.push({ x: x, y: y, vx: 0, vy: 0, life: 0.8, maxLife: 1, type: 'ripple', color: currentTheme.hazard.color });
+            let hz = getActiveHazardTheme();
+            splashes.push({ x: x, y: y, vx: 0, vy: 0, life: 1, maxLife: 1, type: 'ripple', color: hz.edge });
+            splashes.push({ x: x, y: y, vx: 0, vy: 0, life: 0.8, maxLife: 1, type: 'ripple', color: hz.color });
             for(let i=0; i<12; i++) {
-                splashes.push({ x: x, y: y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 1 + Math.random()*0.5, maxLife: 1.5, type: 'drop', color: currentTheme.hazard.edge });
+                splashes.push({ x: x, y: y, vx: (Math.random()-0.5)*12, vy: (Math.random()-0.5)*12, life: 1 + Math.random()*0.5, maxLife: 1.5, type: 'drop', color: hz.edge });
             }
         }
 
@@ -3770,7 +3782,7 @@
                         let tile = borderHexList[Math.floor(Math.random() * borderHexList.length)];
                         if (isOnScreen(tile.x, tile.y, HEX_SIZE * 2)) {
                             let a = Math.random() * Math.PI * 2; let sx = tile.x + Math.cos(a)*HEX_SIZE; let sy = tile.y + Math.sin(a)*HEX_SIZE;
-                            if (isOnScreen(sx, sy, 50)) { splashes.push({ x: sx, y: sy, vx: 0, vy: 0, life: 1, maxLife: 1.5, type: 'ripple', color: currentTheme.hazard.edge }); }
+                            if (isOnScreen(sx, sy, 50)) { splashes.push({ x: sx, y: sy, vx: 0, vy: 0, life: 1, maxLife: 1.5, type: 'ripple', color: getActiveHazardTheme().edge }); }
                         }
                     }
 
@@ -4169,7 +4181,15 @@
                 galaxySkyGradientCache.addColorStop(0.7, '#3a1361'); galaxySkyGradientCache.addColorStop(1, '#6a2f8f');
                 galaxySkyGradientCacheH = canvas.height;
             }
-            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : skyGradientCache);
+            // Rainbow skin: soft candy-colored bands top to bottom, like a page straight out
+            // of a coloring book instead of a realistic sky.
+            if (!rainbowSkyGradientCache || rainbowSkyGradientCacheH !== canvas.height) {
+                rainbowSkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                rainbowSkyGradientCache.addColorStop(0, '#ffd6e8'); rainbowSkyGradientCache.addColorStop(0.35, '#fff3b0');
+                rainbowSkyGradientCache.addColorStop(0.65, '#c8f7c5'); rainbowSkyGradientCache.addColorStop(1, '#bde0fe');
+                rainbowSkyGradientCacheH = canvas.height;
+            }
+            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : (player.color === 'rainbow' ? rainbowSkyGradientCache : skyGradientCache));
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
@@ -5123,6 +5143,112 @@
             ctx.restore();
         }
 
+        // Rainbow skin: a hand-drawn "crayon blob" - a wobbly, hand-wavering closed path
+        // instead of a perfect circle, filled with a flat coloring-book color and traced in
+        // a thick black outline. The fill path is jittered by more than the outline path
+        // (`overflow`), so at a few points the color visibly pokes out past the black line -
+        // the "colored outside the lines" look the whole theme leans on.
+        function drawCrayonBlob(cx, cy, r, seed, fillColor, overflow) {
+            let steps = 14;
+            function tracePath(jitterAmp, seedOffset) {
+                ctx.beginPath();
+                for (let i = 0; i <= steps; i++) {
+                    let a = (i / steps) * Math.PI * 2;
+                    let n = rainbowHash(seed + seedOffset + i * 3.7);
+                    let rr = r * (1 + (n - 0.5) * jitterAmp);
+                    let px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+            }
+            ctx.fillStyle = fillColor;
+            tracePath(overflow, 0); ctx.fill();
+            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
+            tracePath(0.12, 100); ctx.stroke();
+        }
+
+        // Rainbow skin: a simple doodled smiley - two dot eyes, a curved mouth, and rosy
+        // cheeks, scaled to whatever the shape's radius is. Sprinkled onto a fraction of
+        // trees/rocks so the level occasionally looks back at you.
+        function drawCrayonFace(cx, cy, size) {
+            ctx.fillStyle = '#1a1a1a';
+            ctx.beginPath(); ctx.arc(cx - size * 0.35, cy - size * 0.1, size * 0.11, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx + size * 0.35, cy - size * 0.1, size * 0.11, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = size * 0.09; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.arc(cx, cy + size * 0.05, size * 0.28, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,120,140,0.55)';
+            ctx.beginPath(); ctx.arc(cx - size * 0.5, cy + size * 0.15, size * 0.09, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(cx + size * 0.5, cy + size * 0.15, size * 0.09, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // Rainbow skin: every tree renders as a doodled crayon tree - a plain brown trunk
+        // with a black outline, topped with a wobbly, flat-colored crayon blob crown picked
+        // from the coloring-book palette. About a third get a hand-drawn smiling face.
+        function drawRainbowTree(x, y, radius, seed) {
+            ctx.fillStyle = 'rgba(0,0,0,0.22)';
+            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.38, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#c68642';
+            ctx.fillRect(x - radius * 0.2, y - radius * 0.1, radius * 0.4, radius * 0.9);
+            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3;
+            ctx.strokeRect(x - radius * 0.2, y - radius * 0.1, radius * 0.4, radius * 0.9);
+            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(seed) * RAINBOW_PALETTE.length)];
+            let crownY = y - radius * 0.75;
+            drawCrayonBlob(x, crownY, radius * 0.85, seed, color, 0.22);
+            if (rainbowHash(seed + 500) < 0.35) drawCrayonFace(x, crownY, radius * 0.85);
+        }
+
+        // Rainbow skin: every rock renders as a squashed crayon blob instead of the theme's
+        // usual rock art - same wobbly outline-and-overflow treatment as the trees, just
+        // flattened, and occasionally smiling too.
+        function drawRainbowRock(x, y, radius, seed) {
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(seed + 200) * RAINBOW_PALETTE.length)];
+            ctx.save();
+            ctx.translate(x, y); ctx.scale(1, 0.75);
+            drawCrayonBlob(0, 0, radius * 0.95, seed + 50, color, 0.2);
+            if (rainbowHash(seed + 700) < 0.3) drawCrayonFace(0, 0, radius * 0.95);
+            ctx.restore();
+        }
+
+        // Rainbow skin: every grass/flower/leaf speck renders as a tiny black-outlined doodle
+        // in a bright coloring-book color instead of its usual flat foliage dot/blade/curl.
+        function drawRainbowDecor(d, breezeX) {
+            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(d.x * 0.31 + d.y * 0.17) * RAINBOW_PALETTE.length)];
+            ctx.fillStyle = color; ctx.strokeStyle = '#1a1a1a';
+            if (d.type === 0) {
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.arc(d.x, d.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            } else if (d.type === 1) {
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 4 + breezeX * 5, d.y - 9); ctx.lineTo(d.x + 4 + breezeX * 5, d.y - 9); ctx.closePath();
+                ctx.fill(); ctx.stroke();
+            } else {
+                ctx.lineWidth = 2.5;
+                ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX * 5, d.y - 6, d.x + breezeX * 10, d.y - 12); ctx.stroke();
+            }
+        }
+
+        // Rainbow skin: hazard pockets (water/lava/ice, whatever the theme normally puts
+        // there) fill with a stack of wavy, hand-drawn rainbow crayon stripes instead of the
+        // usual themed texture - reads like a scribbled-in pool on a coloring page.
+        function drawRainbowHazardStripes(cx, cy, span) {
+            let t = Date.now() / 1000;
+            ctx.lineCap = 'round';
+            for (let i = 0; i < RAINBOW_PALETTE.length; i++) {
+                let phase = t * 0.6 + i * 0.5;
+                let rowY = cy - span * 0.75 + (i / (RAINBOW_PALETTE.length - 1)) * span * 1.5;
+                ctx.strokeStyle = RAINBOW_PALETTE[i];
+                ctx.lineWidth = 5;
+                ctx.beginPath();
+                for (let x = cx - span; x <= cx + span; x += 6) {
+                    let y = rowY + Math.sin(x * 0.04 + phase) * 6;
+                    if (x === cx - span) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            }
+        }
+
         // Draws the animated water/lava/ice noise texture within a square region roughly `span`
         // wide, respecting whatever clip is already active on ctx. Shared by the small hazard
         // pockets that fill hex holes.
@@ -5204,6 +5330,14 @@
             // (drawHazardTexture) instead of its usual themed bubble/arc/line texture, so the
             // whole skin reads as one consistent monochrome look rather than only water changing.
             if (player.color === 'onebit') return { type: currentTheme.hazard.type, color: '#000000', edge: '#ffffff' };
+            // Pure Gold: every hazard pocket (water/lava/ice) turns to liquid gold - forced to
+            // the 'water' type so it always gets the rippling-pool texture/animation rather
+            // than lava bubbles or ice cracks, just recolored molten-gold.
+            if (player.color === 'gold') return { type: 'water', color: '#8a6500', edge: '#ffd700' };
+            // Rainbow: hazard pockets become a scribbled-in rainbow-striped pool (see
+            // drawRainbowHazardStripes) - color/edge here only matter for the base fill and
+            // hex-edge stroke, the striped texture itself is drawn separately.
+            if (player.color === 'rainbow') return { type: currentTheme.hazard.type, color: '#eaf6ff', edge: '#1a1a1a' };
             return currentTheme.hazard;
         }
 
@@ -5233,6 +5367,8 @@
                     drawBlackHoleSwirl(tile.x, tile.y, HEX_SIZE);
                 } else if (player.color === 'glitch') {
                     drawMatrixRain(tile.x, tile.y, HEX_SIZE);
+                } else if (player.color === 'rainbow') {
+                    drawRainbowHazardStripes(tile.x, tile.y, HEX_SIZE);
                 } else {
                     drawHazardTexture(tile.x, tile.y, HEX_SIZE, hz);
                 }
@@ -5677,7 +5813,7 @@
             // honeycomb cell borders) then filled with the ground color and used as a clip so
             // grid-dust and decorations stay confined to land tiles - mirrors the old single
             // fill/stroke/clip-per-frame approach, just with hexagons standing in for circles.
-            ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = player.color === 'onebit' ? '#ffffff' : currentTheme.hazard.edge;
+            ctx.save(); ctx.lineWidth = 6; ctx.strokeStyle = player.color === 'onebit' ? '#ffffff' : (player.color === 'rainbow' ? '#1a1a1a' : currentTheme.hazard.edge);
             pathHexUnion(ctx, visLand); ctx.stroke();
             ctx.fillStyle = currentTheme.bg; ctx.fill(); ctx.clip();
             // Glitch: while equipped, the entire visible floor renders solid black - overrides
@@ -5729,6 +5865,24 @@
                         ctx.fillStyle = 'rgba(120,115,108,0.4)';
                         ctx.beginPath(); ctx.arc(lt.x + (dseed - 0.5) * HEX_SIZE, lt.y + (((dseed * 17) % 1) - 0.5) * HEX_SIZE, 1.4, 0, Math.PI * 2); ctx.fill();
                     }
+                }
+                ctx.restore();
+            }
+            // Rainbow: while equipped, the floor becomes a patchwork coloring-book page - each
+            // hex gets its own flat pastel color (stable per-tile, picked from RAINBOW_PASTELS)
+            // and a bold black crayon outline, like every cell of the honeycomb was colored in
+            // by hand with a different marker.
+            if (player.color === 'rainbow') {
+                ctx.save();
+                for (let li = 0; li < visLand.length; li++) {
+                    let lt = visLand[li];
+                    let h = rainbowHash(lt.q * 12.9898 + lt.r * 78.233);
+                    ctx.fillStyle = RAINBOW_PASTELS[Math.floor(h * RAINBOW_PASTELS.length)];
+                    let c = cachedHexCorners(lt);
+                    ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y);
+                    for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y);
+                    ctx.closePath(); ctx.fill();
+                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5; ctx.stroke();
                 }
                 ctx.restore();
             }
@@ -5880,10 +6034,15 @@
                         drawVoidDecor(d, breezeX);
                     } else if (player.color === 'onebit') {
                         drawOnebitDecor(d, breezeX);
+                    } else if (player.color === 'rainbow') {
+                        drawRainbowDecor(d, breezeX);
                     } else {
-                        // Pure Gold: decorations the player has brushed against stay gilded
-                        // forever - same shapes, just swapped to a gold fill/stroke.
-                        let dcolor = d.golden ? '#ffcc00' : d.color;
+                        // Pure Gold: every decoration renders gilded the entire time the skin
+                        // is equipped (not just ones the player has personally brushed against -
+                        // that per-speck `d.golden` flag still gets set on touch, for the
+                        // permanent trail left behind after switching skins, but is no longer
+                        // the only thing gating the gold color here).
+                        let dcolor = (player.color === 'gold' || d.golden) ? '#ffcc00' : d.color;
                         ctx.fillStyle = dcolor; ctx.strokeStyle = dcolor; ctx.lineWidth = 2;
                         if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
                         else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
@@ -6020,6 +6179,9 @@
                     // 1-Bit: every tree renders as a flat black/white silhouette instead of its
                     // usual foliage, all the time.
                     if (player.color === 'onebit') { drawOnebitTree(t.x, t.y, t.radius, t.variant || 0, t.seed || 0); return; }
+                    // Rainbow: every tree renders as a doodled crayon tree instead of its
+                    // usual foliage, all the time (see drawRainbowTree).
+                    if (player.color === 'rainbow') { drawRainbowTree(t.x, t.y, t.radius, t.seed || 0); return; }
                     let variant = t.variant || 0; let sway = (currentTheme.name === 'Desert' ? 0 : Math.sin(Date.now()/1400 + (t.seed||0)) * 0.05) + breezeX;
                     if (t.type === 'tree' && currentTheme.name !== 'Desert' && currentTheme.name !== 'Snow') {
                         if (Math.abs(player.vx) + Math.abs(player.vy) > 12 && Math.random() < 0.06 && dist(player.worldX, player.worldY, t.x, t.y) < 600) {
@@ -6123,6 +6285,9 @@
                     // 1-Bit: every rock renders as a small monochrome house instead of theme
                     // rock art, all the time.
                     if (player.color === 'onebit') { drawOnebitHouse(r.x, r.y, r.radius, r.variant || 0, r.seed || 0); return; }
+                    // Rainbow: every rock renders as a squashed crayon blob instead of its
+                    // usual theme art, all the time (see drawRainbowRock).
+                    if (player.color === 'rainbow') { drawRainbowRock(r.x, r.y, r.radius, r.seed || 0); return; }
                     let variant = r.variant || 0;
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(r.x, r.y + r.radius*0.18, r.radius*1.05, r.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (r.golden) {
@@ -6171,15 +6336,31 @@
                     if (player.color === 'glitch') { drawFirewallSegment(f); return; }
                     let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
                     let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
+                    // Pure Gold: every fence renders gilded, all the time - same post-and-rail
+                    // shape, just swapped to gold posts/rails with a bright highlighted edge
+                    // instead of the usual weathered wood.
+                    let isGold = player.color === 'gold';
+                    // Rainbow: every fence renders as a doodled crayon fence - a thick black
+                    // outline with a different bright coloring-book color on each rail, like a
+                    // kid picked a new marker partway through.
+                    let isRainbow = player.color === 'rainbow';
                     ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
                     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(-len/2, 5, len, 4);
-                    ctx.fillStyle = '#8a5a2b';
+                    ctx.fillStyle = isGold ? '#a9720c' : (isRainbow ? '#1a1a1a' : '#8a5a2b');
                     ctx.fillRect(-len/2 - 2, -14, 5, 20);
                     ctx.fillRect(len/2 - 3, -14, 5, 20);
-                    ctx.fillStyle = '#a97a3c';
-                    ctx.fillRect(-len/2, -10, len, 4);
-                    ctx.fillRect(-len/2, -2, len, 4);
-                    ctx.strokeStyle = 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
+                    if (isRainbow) {
+                        ctx.fillStyle = RAINBOW_PALETTE[Math.floor(rainbowHash(f.midX * 0.13 + f.midY * 0.07) * RAINBOW_PALETTE.length)];
+                        ctx.fillRect(-len/2, -10, len, 4);
+                        ctx.fillStyle = RAINBOW_PALETTE[Math.floor(rainbowHash(f.midX * 0.13 + f.midY * 0.07 + 3) * RAINBOW_PALETTE.length)];
+                        ctx.fillRect(-len/2, -2, len, 4);
+                        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
+                    } else {
+                        ctx.fillStyle = isGold ? '#ffd700' : '#a97a3c';
+                        ctx.fillRect(-len/2, -10, len, 4);
+                        ctx.fillRect(-len/2, -2, len, 4);
+                        ctx.strokeStyle = isGold ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
+                    }
                     ctx.strokeRect(-len/2, -10, len, 4); ctx.strokeRect(-len/2, -2, len, 4);
                     ctx.restore();
                 }

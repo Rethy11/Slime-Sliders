@@ -3761,7 +3761,14 @@
                             let pth = player.radius + e.radius - 5;
                             if (pth > 0 && pdx*pdx + pdy*pdy < pth*pth) {
                                 let slimesFriendly = e.type === 'wanderer' && (runItems.slimefriend || 0) > 0;
-                                if (!slimesFriendly && player.activePowerup !== 'rampage') {
+                                if (e.type === 'shooter') {
+                                    // Turret Eye is fragile up close - it keeps its distance and
+                                    // snipes from range specifically because direct contact pops
+                                    // it instead of hurting the player. Its plasma orbs are still
+                                    // lethal (handled separately in the projectile collision code).
+                                    spawnSplash(e.x, e.y);
+                                    destroyEnemyByIndex(i, [2,4]);
+                                } else if (!slimesFriendly && player.activePowerup !== 'rampage') {
             triggerGameOver(e.type);
                                 }
                             }

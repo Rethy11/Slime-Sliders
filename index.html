@@ -1035,10 +1035,26 @@
             { id: 'rare_collector',  name: 'Rare Collector',     desc: 'Unlock all 10 rare skins.',                   check: () => rareSkins.every(s => parseInt(storage.get('inv_' + s.id) || 0) > 0) },
             { id: 'hatalogue',       name: 'Hatalogue',          desc: 'Unlock all 10 hats.',                         check: () => hats.every(h => parseInt(storage.get('inv_' + h.id) || 0) > 0) },
             { id: 'glitch_hunter',   name: 'Glitch Hunter',      desc: 'Discover the secret Corrupted Data skin.',    check: () => parseInt(storage.get('inv_corrupted') || 0) > 0 },
-            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length }
+            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length },
+            // Unlike every other entry here, this can't be phrased as a check() against
+            // persisted stats - it depends on the specific level the player died on (goal
+            // fenced off entirely) plus having actually seen that goal before dying. Both are
+            // transient per-level state, so triggerGameOver() sets 'ach_sometimes_in_life'
+            // directly instead of this check ever running. check() always returns false so
+            // checkAchievements() never double-unlocks it once storage already has it.
+            { id: 'sometimes_in_life', name: 'Sometimes in Life', desc: 'Die in an unavoidable way.', check: () => false }
         ];
         
         let goal = { x: 0, y: 0, radius: 45, active: true, required: 5, collected: 0 };
+        // Extremely rare generation edge case: the goal's own hex can end up as an isolated
+        // one-tile island (every neighbor a hazard hole or off-map sky) that then independently
+        // rolls hasFence=true in buildFences(), fencing off its only 6 edges and leaving it
+        // completely unreachable. goalUnreachable is set right after buildFences() detects this;
+        // goalSeen latches true the first time the goal is actually drawn on-screen (see draw()),
+        // so a death on such a level only counts as "unavoidable" if the player got to see the
+        // goal sitting there, mockingly, behind its fence. Both reset every generateLevel().
+        let goalUnreachable = false;
+        let goalSeen = false;
         const gridSize = 120; let isDragging = false; let lastX = 0, lastY = 0;
 
         // Story told two sentences at a time by the rare fishing-scene vignette (see
@@ -1901,6 +1917,7 @@
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             safeGridCache.clear();
+            goalUnreachable = false; goalSeen = false;
 
             lastCountdownSecond = -1;
             musicSped = false;
@@ -2018,6 +2035,11 @@
 
             buildFences();
             buildFenceGrid();
+
+            // Rare edge case: the goal's hex has no land neighbors at all (fenceCandidateDirs
+            // covers all 6 sides) and independently rolled hasFence=true, so every one of its
+            // edges got a fence. That makes the goal a fenced-off island with no way in.
+            goalUnreachable = !!(goalTile.fenceCandidateDirs && goalTile.fenceCandidateDirs.length === 6 && goalTile.hasFence);
 
             let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
             if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; }
@@ -3270,7 +3292,7 @@
         function handleStart(e) {
             initAudio();
             let unlockPopup = document.getElementById('unlock-popup');
-            if (unlockPopup.classList.contains('pop-anim')) { unlockPopup.classList.remove('pop-anim'); return; }
+            if (unlockPopup.classList.contains('pop-anim')) { unlockPopup.classList.remove('pop-anim'); unlockPopupBusy = false; advanceUnlockPopupQueue(); return; }
             if (gameState !== 'playing') return;
             isDragging = true;
             const touch = e.touches ? e.touches[0] : e; lastX = touch.clientX; lastY = touch.clientY;
@@ -5608,6 +5630,8 @@
             renderQueue.length = rqCount;
             renderQueue.sort(rqSortCompare);
             
+            if (goal.active && !goalSeen && isOnScreen(goal.x + tiltX, goal.y + tiltY, cullBuffer)) goalSeen = true;
+
             if (goal.active) {
                 let isLocked = goal.collected < goal.required; let pulse = isLocked ? 0 : Math.sin(Date.now() / 150) * 8;
                 ctx.save(); ctx.translate(goal.x, goal.y);
@@ -6173,6 +6197,7 @@
             lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
             shootingStars = []; shootingStarTimer = 0;
             isSurvivalLevel = false; lastLevelWasSurvival = false; enemyTelegraphs = [];
+            goalUnreachable = false; goalSeen = false;
             clearTimeout(surviveAnnounceTimeout);
             if (domRefs.surviveAnnouncement) { domRefs.surviveAnnouncement.classList.remove('show'); domRefs.surviveAnnouncement.style.display = 'none'; }
             updateItemsHUD();
@@ -6199,6 +6224,13 @@
             if (level > highestLevel) { highestLevel = level; storage.set('landSlidersBestLevel', highestLevel);
             checkAchievements();
             }
+            // "Sometimes in Life": the goal on this level was completely fenced off (see
+            // goalUnreachable in generateLevel) and the player actually saw it before dying, so
+            // there was truly no way to win this level - unlock regardless of death reason.
+            if (goalUnreachable && goalSeen && storage.get('ach_sometimes_in_life') !== 'true') {
+                storage.set('ach_sometimes_in_life', 'true');
+                showUnlockPopup('Sometimes in Life unlocked!');
+            }
             document.getElementById('go-level').innerText = level;
             document.getElementById('go-best').innerText = highestLevel;
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
@@ -6214,13 +6246,34 @@
         // Generic version of the pop-in used by unlockAlmanacEntry - lets achievement unlocks
         // reuse the same star-flanked popup with their own message instead of the hardcoded
         // "New Enemy Entry Unlocked!" text.
+        // Queued rather than fire-and-forget: multiple unlocks can land in the same tick (e.g.
+        // a level-up achievement and Sometimes in Life both unlocking from the same death), and
+        // without a queue the second call would instantly overwrite the first popup's text and
+        // restart its animation, so only the last unlock would ever actually be seen on screen.
+        let unlockPopupQueue = [];
+        let unlockPopupBusy = false;
         function showUnlockPopup(text) {
+            unlockPopupQueue.push(text);
+            advanceUnlockPopupQueue();
+        }
+        function advanceUnlockPopupQueue() {
+            if (unlockPopupBusy || !unlockPopupQueue.length) return;
+            unlockPopupBusy = true;
             let popup = document.getElementById('unlock-popup');
             let textEl = document.getElementById('unlock-popup-text');
+            let text = unlockPopupQueue.shift();
             if (textEl) textEl.innerText = text;
             popup.classList.remove('pop-anim');
             requestAnimationFrame(() => requestAnimationFrame(() => popup.classList.add('pop-anim')));
         }
+        // Fires when the 3s pop-in/pop-out animation completes naturally, freeing the popup up
+        // for the next queued unlock (if any). The early-dismiss tap handler in handleStart
+        // below is the other way unlockPopupBusy gets cleared, for when a player taps through
+        // a popup before it finishes on its own.
+        document.getElementById('unlock-popup').addEventListener('animationend', () => {
+            unlockPopupBusy = false;
+            advanceUnlockPopupQueue();
+        });
 
         // Runs every achievement's check() and unlocks (persists + pops a toast for) any that
         // just newly passed. Called after anything that could move one of their underlying

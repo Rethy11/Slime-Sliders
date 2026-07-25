@@ -281,7 +281,12 @@
             touch-action: none;
         }
 
-        .gacha-btn { font-size: 0.7rem; padding: 15px 20px; background: #ffcf33; color: #000; border: 2px solid rgba(0,0,0,0.3); border-radius: 4px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 6px; width: 80%; max-width: 300px; }
+        /* Row wrapper: the two pull buttons used to be full-width blocks stacked on top of
+           each other, which made the gacha tab taller than the shop modal and forced a
+           scrollbar. Side by side, they fit in the same vertical space the claw machine and
+           coin bag already needed. */
+        .gacha-pull-row { display: flex; gap: 8px; width: 100%; max-width: 320px; margin-top: 8px; }
+        .gacha-btn { font-size: 0.55rem; padding: 12px 6px; background: #ffcf33; color: #000; border: 2px solid rgba(0,0,0,0.3); border-radius: 4px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; flex: 1; min-width: 0; line-height: 1.5; }
         .gacha-btn:active { transform: translateY(5px); box-shadow: none; }
         .gacha-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; cursor: not-allowed; }
         /* Distinct color from the single-pull button so the two are easy to tell apart at a
@@ -308,7 +313,7 @@
         .gacha-ten-panel { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
         .gacha-ten-title { font-size: 1.1rem; color: #ffcf33; text-shadow: 0 2px 5px #000; text-align: center; }
         .gacha-ten-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; width: 100%; }
-        .gacha-ten-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 4px; text-align: center; border: 2px solid transparent; position: relative; animation: gachaPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards; }
+        .gacha-ten-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 4px; text-align: center; border: 2px solid transparent; position: relative; overflow: hidden; animation: gachaPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards; }
         /* Rare pulls get the same gold treatment as the inventory grid's equipped highlight
            idiom, so a legendary result visibly pops out of the row of commons around it. */
         .gacha-ten-item.rare { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.6); background: rgba(255,215,0,0.12); }
@@ -351,7 +356,7 @@
         .inventory-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 10px; max-height: 350px; overflow-y: auto; padding: 5px; }
         .inventory-grid::-webkit-scrollbar { width: 6px; }
         .inventory-grid::-webkit-scrollbar-thumb { background: #ffcf33; border-radius: 3px; }
-        .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; touch-action: manipulation; }
+        .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; touch-action: manipulation; overflow: hidden; }
         .inv-item:hover { background: rgba(255,255,255,0.2); }
         .inv-item.equipped { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
         .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; }
@@ -363,6 +368,8 @@
             overflow-wrap: normal; 
             word-break: keep-all; 
             line-height: 1.2; 
+            text-align: center;
+            width: 100%;
         }
 
         .inv-count { position: absolute; top: -5px; right: -5px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; }
@@ -2767,8 +2774,10 @@
                     <div class="gacha-machine" id="gacha-machine">
                         <canvas id="gacha-canvas" width="300" height="240"></canvas>
                     </div>
-                    <button class="gacha-btn" id="btn-pull" style="margin-top:8px;">Pull (100 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
-                    <button class="gacha-btn gacha-btn-ten" id="btn-pull-ten">Pull x10 (900 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                    <div class="gacha-pull-row">
+                        <button class="gacha-btn" id="btn-pull">Pull (100 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                        <button class="gacha-btn gacha-btn-ten" id="btn-pull-ten">Pull x10 (900 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                    </div>
                     <div class="shop-coin-bag">
                         <img class="icon-img" style="width:1.1em;height:1.1em;" src="${iconDataURL('coin',24)}" alt=""> <span id="shop-coin-display">0</span>
                     </div>
@@ -3268,6 +3277,7 @@
             });
             let overlay = document.getElementById('gacha-ten-overlay');
             if (overlay) overlay.style.display = 'flex';
+            fitInvNameLabels(grid);
         }
 
         function revealGachaReward(chosenItem, itemCategory) {
@@ -3332,6 +3342,24 @@
             return Math.max(remSize, 0.42).toFixed(2) + "rem";
         }
 
+        // invNameFontSize's character-count estimate is a cheap first guess so labels aren't
+        // huge for a frame, but it can't know the real rendered width of this pixel font (a
+        // handful of words like "Pastel"/"Orange" still came out just wide enough to overflow
+        // their box, which reads as the text being jammed against one edge instead of centered
+        // - not actually a text-align bug). This runs after the labels are in the (visible) DOM
+        // and shrinks font-size step by step until each one's actual scrollWidth fits inside its
+        // own clientWidth, so it's correct regardless of container width or font quirks.
+        function fitInvNameLabels(container) {
+            if (!container) return;
+            container.querySelectorAll('.inv-name').forEach(el => {
+                for (let size = 0.75; size > 0.42; size -= 0.02) {
+                    el.style.fontSize = size.toFixed(2) + "rem";
+                    if (el.scrollWidth <= el.clientWidth) return;
+                }
+                el.style.fontSize = "0.42rem";
+            });
+        }
+
         function populateInventory() {
             const skinsContainer = document.getElementById('inv-skins');
             const hatsContainer = document.getElementById('inv-hats');
@@ -3371,6 +3399,9 @@
                     skinsContainer.appendChild(div);
                 });
             }
+
+            fitInvNameLabels(hatsContainer);
+            fitInvNameLabels(skinsContainer);
         }
 
         // Grants the secret "Corrupted Data" skin the first time 20 consecutive Remove Hat

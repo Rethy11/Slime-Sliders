@@ -975,7 +975,7 @@
             else if (skin === 'toxic') {
                 if (player.acidDropDist === undefined) player.acidDropDist = 0;
                 player.acidDropDist += Math.hypot(player.vx, player.vy);
-                if (player.acidDropDist > 10) {
+                if (player.acidDropDist > 6) {
                     player.acidDropDist = 0;
                     acidTrail.push({ x: player.worldX, y: player.worldY, radius: 16 + Math.random()*6, life: 4, maxLife: 4, seed: Math.random()*1000 });
                 }
@@ -5459,6 +5459,51 @@
             }
         }
 
+        // Toxic Sludge: beyond the aura glow behind an irradiated entity, tint the entity's
+        // own already-drawn pixels a pulsing sickly green too, so the enemy/companion itself
+        // visibly reads as poisoned instead of just standing in front of a green halo. Clipped
+        // to a circle around the entity and composited with 'source-atop', which only paints
+        // over pixels that already have alpha there (i.e. the sprite's own silhouette) - so the
+        // tint follows that sprite's exact shape without needing to reskin it. Call this AFTER
+        // the entity's normal sprite has been drawn (drawRadioactiveGlow, by contrast, is drawn
+        // first so it sits behind).
+        // Toxic Sludge: traces a smooth, softly wobbling blob outline (into the current path -
+        // caller still needs to fill/stroke/clip it) instead of a perfect circle. The wobble is
+        // seeded per-pool and animated by time, so each puddle gently churns in place and no two
+        // pools along the trail look identical, reinforcing the "fluid sludge" read over "row of
+        // uniform circles". Uses quadraticCurveTo through midpoints of a ring of perturbed
+        // points, the standard trick for a closed loop with no visible polygon corners.
+        function drawOrganicBlobPath(x, y, radius, seed, time) {
+            const N = 8;
+            let pts = [];
+            for (let i = 0; i < N; i++) {
+                let ang = (i / N) * Math.PI * 2;
+                let n = Math.sin(ang * 3 + seed * 9 + time / 450) * 0.14 + Math.sin(ang * 5 - seed * 6 + time / 650) * 0.08;
+                let r = radius * (1 + n);
+                pts.push({ x: x + Math.cos(ang) * r, y: y + Math.sin(ang) * r });
+            }
+            ctx.beginPath();
+            let midStart = { x: (pts[N-1].x + pts[0].x) / 2, y: (pts[N-1].y + pts[0].y) / 2 };
+            ctx.moveTo(midStart.x, midStart.y);
+            for (let i = 0; i < N; i++) {
+                let p = pts[i], pn = pts[(i + 1) % N];
+                let midx = (p.x + pn.x) / 2, midy = (p.y + pn.y) / 2;
+                ctx.quadraticCurveTo(p.x, p.y, midx, midy);
+            }
+            ctx.closePath();
+        }
+
+        function drawIrradiatedTint(x, y, radius) {
+            let t = Date.now();
+            ctx.save();
+            ctx.beginPath(); ctx.arc(x, y, radius * 1.6, 0, Math.PI * 2); ctx.clip();
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.globalAlpha = 0.5 + Math.sin(t / 180) * 0.15;
+            ctx.fillStyle = '#39ff14';
+            ctx.fillRect(x - radius * 1.6, y - radius * 1.6, radius * 3.2, radius * 3.2);
+            ctx.restore();
+        }
+
         function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId, targetCtx) {
             let c = targetCtx || ctx;
             let renderY = y; let speed = Math.sqrt(vx * vx + vy * vy);
@@ -6602,12 +6647,35 @@
                     let a = item.obj;
                     let alpha = Math.max(0, Math.min(1, a.life / a.maxLife));
                     let now = Date.now();
+                    // Additive glow first, UNCLIPPED and drawn with 'lighter' so a pool's glow
+                    // brightens wherever it overlaps its neighbors in the trail - consecutive
+                    // pools fuse into one continuous glowing streak instead of reading as a
+                    // string of separate rings.
                     ctx.save();
-                    ctx.globalAlpha = 0.55 * alpha; ctx.fillStyle = '#1a3d0a';
-                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI*2); ctx.fill();
-                    ctx.globalAlpha = 0.85 * alpha; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2;
-                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI*2); ctx.stroke();
+                    ctx.globalCompositeOperation = 'lighter';
+                    ctx.globalAlpha = 0.4 * alpha;
+                    let glowGrad = ctx.createRadialGradient(a.x, a.y, 0, a.x, a.y, a.radius * 1.6);
+                    glowGrad.addColorStop(0, 'rgba(140,255,90,0.9)');
+                    glowGrad.addColorStop(0.5, 'rgba(57,255,20,0.4)');
+                    glowGrad.addColorStop(1, 'rgba(57,255,20,0)');
+                    ctx.fillStyle = glowGrad;
+                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius * 1.6, 0, Math.PI*2); ctx.fill();
+                    ctx.restore();
+                    // Body of the pool: an organic wobbly blob (not a perfect circle) with a
+                    // soft inner-glow edge instead of a hard stroke ring, so it reads as a soft
+                    // fluid puddle that melts into neighboring pools rather than a distinct disc.
+                    ctx.save();
+                    ctx.globalAlpha = 0.6 * alpha;
+                    ctx.fillStyle = '#1a3d0a';
+                    drawOrganicBlobPath(a.x, a.y, a.radius, a.seed, now);
+                    ctx.fill();
                     ctx.clip();
+                    let edgeGrad = ctx.createRadialGradient(a.x, a.y, a.radius * 0.3, a.x, a.y, a.radius);
+                    edgeGrad.addColorStop(0, 'rgba(57,255,20,0)');
+                    edgeGrad.addColorStop(1, 'rgba(57,255,20,0.55)');
+                    ctx.globalAlpha = 0.8 * alpha;
+                    ctx.fillStyle = edgeGrad;
+                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius * 1.3, 0, Math.PI*2); ctx.fill();
                     ctx.fillStyle = 'rgba(57,255,20,0.6)';
                     for (let bi = 0; bi < 3; bi++) {
                         let bp = (now / 900 + a.seed + bi / 3) % 1;
@@ -6690,6 +6758,9 @@
                     // raw collision circle instead, labeled with its type.
                     if (player.color === 'corrupted') { drawHitboxCircle(e.x, e.y, e.radius, '#ff003c', (e.type || 'ENEMY').toUpperCase().slice(0, 6)); }
                     else if (sprite) sprite(ctx, e, player);
+                    // Toxic Sludge: tint the sprite itself sickly green on top of its normal
+                    // art, in addition to the aura glow drawn behind it above.
+                    if (e.irradiated) drawIrradiatedTint(e.x, e.y, e.radius);
                     e.x = realEX; e.y = realEY;
                 }
                 else if (item.type === 'companion') {
@@ -6701,6 +6772,9 @@
                     // behind whatever skin the companion is already wearing.
                     if (cs.irradiated) drawRadioactiveGlow(ccx, ccy, cs.radius);
                     drawCharacterModel(ccx, ccy, 0, 0, cs.radius, cs.colorId, false, null);
+                    // Toxic Sludge: tint the companion's own body sickly green too, same as
+                    // enemies above, on top of whatever skin it's already wearing.
+                    if (cs.irradiated) drawIrradiatedTint(ccx, ccy, cs.radius);
                 }
                 else if (item.type === 'player') {
                     let p = item.obj;

@@ -3799,7 +3799,7 @@
                     }
 
                     if (chest && !chest.collected && dist(player.worldX, player.worldY, chest.x, chest.y) < player.radius + chest.radius) {
-                        chest.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
+                        chest.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); totalCoins += 50; if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
                         for(let i=0; i<20; i++) spawnLoot(chest.x, chest.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                         grantRoguelikeItem(rollRoguelikeItem());
                         updateHUD(); markCoinsDirty();
@@ -3811,7 +3811,7 @@
                     for (let sci = skeletonChests.length - 1; sci >= 0; sci--) {
                         let sc = skeletonChests[sci];
                         if (!sc.collected && dist(player.worldX, player.worldY, sc.x, sc.y) < player.radius + sc.radius) {
-                            sc.collected = true; levelChestOpened++; screenShake = Math.max(screenShake, 24); playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
+                            sc.collected = true; levelChestOpened++; screenShake = Math.max(screenShake, 24); playSFX('chest'); totalCoins += 50; if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
                             for (let si = 0; si < 20; si++) spawnLoot(sc.x, sc.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                             grantRoguelikeItem(rollRoguelikeItem(true));
                             updateHUD(); markCoinsDirty();
@@ -3846,7 +3846,8 @@
                             c.collected = true; levelCoinsCollected++;
                             let coinVal = coinValue(c.type); let pitch = c.type === 'coin' ? 1 : (c.type === 'ruby' ? 1.2 : (c.type === 'sapphire' ? 1.4 : 1.6));
                             playSFX('coin', pitch); totalCoins += coinVal;
-                            goal.collected = Math.min(goal.required, goal.collected + coinVal); updateHUD(); markCoinsDirty();
+                            if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + coinVal);
+                            updateHUD(); markCoinsDirty();
                         }
                     }
 

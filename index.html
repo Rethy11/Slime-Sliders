@@ -780,7 +780,7 @@
         // the segment plus the fence's own thickness), and returns the corrected point. Used by
         // the player and enemies each tick so fences act as solid walls rather than decoration.
         const fenceThickness = 10;
-        function resolveFenceCollision(x, y, radius) {
+        function resolveFenceCollision(x, y, radius, markGolden) {
             let nearFences = getNearbyFences(x, y);
             for (let i = 0; i < nearFences.length; i++) {
                 let f = nearFences[i];
@@ -798,6 +798,9 @@
                     let overlap = threshold - d;
                     x += (ex / d) * overlap;
                     y += (ey / d) * overlap;
+                    // Pure Gold (Midas): only the specific fence segment actually bumped stays
+                    // gilded, same touch-based rule as the ground/decorations/hazards.
+                    if (markGolden) f.golden = true;
                 }
             }
             return { x, y };
@@ -4015,7 +4018,7 @@
                         }
                     }
                     {
-                        let pushed = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4);
+                        let pushed = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4, player.color === 'gold');
                         if (pushed.x !== player.worldX || pushed.y !== player.worldY) {
                             player.worldX = pushed.x; player.worldY = pushed.y; player.vx *= 0.6; player.vy *= 0.6;
                         }
@@ -6061,19 +6064,50 @@
                 }
                 ctx.restore();
             }
-            ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4;
             const startX = Math.floor((camera.x - tiltX) / gridSize) * gridSize; const startY = Math.floor((camera.y - tiltY) / gridSize) * gridSize;
             // Build one path for every visible dust mark and stroke it once, instead of a
             // separate beginPath()/stroke() per grid cell. isSafeGridCached also avoids
             // re-hitting the hex lookup for grid coordinates already checked in a recent frame.
-            ctx.beginPath();
-            for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
-                for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
-                    if (!isSafeGridCached(x, y)) continue;
-                    ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5);
+            // Pure Gold (Midas): these little V-shaped grass marks live on their own square
+            // grid, entirely separate from the `decorations` array and its per-speck `.golden`
+            // flag, so they need their own touch check here - split into two passes (normal vs
+            // already-gilded goldenTiles) so a mark only turns gold once the player has
+            // actually slid over the hex tile it sits on, instead of gilding all of them (or
+            // none of them) at once.
+            if (player.color === 'gold') {
+                ctx.beginPath();
+                for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
+                    for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
+                        if (!isSafeGridCached(x, y)) continue;
+                        let h = pixelToAxial(x, y);
+                        let tile = hexTiles.get(hexKey(h.q, h.r));
+                        if (tile && goldenTiles.has(tile)) continue;
+                        ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5);
+                    }
                 }
+                ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4; ctx.stroke();
+                ctx.beginPath();
+                for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
+                    for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
+                        if (!isSafeGridCached(x, y)) continue;
+                        let h = pixelToAxial(x, y);
+                        let tile = hexTiles.get(hexKey(h.q, h.r));
+                        if (!tile || !goldenTiles.has(tile)) continue;
+                        ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5);
+                    }
+                }
+                ctx.strokeStyle = '#ffcc00'; ctx.lineWidth = 4; ctx.stroke();
+            } else {
+                ctx.strokeStyle = currentTheme.grid; ctx.lineWidth = 4;
+                ctx.beginPath();
+                for (let x = startX; x < startX + canvas.width + gridSize; x += gridSize) {
+                    for (let y = startY; y < startY + canvas.height + gridSize; y += gridSize) {
+                        if (!isSafeGridCached(x, y)) continue;
+                        ctx.moveTo(x - 5, y - 5); ctx.lineTo(x, y + 5); ctx.lineTo(x + 5, y - 5);
+                    }
+                }
+                ctx.stroke();
             }
-            ctx.stroke();
             const cullBuffer = 100; let breezeX = player.vx * 0.08; 
             // PERF: was decorations.forEach() over the full array (can be thousands of specks
             // on a large level) checking isOnScreen on every single one every frame. Now we
@@ -6397,10 +6431,10 @@
                     if (player.color === 'glitch') { drawFirewallSegment(f); return; }
                     let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
                     let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
-                    // Pure Gold: every fence renders gilded, all the time - same post-and-rail
-                    // shape, just swapped to gold posts/rails with a bright highlighted edge
-                    // instead of the usual weathered wood.
-                    let isGold = player.color === 'gold';
+                    // Pure Gold (Midas): only fences the player has actually bumped into stay
+                    // gilded - same post-and-rail shape, just swapped to gold posts/rails with
+                    // a bright highlighted edge instead of the usual weathered wood.
+                    let isGold = f.golden;
                     // Rainbow: every fence renders as a doodled crayon fence - a thick black
                     // outline with a different bright coloring-book color on each rail, like a
                     // kid picked a new marker partway through.

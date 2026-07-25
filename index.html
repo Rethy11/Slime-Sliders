@@ -2342,6 +2342,9 @@
             buildSurvivalFences();
             buildFenceGrid();
 
+            let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
+            if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; levelChestPossible = 1; }
+
             // Sparse trees/rocks for cover and visual interest, kept away from the very center
             // so the goal area stays clear, and never placed on the goal's own hex.
             for (let tile of landHexList) {

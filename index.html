@@ -744,6 +744,10 @@
         // Declared here (rather than down with the rest of the hex grid math) because the
         // land-tile spatial-hash grid below needs it, and this runs first.
         const HEX_SIZE = 48;
+        // Center-to-center distance between adjacent hex tiles (see axialToPixel: neighbors are
+        // HEX_SIZE*sqrt(3) apart along a pointy-top axis) - used to convert Plasma Beam's
+        // "N hex tile radius" into a plain pixel distance.
+        const HEX_TILE_DIST = HEX_SIZE * Math.sqrt(3);
         const landTileGridSize = HEX_SIZE * 4;
         let landTileGrid = new Map();
         let holeTileGrid = new Map();
@@ -919,7 +923,8 @@
             color: storage.get('landSlidersSkin') || 'cyan',
             hat: storage.get('landSlidersHat') || null,
             jiggleForceX: 0, jiggleForceY: 0, activePowerup: null, powerupDuration: 0,
-            powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0, spikesTimer: 0
+            powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0, spikesTimer: 0,
+            plasmaTimer: 0, invulnerableTimer: 0, wilkshirianTimer: 0
         };
 
         // Applies/removes the screen-color-inversion effect tied to the secret Corrupted Data
@@ -1033,6 +1038,14 @@
         let items = []; let enemies = []; let trees = []; let hives = [];
         let projectiles = []; let icicles = []; let flameParticles = []; let leaves = [];
         let splashes = []; let decorations = []; let powerups = []; let chest = null;
+        // Roguelite: Skeleton Key item - one extra bonus chest per stack, placed alongside the
+        // level's normal chest. Kept as its own array (rather than reusing `chest`) since there
+        // can be any number of them depending on stack count, and their loot table intentionally
+        // excludes legendaries (see rollRoguelikeItem's excludeLegendary param).
+        let skeletonChests = [];
+        // Roguelite: Plasma Beam item - transient zap-line visuals, one per target hit, each
+        // {x1,y1,x2,y2,life}. Purely cosmetic bookkeeping, faded out and removed in update().
+        let plasmaBeamFX = [];
         // Very rare ambient vignette: a man and boy sitting at the water's edge, fishing (see
         // the spawn logic in generateLevel and drawFishingScene below). At most one per level,
         // and only ever beside a genuine water-type hazard - lava/ice themes never get one.
@@ -1062,8 +1075,11 @@
             magnet:      { id: 'magnet',      rarity: 'common',    name: 'Magnet',      desc: 'Pulls nearby coins and gems toward you. Each stack widens the pull radius.' },
             wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over a hazard longer before falling. Each stack adds more hover time.' },
             spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Periodically unleashes an icy shockwave around you. Each stack makes it fire more often.' },
+            wilkshirianknowledge: { id: 'wilkshirianknowledge', rarity: 'common', name: 'Wilkshirian Knowledge', desc: 'Grants brief invulnerability on a recurring timer. Each stack shortens the wait between activations.' },
             slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.' },
-            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.' }
+            plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.' },
+            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.' },
+            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.' }
         };
 
         // Achievement definitions. Each check() reads from persisted storage / in-memory state
@@ -1735,6 +1751,42 @@
                     tctx.fillStyle = '#ff6b6b'; tctx.beginPath(); tctx.arc(0,2*s,7*s,Math.PI,0); tctx.fill();
                     tctx.fillStyle = '#c0392b'; tctx.beginPath(); tctx.roundRect(0,-1*s,9*s,2.5*s,1*s); tctx.fill();
                     break;
+                case 'skeletonkey':
+                    // Bone-white key with a tiny skull worked into the bow, teeth notched like a
+                    // classic old-fashioned key rather than a modern flat one.
+                    tctx.strokeStyle = '#f4f1de'; tctx.fillStyle = '#f4f1de'; tctx.lineWidth = 2.4*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(-3*s,-3*s); tctx.lineTo(7*s,7*s); tctx.stroke();
+                    tctx.fillRect(3.5*s, 5*s, 2.6*s, 2.6*s); tctx.fillRect(6*s, 2.5*s, 2.6*s, 2.6*s);
+                    tctx.beginPath(); tctx.arc(-6*s,-6*s,5*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#2b2b2b';
+                    tctx.beginPath(); tctx.arc(-7.6*s,-6.6*s,1.1*s,0,Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.arc(-4.6*s,-6.6*s,1.1*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillRect(-6.6*s, -4.6*s, 1.2*s, 1.6*s);
+                    tctx.strokeStyle = '#8b8b7a'; tctx.lineWidth = 0.8*s; tctx.beginPath(); tctx.arc(-6*s,-6*s,5*s,0,Math.PI*2); tctx.stroke();
+                    break;
+                case 'plasmabeam':
+                    // A tight neon laser bolt (as opposed to 'lightning's jagged yellow zigzag)
+                    // with a bright impact burst at the tip, magenta/cyan to read as "plasma".
+                    tctx.strokeStyle = 'rgba(255, 71, 226, 0.35)'; tctx.lineWidth = 7*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(-8*s,8*s); tctx.lineTo(6*s,-8*s); tctx.stroke();
+                    tctx.strokeStyle = '#ff47e2'; tctx.lineWidth = 3*s;
+                    tctx.beginPath(); tctx.moveTo(-8*s,8*s); tctx.lineTo(6*s,-8*s); tctx.stroke();
+                    tctx.strokeStyle = '#e8fbff'; tctx.lineWidth = 1.3*s;
+                    tctx.beginPath(); tctx.moveTo(-8*s,8*s); tctx.lineTo(6*s,-8*s); tctx.stroke();
+                    tctx.fillStyle = '#e8fbff'; tctx.beginPath(); tctx.arc(6*s,-8*s,3*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = 'rgba(0, 229, 255, 0.6)'; tctx.beginPath(); tctx.arc(6*s,-8*s,5.5*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'wilkshirianknowledge':
+                    // A small open book with glowing pages - "knowledge" that occasionally
+                    // shields you, so a soft gold glow sits behind it like the invulnerability
+                    // aura it grants.
+                    tctx.fillStyle = 'rgba(255, 235, 150, 0.5)'; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#fdf6e3';
+                    tctx.beginPath(); tctx.moveTo(0,-2*s); tctx.quadraticCurveTo(-8*s,-6*s,-9*s,-1*s); tctx.quadraticCurveTo(-8*s,4*s,0,6*s); tctx.quadraticCurveTo(8*s,4*s,9*s,-1*s); tctx.quadraticCurveTo(8*s,-6*s,0,-2*s); tctx.fill();
+                    tctx.strokeStyle = '#b8860b'; tctx.lineWidth = 1*s;
+                    tctx.beginPath(); tctx.moveTo(0,-2*s); tctx.lineTo(0,6*s); tctx.stroke();
+                    tctx.beginPath(); tctx.moveTo(-9*s,-1*s); tctx.quadraticCurveTo(-8*s,4*s,0,6*s); tctx.quadraticCurveTo(8*s,4*s,9*s,-1*s); tctx.stroke();
+                    break;
             }
             tctx.restore();
         }
@@ -1835,14 +1887,20 @@
 
         // ---- Roguelite run-item system ----
         // Chests and mimics always drop exactly one of these: 70% common (split evenly across
-        // the 3 commons, ~23.3% each), 20% epic, 10% legendary. Items stack with themselves and
-        // with each other for the rest of the run.
-        function rollRoguelikeItem() {
+        // the 4 commons, 17.5% each), 20% epic (split evenly, 10% each), 10% legendary (split
+        // evenly, 5% each). Items stack with themselves and with each other for the rest of the
+        // run. Pass excludeLegendary=true (Skeleton Key's bonus chests) to reroll a would-be
+        // legendary into the epic tier instead, so those chests can never hand out a legendary.
+        function rollRoguelikeItem(excludeLegendary) {
+            const legendaries = ['shuriken', 'skeletonkey'];
+            const epics = ['slimefriend', 'plasmabeam'];
+            const commons = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge'];
             let r = Math.random();
-            if (r < 0.10) return 'shuriken';
-            if (r < 0.30) return 'slimefriend';
-            let commons = ['magnet', 'wings', 'spikes'];
-            return commons[Math.floor(Math.random() * commons.length)];
+            let pool;
+            if (r < 0.10 && !excludeLegendary) pool = legendaries;
+            else if (r < 0.30) pool = epics;
+            else pool = commons;
+            return pool[Math.floor(Math.random() * pool.length)];
         }
 
         // Adds companion slimes up to the current Slime Squad stack count, without touching
@@ -1876,7 +1934,7 @@
             let container = domRefs.itemsHud;
             if (!container) return;
             container.innerHTML = '';
-            const order = ['magnet', 'wings', 'spikes', 'slimefriend', 'shuriken'];
+            const order = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge', 'slimefriend', 'plasmabeam', 'shuriken', 'skeletonkey'];
             order.forEach(id => {
                 let count = runItems[id];
                 if (!count) return;
@@ -1948,6 +2006,11 @@
             requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('pop-anim')));
         }
 
+        // Roguelite: Wilkshirian Knowledge's periodic invulnerability window. Centralized here
+        // so every death path (hazard fall, enemy touch, shooter projectile) checks the same
+        // flag instead of each guarding player.invulnerableTimer directly.
+        function isPlayerInvulnerable() { return (player.invulnerableTimer || 0) > 0; }
+
         function destroyEnemyByIndex(idx, coinRange) {
             let e = enemies[idx]; if (!e) return;
             let range = coinRange || [2,4]; let n = Math.floor(range[0] + Math.random() * (range[1]-range[0]+1));
@@ -2009,11 +2072,29 @@
             }
         }
 
+        // Roguelite: Skeleton Key item - places one bonus chest per stack on open land hexes,
+        // same placement rule as the normal chest (pickLandHex fallback to any land tile). Their
+        // loot always excludes legendaries (see the excludeLegendary param on rollRoguelikeItem,
+        // used where they're actually opened). Called from both generateLevel() and
+        // generateSurvivalLevel() right after each places its own regular chest.
+        function spawnSkeletonChests() {
+            let stacks = runItems.skeletonkey || 0;
+            for (let sk = 0; sk < stacks; sk++) {
+                let skTile = pickLandHex(200) || (landHexList.length ? landHexList[Math.floor(Math.random() * landHexList.length)] : null);
+                if (skTile && !skTile.element) {
+                    skeletonChests.push({ x: skTile.x, y: skTile.y, radius: 22, collected: false });
+                    skTile.element = { type: 'skeletonchest' };
+                    levelChestPossible++;
+                }
+            }
+        }
+
         function generateLevel() {
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
-            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null;
+            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = [];
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
+            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
             safeGridCache.clear();
             goalUnreachable = false; goalSeen = false;
             levelCoinsCollected = 0; levelCoinsPossible = 0;
@@ -2147,6 +2228,7 @@
 
             let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
             if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; levelChestPossible = 1; }
+            spawnSkeletonChests();
 
             if (level >= 3) {
                 let numHives = Math.floor(scaledLevel / 4) + 1;
@@ -2349,6 +2431,7 @@
 
             let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
             if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; levelChestPossible = 1; }
+            spawnSkeletonChests();
 
             // Sparse trees/rocks for cover and visual interest, kept away from the very center
             // so the goal area stays clear, and never placed on the goal's own hex.
@@ -3610,10 +3693,63 @@
                         }
                     }
 
+                    // --- Roguelite: Plasma Beam item - charges for 3s, then zaps the nearest
+                    // enemies within range. Charge time itself doesn't change with stacks (only
+                    // target count and range do, per the item's own description). ---
+                    let plasmaStacks = runItems.plasmabeam || 0;
+                    if (plasmaStacks > 0) {
+                        player.plasmaTimer = (player.plasmaTimer || 0) + 1/60;
+                        if (player.plasmaTimer >= 3) {
+                            player.plasmaTimer = 0;
+                            let plasmaRange = (3 + (plasmaStacks - 1)) * HEX_TILE_DIST;
+                            let targets = [];
+                            for (let ei = 0; ei < enemies.length; ei++) {
+                                let e = enemies[ei];
+                                let d = dist(player.worldX, player.worldY, e.x, e.y);
+                                if (d <= plasmaRange) targets.push({ idx: ei, x: e.x, y: e.y, d });
+                            }
+                            targets.sort((a, b) => a.d - b.d);
+                            targets = targets.slice(0, plasmaStacks);
+                            if (targets.length) {
+                                playSFX('lightning');
+                                screenShake = Math.max(screenShake, 8);
+                                // Destroy in descending index order so earlier splices don't
+                                // shift the indices of targets still waiting to be removed.
+                                targets.sort((a, b) => b.idx - a.idx);
+                                for (let t of targets) {
+                                    plasmaBeamFX.push({ x1: player.worldX, y1: player.worldY, x2: t.x, y2: t.y, life: 0.22, maxLife: 0.22 });
+                                    destroyEnemyByIndex(t.idx, [1,2]);
+                                }
+                            }
+                        }
+                    }
+                    for (let bi = plasmaBeamFX.length - 1; bi >= 0; bi--) {
+                        plasmaBeamFX[bi].life -= 1/60;
+                        if (plasmaBeamFX[bi].life <= 0) plasmaBeamFX.splice(bi, 1);
+                    }
+
+                    // --- Roguelite: Wilkshirian Knowledge item - periodic invulnerability window.
+                    // Interval between activations is 3 + 7*(0.85^stacks) seconds; the
+                    // invulnerable window itself is always a flat 3 seconds. ---
+                    let wilkStacks = runItems.wilkshirianknowledge || 0;
+                    if (player.invulnerableTimer > 0) {
+                        player.invulnerableTimer -= 1/60;
+                        if (player.invulnerableTimer < 0) player.invulnerableTimer = 0;
+                    } else if (wilkStacks > 0) {
+                        player.wilkshirianTimer = (player.wilkshirianTimer || 0) + 1/60;
+                        let wilkInterval = 3 + 7 * Math.pow(0.85, wilkStacks);
+                        if (player.wilkshirianTimer >= wilkInterval) {
+                            player.wilkshirianTimer = 0;
+                            player.invulnerableTimer = 3;
+                            screenShake = Math.max(screenShake, 4);
+                            playSFX('powerup_pickup');
+                        }
+                    }
+
                     // Roguelite: Wings item extends how long you can hover over a hazard before falling.
                     let wingsStacks = runItems.wings || 0;
                     let hazardLimit = 1.25 + (wingsStacks > 0 ? 0.5 + (wingsStacks - 1) * 0.25 : 0);
-                    if (!isSafe(player.worldX, player.worldY)) {
+                    if (!isSafe(player.worldX, player.worldY) && !isPlayerInvulnerable()) {
                         if (player.hazardTimer === 0) spawnSplash(player.worldX, player.worldY);
                         player.hazardTimer += 1/60;
                         if (player.hazardTimer > 0.2) warnUI.style.display = 'block';
@@ -3651,10 +3787,23 @@
                     }
 
                     if (chest && !chest.collected && dist(player.worldX, player.worldY, chest.x, chest.y) < player.radius + chest.radius) {
-                        chest.collected = true; levelChestOpened = 1; screenShake = 30; playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
+                        chest.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
                         for(let i=0; i<20; i++) spawnLoot(chest.x, chest.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                         grantRoguelikeItem(rollRoguelikeItem());
                         updateHUD(); markCoinsDirty();
+                    }
+
+                    // Roguelite: Skeleton Key item - one or more bonus chests placed alongside
+                    // the normal one. Same pickup/reward flow, but their loot roll excludes
+                    // legendaries (rollRoguelikeItem(true)).
+                    for (let sci = skeletonChests.length - 1; sci >= 0; sci--) {
+                        let sc = skeletonChests[sci];
+                        if (!sc.collected && dist(player.worldX, player.worldY, sc.x, sc.y) < player.radius + sc.radius) {
+                            sc.collected = true; levelChestOpened++; screenShake = Math.max(screenShake, 24); playSFX('chest'); totalCoins += 50; goal.collected = Math.min(goal.required, goal.collected + 50);
+                            for (let si = 0; si < 20; si++) spawnLoot(sc.x, sc.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
+                            grantRoguelikeItem(rollRoguelikeItem(true));
+                            updateHUD(); markCoinsDirty();
+                        }
                     }
 
                     // Rare fishing scene: purely decorative, but physically touching the pair
@@ -3776,7 +3925,7 @@
                                     // lethal (handled separately in the projectile collision code).
                                     spawnSplash(e.x, e.y);
                                     destroyEnemyByIndex(i, [2,4]);
-                                } else if (!slimesFriendly && player.activePowerup !== 'rampage') {
+                                } else if (!slimesFriendly && player.activePowerup !== 'rampage' && !isPlayerInvulnerable()) {
             triggerGameOver(e.type);
                                 }
                             }
@@ -3898,6 +4047,8 @@
                         let overlap = (player.radius + p.radius) - dist(player.worldX, player.worldY, p.x, p.y);
                         p.x += Math.cos(normAngle)*overlap; p.y += Math.sin(normAngle)*overlap; p.deflected = true;
                         screenShake = Math.max(screenShake, 5);
+                    } else if (isPlayerInvulnerable()) {
+                        spawnSplash(p.x, p.y); projectiles.splice(i, 1); continue;
                     } else triggerGameOver('shooter');
                 }
                 if (gameState === 'playing' && p.deflected) {
@@ -5791,6 +5942,7 @@
             for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
             for (let i = 0; i < companions.length; i++) { let cs = companions[i]; if (isOnScreen(cs.x + tiltX, cs.y + tiltY, cullBuffer)) pushRQ('companion', cs, cs.y + (cs.radius || 0)); }
             if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
+            for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
             pushRQ('player', player, player.worldY + (player.radius || 0));
             renderQueue.length = rqCount;
@@ -6119,6 +6271,38 @@
                         ctx.fillStyle = '#3a1c08'; ctx.fillRect(c.x - c.radius + 3, c.y - c.radius*0.5 + 3, c.radius*2 - 6, c.radius*1.5 - 10);
                     }
                 }
+                else if (item.type === 'skeletonchest') {
+                    // Skeleton Key's bonus chests get their own single look (bone-white planks,
+                    // a little skull-and-crossbones on the lid) rather than replicating every
+                    // equipped skin's chest variant like the normal chest above - keeps it
+                    // instantly distinguishable as "the bonus chest" at a glance regardless of
+                    // skin, without a large duplicate per-skin block.
+                    let c = item.obj;
+                    if (!c.collected) { ctx.save(); ctx.globalAlpha = 0.15 + 0.1*Math.sin(Date.now()/400); ctx.fillStyle = '#e8e4d0'; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius*1.8, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
+                    drawGroundShadow(ctx, c.x, c.y + c.radius, c.radius, c.radius*0.5);
+                    if (!c.collected) {
+                        ctx.fillStyle = '#e8e4d0'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.fill();
+                        ctx.strokeStyle = '#7a7565'; ctx.lineWidth = 1.5; ctx.beginPath();
+                        ctx.moveTo(c.x - c.radius*0.5, c.y - c.radius*0.5); ctx.lineTo(c.x - c.radius*0.5, c.y + c.radius);
+                        ctx.moveTo(c.x + c.radius*0.5, c.y - c.radius*0.5); ctx.lineTo(c.x + c.radius*0.5, c.y + c.radius);
+                        ctx.stroke();
+                        ctx.fillStyle = '#5a5648'; ctx.fillRect(c.x - c.radius, c.y, c.radius*2, 4);
+                        // skull-and-crossbones lock plate
+                        ctx.fillStyle = '#2b2b2b'; ctx.beginPath(); ctx.arc(c.x, c.y - 2, 5, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#e8e4d0'; ctx.beginPath(); ctx.arc(c.x, c.y - 3, 3.6, 0, Math.PI*2); ctx.fill();
+                        ctx.fillStyle = '#2b2b2b';
+                        ctx.beginPath(); ctx.arc(c.x - 1.3, c.y - 3.5, 0.9, 0, Math.PI*2); ctx.fill();
+                        ctx.beginPath(); ctx.arc(c.x + 1.3, c.y - 3.5, 0.9, 0, Math.PI*2); ctx.fill();
+                        ctx.strokeStyle = '#e8e4d0'; ctx.lineWidth = 1.4; ctx.beginPath();
+                        ctx.moveTo(c.x - 6, c.y + 4); ctx.lineTo(c.x + 6, c.y - 1);
+                        ctx.moveTo(c.x - 6, c.y - 1); ctx.lineTo(c.x + 6, c.y + 4);
+                        ctx.stroke();
+                    } else {
+                        ctx.fillStyle = '#c9c4ac'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*1.5, c.radius*2, c.radius, 5); ctx.fill();
+                        ctx.fillStyle = '#e8e4d0'; ctx.beginPath(); ctx.roundRect(c.x - c.radius, c.y - c.radius*0.5, c.radius*2, c.radius*1.5, 5); ctx.fill();
+                        ctx.fillStyle = '#7a7565'; ctx.fillRect(c.x - c.radius + 3, c.y - c.radius*0.5 + 3, c.radius*2 - 6, c.radius*1.5 - 10);
+                    }
+                }
                 else if (item.type === 'fishingScene') {
                     let fs = item.obj;
                     drawFishingScene(fs.x, fs.y, fs.angle, fs.seed);
@@ -6227,6 +6411,19 @@
                         ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(0, 0, p.radius * 2 + auraPulse, 0, Math.PI*2); ctx.fill();
                         ctx.restore();
                     }
+                    // Roguelite: Wilkshirian Knowledge - a shimmering gold shield aura while the
+                    // periodic invulnerability window is active.
+                    if (isPlayerInvulnerable()) {
+                        ctx.save();
+                        ctx.translate(pdrawX, pdrawY);
+                        let shieldPulse = Math.sin(Date.now()/70) * 6;
+                        ctx.globalAlpha = 0.55 + 0.25 * Math.sin(Date.now()/90);
+                        ctx.strokeStyle = '#ffcf33'; ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.arc(0, 0, p.radius + 10 + shieldPulse, 0, Math.PI*2); ctx.stroke();
+                        ctx.globalAlpha = 0.18;
+                        ctx.fillStyle = '#fff6d0'; ctx.beginPath(); ctx.arc(0, 0, p.radius + 10 + shieldPulse, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    }
                     if (p.activePowerup === 'lightning') {
                         let target = getLightningTargetWorld();
                         // Corrupted Data: the beam's actual kill-check is a capsule of radius
@@ -6267,6 +6464,31 @@
                                 ctx.restore();
                             }
                         }
+                    }
+                    // Roguelite: Plasma Beam item - a filling ring around the player shows
+                    // charge progress toward the next zap, and any just-fired zaps render as
+                    // fading neon beam lines out to their targets.
+                    let plasmaStacksDraw = runItems.plasmabeam || 0;
+                    if (plasmaStacksDraw > 0) {
+                        let chargeT = Math.min(1, (p.plasmaTimer || 0) / 3);
+                        ctx.save();
+                        ctx.translate(pdrawX, pdrawY);
+                        ctx.strokeStyle = 'rgba(255, 71, 226, 0.3)'; ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.arc(0, 0, p.radius + 16, 0, Math.PI*2); ctx.stroke();
+                        ctx.strokeStyle = '#ff47e2'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.arc(0, 0, p.radius + 16, -Math.PI/2, -Math.PI/2 + chargeT * Math.PI * 2); ctx.stroke();
+                        ctx.restore();
+                    }
+                    for (let bi = 0; bi < plasmaBeamFX.length; bi++) {
+                        let fx = plasmaBeamFX[bi];
+                        let fxA = Math.max(0, fx.life / fx.maxLife);
+                        ctx.save();
+                        ctx.globalAlpha = fxA;
+                        ctx.strokeStyle = 'rgba(255, 71, 226, 0.4)'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.moveTo(fx.x1, fx.y1); ctx.lineTo(fx.x2, fx.y2); ctx.stroke();
+                        ctx.strokeStyle = '#e8fbff'; ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.moveTo(fx.x1, fx.y1); ctx.lineTo(fx.x2, fx.y2); ctx.stroke();
+                        ctx.restore();
                     }
                     if (player.color === 'void') { ctx.restore(); voidGrayscaleActive = true; }
                 }
@@ -6358,7 +6580,8 @@
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.spikesTimer = 0;
             projectiles = []; icicles = []; flameParticles = [];
             splashes = []; leaves = []; screenShake = 0; hives = [];
-            runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0;
+            runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
+            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
             iceFrostedTiles.clear();
             lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
             shootingStars = []; shootingStarTimer = 0;

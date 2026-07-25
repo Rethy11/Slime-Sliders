@@ -2838,9 +2838,12 @@
                     }
                 });
             }
-            // Same dismiss pattern for the x10 results overlay - it doesn't touch the claw pool
-            // at all (see pullGachaTen), so no setupGachaPhysics() call is needed on dismiss,
-            // just refreshing the coin display/button disabled-state.
+            // The x10 results overlay used to be dismissible with no pool refresh, back when a
+            // bulk pull just instant-rolled 10 items with no physical claw involved at all. Now
+            // that it plays out through 10 real cranes hauling 10 real slimes out of the bowl,
+            // dismissing the grid needs to top the bowl back up too - otherwise the bowl is just
+            // left visibly thinned out (or even short of the next pull's 10-slime minimum)
+            // instead of looking freshly restocked, same as a single pull's dismiss does.
             let tenOverlay = document.getElementById('gacha-ten-overlay');
             if (tenOverlay) {
                 let newTenOverlay = tenOverlay.cloneNode(true);
@@ -2848,6 +2851,7 @@
                 newTenOverlay.addEventListener('click', (e) => {
                     if (e.currentTarget.style.display === 'flex') {
                         e.currentTarget.style.display = 'none';
+                        setupGachaPhysics();
                         updateShopButtons();
                     }
                 });

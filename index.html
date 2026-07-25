@@ -3093,15 +3093,22 @@
                 }
             }
 
-            // While two or more cranes are still airborne (entering or easing into position),
-            // they can collide with each other on the rail and bounce apart - same overlap+
-            // closing-speed impulse style as the slime-vs-slime collision above, just 1D.
+            // While two or more cranes are still sliding in (entering), they can collide with
+            // each other on the rail and bounce apart - same overlap+closing-speed impulse
+            // style as the slime-vs-slime collision above, just 1D. This only applies during
+            // that initial slide-in, not once a crane starts easing toward its own slot
+            // (settling): if two cranes' target order got swapped while bouncing around during
+            // entry, their slots can end up on the opposite side of each other, meaning one
+            // needs to cross the other to reach its slime. Treating settling cranes as solid
+            // here would let two such cranes permanently pin each other at arm's length, neither
+            // ever able to pass - a real deadlock that could leave a x10 pull stuck forever with
+            // two claws frozen mid-air.
             for (let i = 0; i < cranes.length; i++) {
                 let a = cranes[i];
-                if (a.state !== 'entering' && a.state !== 'settling') continue;
+                if (a.state !== 'entering') continue;
                 for (let j = i + 1; j < cranes.length; j++) {
                     let b = cranes[j];
-                    if (b.state !== 'entering' && b.state !== 'settling') continue;
+                    if (b.state !== 'entering') continue;
                     let dx = b.x - a.x;
                     let minDist = 24;
                     if (Math.abs(dx) < minDist) {

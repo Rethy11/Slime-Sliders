@@ -963,12 +963,19 @@
                     flameParticles.push({ x: player.worldX + (Math.random()-0.5)*14, y: player.worldY + (Math.random()-0.5)*14, vx: (Math.random()-0.5)*1.2, vy: -0.4 - Math.random()*0.6, life: 0.7, maxLife: 0.7, size: 3 + Math.random()*4 });
                 }
             }
-            // Toxic Sludge: the ground the player slides across stays pooled with glowing green
-            // ooze forever, plus drips continue trailing behind while moving.
+            // Toxic Sludge: rather than staining the hex tiles themselves, the player leaves a
+            // trail of glowing, bubbling acid pools behind them as they move - see acidTrail's
+            // update/collision loop (SECTION 7) and drawAcidPool (SECTION 8). Any enemy or
+            // companion that touches one of these pools picks up the same radioactive glow as
+            // the player, drawn as an overlay on top of its normal sprite (drawRadioactiveGlow)
+            // rather than reskinning every enemy sprite individually.
             else if (skin === 'toxic') {
-                let h = pixelToAxial(player.worldX, player.worldY);
-                let tile = hexTiles.get(hexKey(h.q, h.r));
-                if (tile && tile.type === 'land') toxicSludgeTiles.add(tile);
+                if (player.acidDropDist === undefined) player.acidDropDist = 0;
+                player.acidDropDist += Math.hypot(player.vx, player.vy);
+                if (player.acidDropDist > 10) {
+                    player.acidDropDist = 0;
+                    acidTrail.push({ x: player.worldX, y: player.worldY, radius: 16 + Math.random()*6, life: 4, maxLife: 4, seed: Math.random()*1000 });
+                }
                 if (moving && Math.random() < 0.3) {
                     splashes.push({ x: player.worldX + (Math.random()-0.5)*10, y: player.worldY + (Math.random()-0.5)*10, vx: 0, vy: 0, life: 1, maxLife: 1.1, type: 'drop', color: '#39ff14' });
                 }
@@ -1089,10 +1096,15 @@
         // map itself rather than just the character. Populated in updateSkinWorldEffects() and
         // rendered in draw() right alongside the ice frost overlay.
         let lavaScorchedTiles = new Set();   // Magma: ground stays charred/cracked forever
-        let toxicSludgeTiles = new Set();    // Toxic Sludge: ground stays pooled with ooze forever
         let fairyBloomTiles = new Set();     // Fairy Dust: ground blooms with flowers forever
         let goldenTiles = new Set();         // Pure Gold: ground stays gilded forever
         let goldenHazardTiles = new Set();   // Pure Gold: hazard pockets stay liquid gold forever, once touched
+        // Toxic Sludge: glowing, bubbling acid pools left behind the player as they move,
+        // each {x,y,radius,life,maxLife,seed}. Not tied to hex tiles - lives and fades like any
+        // other particle effect (update/collision loop in SECTION 7, drawn in SECTION 8). Any
+        // enemy/companion overlapping an active pool picks up a permanent `.irradiated` flag,
+        // which renders the same green glow overlay on top of their normal sprite.
+        let acidTrail = [];
         // Shooting stars for the Galaxy skin - each is {x,y,vx,vy,life}, spawned on a timer in
         // updateSkinWorldEffects() and drawn in world space by drawSkyBackground.
         let shootingStars = [];
@@ -2141,7 +2153,7 @@
             companions = [];
             playerTrail = [];
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear();
+            lavaScorchedTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear(); acidTrail = [];
             syncCompanionsToStack();
 
             // Rare Survival level type: rolled fresh each level-up (never on level 1, and never
@@ -2160,11 +2172,13 @@
             goal.required = Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
             
             currentTheme = themes[(level - 1) % themes.length];
-            // Magma always plays its levels with the Volcano (stage 4) design, and Glacier
-            // always plays its levels with the Snow (stage 3) design, regardless of the level
-            // number's usual place in the theme rotation above.
+            // Magma always plays its levels with the Volcano (stage 4) design, Glacier always
+            // plays its levels with the Snow (stage 3) design, and Toxic Sludge always plays
+            // its levels with the Swamp (stage 5) design, regardless of the level number's
+            // usual place in the theme rotation above.
             if (player.color === 'lava') currentTheme = themes[3];
             else if (player.color === 'ice') currentTheme = themes[2];
+            else if (player.color === 'toxic') currentTheme = themes[4];
             // Restart the background music for the new level (matches the old sequencer's
             // per-level resync), cycling through the same theme order.
             playMusicTrack((level - 1) % musicFiles.length);
@@ -2399,6 +2413,7 @@
             currentTheme = themes[randomThemeIdx];
             if (player.color === 'lava') currentTheme = themes[3];
             else if (player.color === 'ice') currentTheme = themes[2];
+            else if (player.color === 'toxic') currentTheme = themes[4];
             playMusicTrack(randomThemeIdx % musicFiles.length);
             document.body.style.setProperty('--bg-color', currentTheme.bg);
 
@@ -4112,6 +4127,26 @@
                 s.x += s.vx; s.y += s.vy; s.vx *= 0.9; s.vy *= 0.9; s.life -= 1/30;
                 if (s.life <= 0) splashes.splice(i, 1);
             }
+            // Toxic Sludge: acid pools left behind by the player fade out over their lifetime;
+            // while active, any enemy or companion overlapping one picks up a permanent
+            // `.irradiated` flag (checked once - already-irradiated entities skip the distance
+            // check below), which drawRadioactiveGlow then renders as an overlay glow on top of
+            // that entity's normal sprite every frame from then on.
+            for (let i = acidTrail.length - 1; i >= 0; i--) { let a = acidTrail[i];
+                if (!isNearScreen(a.x, a.y)) { acidTrail.splice(i, 1); continue; }
+                a.life -= 1/60;
+                if (a.life <= 0) { acidTrail.splice(i, 1); continue; }
+                if (gameState === 'playing') {
+                    for (let j = 0; j < enemies.length; j++) {
+                        let e = enemies[j];
+                        if (!e.irradiated && dist(a.x, a.y, e.x, e.y) < a.radius + e.radius) e.irradiated = true;
+                    }
+                    for (let j = 0; j < companions.length; j++) {
+                        let comp = companions[j];
+                        if (!comp.irradiated && dist(a.x, a.y, comp.x, comp.y) < a.radius + comp.radius) comp.irradiated = true;
+                    }
+                }
+            }
         }
 
         // ==========================================
@@ -5402,6 +5437,25 @@
             }
         }
 
+        // Toxic Sludge: the same pulsing green glow used for the player's own 'toxic' skin
+        // (see the drawSpecial === 'toxic' branch below), factored out so any entity - enemy
+        // or companion - can pick it up as a layered overlay once irradiated, without having
+        // to reskin that entity's actual sprite/body art.
+        function drawRadioactiveGlow(x, y, radius) {
+            let t = Date.now();
+            ctx.save();
+            ctx.globalAlpha = 0.25 + Math.sin(t / 200) * 0.1;
+            ctx.fillStyle = '#39ff14';
+            ctx.beginPath(); ctx.arc(x, y, radius * 1.4, 0, Math.PI * 2); ctx.fill();
+            ctx.restore();
+            if (Math.random() < 0.3) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(57,255,20,0.7)';
+                ctx.beginPath(); ctx.arc(x + (Math.random()-0.5)*radius*1.3, y + (Math.random()-0.5)*radius*1.3, 1.5 + Math.random()*2, 0, Math.PI*2); ctx.fill();
+                ctx.restore();
+            }
+        }
+
         function drawCharacterModel(x, y, vx, vy, radius, colorId, isJiggling, hatId, targetCtx) {
             let c = targetCtx || ctx;
             let renderY = y; let speed = Math.sqrt(vx * vx + vy * vy);
@@ -5955,25 +6009,9 @@
                     ctx.restore();
                 }
             }
-            // Toxic Sludge: ground the player has slid over stays pooled with glowing green
-            // ooze forever, with slow bubbles rising through it.
-            if (toxicSludgeTiles.size) {
-                let sludgeVisible = visLand.filter(t => toxicSludgeTiles.has(t));
-                if (sludgeVisible.length) {
-                    ctx.save();
-                    pathHexUnion(ctx, sludgeVisible);
-                    ctx.globalAlpha = 0.65; ctx.fillStyle = '#1a3d0a'; ctx.fill();
-                    ctx.globalAlpha = 1; ctx.strokeStyle = 'rgba(57,255,20,0.6)'; ctx.lineWidth = 2; ctx.stroke();
-                    ctx.clip();
-                    ctx.fillStyle = 'rgba(57,255,20,0.5)';
-                    for (let bi = 0; bi < sludgeVisible.length; bi++) {
-                        let bt = sludgeVisible[bi]; let bp = (Date.now()/900 + bt.x*0.01 + bt.y*0.01) % 1;
-                        ctx.globalAlpha = 0.5 * (1 - bp);
-                        ctx.beginPath(); ctx.arc(bt.x + Math.sin(bt.x)*10, bt.y - bp*20, 3 + bp*3, 0, Math.PI*2); ctx.fill();
-                    }
-                    ctx.restore();
-                }
-            }
+            // Toxic Sludge: no longer stains the hex tiles themselves - see acidTrail, drawn
+            // later in the sorted render queue as proper glowing/bubbling pools instead of a
+            // ground overlay here.
             // Fairy Dust: ground the player has slid over stays in permanent bloom, dotted
             // with tiny pastel flowers.
             if (fairyBloomTiles.size) {
@@ -6120,6 +6158,7 @@
             for (let i = 0; i < flameParticles.length; i++) { let f = flameParticles[i]; if (player.color === 'corrupted' && f.source === 'firecone') continue; if (isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) pushRQ('flame', f, f.y + (f.radius || 0)); }
             for (let i = 0; i < leaves.length; i++) { let l = leaves[i]; if (isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) pushRQ('leaf', l, l.y + (l.radius || 0)); }
             for (let i = 0; i < splashes.length; i++) { let s = splashes[i]; if (isOnScreen(s.x + tiltX, s.y + tiltY, cullBuffer)) pushRQ('splash', s, s.y + (s.radius || 0)); }
+            for (let i = 0; i < acidTrail.length; i++) { let a = acidTrail[i]; if (isOnScreen(a.x + tiltX, a.y + tiltY, cullBuffer)) pushRQ('acid', a, a.y - a.radius); }
             for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
             for (let i = 0; i < companions.length; i++) { let cs = companions[i]; if (isOnScreen(cs.x + tiltX, cs.y + tiltY, cullBuffer)) pushRQ('companion', cs, cs.y + (cs.radius || 0)); }
             if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
@@ -6522,6 +6561,29 @@
                     else { ctx.beginPath(); ctx.arc(s.x, s.y, 2 + (s.life/s.maxLife)*4, 0, Math.PI*2); ctx.fill(); }
                     ctx.restore();
                 }
+                // Toxic Sludge: a glowing puddle of acid, fading out over its lifetime, with a
+                // couple of bubbles slowly rising up through it - the trail the player leaves
+                // behind instead of the old permanent ground stain.
+                else if (item.type === 'acid') {
+                    let a = item.obj;
+                    let alpha = Math.max(0, Math.min(1, a.life / a.maxLife));
+                    let now = Date.now();
+                    ctx.save();
+                    ctx.globalAlpha = 0.55 * alpha; ctx.fillStyle = '#1a3d0a';
+                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI*2); ctx.fill();
+                    ctx.globalAlpha = 0.85 * alpha; ctx.strokeStyle = '#39ff14'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(a.x, a.y, a.radius, 0, Math.PI*2); ctx.stroke();
+                    ctx.clip();
+                    ctx.fillStyle = 'rgba(57,255,20,0.6)';
+                    for (let bi = 0; bi < 3; bi++) {
+                        let bp = (now / 900 + a.seed + bi / 3) % 1;
+                        let bx = a.x + Math.sin(a.seed + bi * 2.1) * a.radius * 0.5;
+                        let by = a.y + a.radius * 0.6 - bp * a.radius * 1.3;
+                        ctx.globalAlpha = 0.5 * (1 - bp) * alpha;
+                        ctx.beginPath(); ctx.arc(bx, by, 1.5 + bp * 2, 0, Math.PI*2); ctx.fill();
+                    }
+                    ctx.restore();
+                }
                 else if (item.type === 'projectile') {
                     let p = item.obj;
                     // Corrupted Data: enemy projectiles render as their raw collision circle.
@@ -6586,6 +6648,10 @@
                         e.y = e.prevY + (realEY - e.prevY) * renderAlpha;
                     }
                     let sprite = window.EnemySprites && window.EnemySprites[e.type];
+                    // Toxic Sludge: an enemy that has touched the acid trail glows the same
+                    // radioactive green as the player, drawn as a glow behind its normal sprite
+                    // rather than reskinning it.
+                    if (e.irradiated) drawRadioactiveGlow(e.x, e.y, e.radius);
                     // Corrupted Data: skip the enemy's usual sprite art entirely and draw its
                     // raw collision circle instead, labeled with its type.
                     if (player.color === 'corrupted') { drawHitboxCircle(e.x, e.y, e.radius, '#ff003c', (e.type || 'ENEMY').toUpperCase().slice(0, 6)); }
@@ -6597,6 +6663,9 @@
                     let ccx = cs.prevX !== undefined ? cs.prevX + (cs.x - cs.prevX) * renderAlpha : cs.x;
                     let ccy = cs.prevY !== undefined ? cs.prevY + (cs.y - cs.prevY) * renderAlpha : cs.y;
                     drawGroundShadow(ctx, ccx, ccy + cs.radius*0.8, cs.radius*0.8, cs.radius*0.35);
+                    // Toxic Sludge: same radioactive glow overlay as enemies above, layered
+                    // behind whatever skin the companion is already wearing.
+                    if (cs.irradiated) drawRadioactiveGlow(ccx, ccy, cs.radius);
                     drawCharacterModel(ccx, ccy, 0, 0, cs.radius, cs.colorId, false, null);
                 }
                 else if (item.type === 'player') {
@@ -6786,7 +6855,7 @@
             runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
             player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear();
+            lavaScorchedTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear(); acidTrail = [];
             shootingStars = []; shootingStarTimer = 0;
             isSurvivalLevel = false; lastLevelWasSurvival = false; enemyTelegraphs = [];
             goalUnreachable = false; goalSeen = false;

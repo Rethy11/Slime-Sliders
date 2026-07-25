@@ -70,8 +70,13 @@
            body's height is "auto" (sized by content) and any tiny mismatch between that and
            the viewport - e.g. right after load, before resize() has sized the canvas - shows
            up as the bottom-anchored UI being shifted down by the difference the moment this
-           skin is equipped (or preselected from storage on load). */
-        body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08); }
+           skin is equipped (or preselected from storage on load).
+           The trailing blur() runs LAST, after the image is already pure black/white, so it
+           doesn't reintroduce mid-grays for contrast() to fight over - it just softens every
+           black/white edge by a fraction of a pixel, which is what gives old monochrome LCD/CRT
+           displays (Game Boy, B&W terminals, etc.) their characteristic hazy glow/bloom instead
+           of looking like flat, razor-sharp clip art. */
+        body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08) blur(1px); }
 
         /* 1-Bit skin (cont.): the threshold filter above collapses lots of close-luminance
            pairs (colored button + white text, gold bg + gray border, etc.) into the same flat

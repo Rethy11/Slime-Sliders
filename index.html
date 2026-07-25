@@ -857,6 +857,11 @@
         const RAINBOW_PALETTE = ['#ff4d6d', '#ff922b', '#ffd43b', '#69db7c', '#4dabf7', '#9775fa', '#f783ac'];
         const RAINBOW_PASTELS = ['#ffe3ec', '#fff3c4', '#d9f7be', '#cdeffd', '#e0d4fa', '#ffe0c2'];
         function rainbowHash(n) { let s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); }
+        // Pure Gold (Midas): the recolor applied only to hazard tiles the player has actually
+        // stood on (see goldenHazardTiles) - forced to the 'water' type so a touched tile
+        // always gets the rippling-pool texture/animation rather than lava bubbles or ice
+        // cracks, just recolored molten-gold.
+        const GOLD_HAZARD_THEME = { type: 'water', color: '#8a6500', edge: '#ffd700' };
 
         let gameState = 'title';
         let previousState = 'title';
@@ -987,10 +992,20 @@
                 let h = pixelToAxial(player.worldX, player.worldY);
                 let tile = hexTiles.get(hexKey(h.q, h.r));
                 if (tile && tile.type === 'land') goldenTiles.add(tile);
-                let nearDecor = getDecorationsInView(player.worldX - 40, player.worldY - 40, player.worldX + 40, player.worldY + 40);
+                // Same hazard tile the player is standing over stays gilded to liquid gold
+                // forever (see the isSafe/hazardTimer check below and GOLD_HAZARD_THEME).
+                if (tile && tile.type === 'hole') goldenHazardTiles.add(tile);
+                // Query box widened from a flat 40px to match the actual touch radius used in
+                // the loop below (player.radius + 10) - previously a decoration sitting just
+                // outside the old fixed 40px box, but still within real touching distance
+                // (e.g. with a size-boosting powerup active), would never even be considered
+                // for gilding, leaving it stuck ungilded no matter how many times it was
+                // brushed against.
+                let touchR = player.radius + 10;
+                let nearDecor = getDecorationsInView(player.worldX - touchR, player.worldY - touchR, player.worldX + touchR, player.worldY + touchR);
                 for (let i = 0; i < nearDecor.length; i++) {
                     let d = nearDecor[i];
-                    if (!d.golden && dist(player.worldX, player.worldY, d.x, d.y) < player.radius + 10) d.golden = true;
+                    if (!d.golden && dist(player.worldX, player.worldY, d.x, d.y) < touchR) d.golden = true;
                 }
                 for (let i = 0; i < companions.length; i++) {
                     let comp = companions[i];
@@ -1077,6 +1092,7 @@
         let toxicSludgeTiles = new Set();    // Toxic Sludge: ground stays pooled with ooze forever
         let fairyBloomTiles = new Set();     // Fairy Dust: ground blooms with flowers forever
         let goldenTiles = new Set();         // Pure Gold: ground stays gilded forever
+        let goldenHazardTiles = new Set();   // Pure Gold: hazard pockets stay liquid gold forever, once touched
         // Shooting stars for the Galaxy skin - each is {x,y,vx,vy,life}, spawned on a timer in
         // updateSkinWorldEffects() and drawn in world space by drawSkyBackground.
         let shootingStars = [];
@@ -1252,7 +1268,7 @@
 
         const rareSkins = [
             { id: "rainbow", name: "Rainbow", preview: "linear-gradient(45deg, red, orange, yellow, green, blue, purple)", isAnimated: true },
-            { id: "gold", name: "Pure Gold", preview: "linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)", isAnimated: true },
+            { id: "gold", name: "Midas", preview: "linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)", isAnimated: true },
             { id: "lava", name: "Magma", preview: "radial-gradient(circle, #ff9f1c, #d32f2f)", isAnimated: true },
             { id: "galaxy", name: "Galaxy", preview: "radial-gradient(circle, #7597de, #2b1055)", isAnimated: true },
             { id: "ice", name: "Glacier", preview: "linear-gradient(135deg, #a5f2f3, #ffffff)", isAnimated: true },
@@ -2125,7 +2141,7 @@
             companions = [];
             playerTrail = [];
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
+            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear();
             syncCompanionsToStack();
 
             // Rare Survival level type: rolled fresh each level-up (never on level 1, and never
@@ -5335,10 +5351,9 @@
             // (drawHazardTexture) instead of its usual themed bubble/arc/line texture, so the
             // whole skin reads as one consistent monochrome look rather than only water changing.
             if (player.color === 'onebit') return { type: currentTheme.hazard.type, color: '#000000', edge: '#ffffff' };
-            // Pure Gold: every hazard pocket (water/lava/ice) turns to liquid gold - forced to
-            // the 'water' type so it always gets the rippling-pool texture/animation rather
-            // than lava bubbles or ice cracks, just recolored molten-gold.
-            if (player.color === 'gold') return { type: 'water', color: '#8a6500', edge: '#ffd700' };
+            // Pure Gold (Midas): hazard pockets stay themed-normal here - only the specific
+            // tile(s) the player has actually stood on turn to liquid gold, permanently, via
+            // goldenHazardTiles/GOLD_HAZARD_THEME checked per-tile in drawHazardHoles below.
             // Rainbow: hazard pockets become a scribbled-in rainbow-striped pool (see
             // drawRainbowHazardStripes) - color/edge here only matter for the base fill and
             // hex-edge stroke, the striped texture itself is drawn separately.
@@ -5355,18 +5370,23 @@
                 camera.x - buf, camera.y - buf,
                 camera.x + canvas.width + buf, camera.y + canvas.height + buf
             );
-            // PERF: hz.edge/lineWidth are the same for every hazard tile this frame - set once
-            // here instead of inside a second per-tile save/restore below (was 2 save/restore
-            // pairs per tile; now 1). The fill+clip save/restore below still has to stay
-            // per-tile since ctx.clip() must not leak between tiles.
-            ctx.lineWidth = 4; ctx.strokeStyle = hz.edge;
+            let isGold = player.color === 'gold';
+            // PERF: hz.edge/lineWidth are the same for every hazard tile this frame, EXCEPT
+            // under Midas where a touched tile needs its own gold edge - only set once up
+            // front when that per-tile variance isn't possible.
+            ctx.lineWidth = 4;
+            if (!isGold) ctx.strokeStyle = hz.edge;
             for (let ti = 0; ti < candidates.length; ti++) {
                 let tile = candidates[ti];
                 if (!isOnScreen(tile.x, tile.y, buf)) continue;
+                // Pure Gold (Midas): only this specific tile turns liquid gold once the player
+                // has actually stood on it - every other hazard tile stays normal.
+                let tileHz = (isGold && goldenHazardTiles.has(tile)) ? GOLD_HAZARD_THEME : hz;
+                if (isGold) ctx.strokeStyle = tileHz.edge;
                 let c = cachedHexCorners(tile);
                 ctx.save();
                 ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath();
-                ctx.fillStyle = hz.color; ctx.fill();
+                ctx.fillStyle = tileHz.color; ctx.fill();
                 ctx.clip();
                 if (player.color === 'galaxy') {
                     drawBlackHoleSwirl(tile.x, tile.y, HEX_SIZE);
@@ -5375,7 +5395,7 @@
                 } else if (player.color === 'rainbow') {
                     drawRainbowHazardStripes(tile.x, tile.y, HEX_SIZE);
                 } else {
-                    drawHazardTexture(tile.x, tile.y, HEX_SIZE, hz);
+                    drawHazardTexture(tile.x, tile.y, HEX_SIZE, tileHz);
                 }
                 ctx.restore();
                 ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y); for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y); ctx.closePath(); ctx.stroke();
@@ -6042,12 +6062,9 @@
                     } else if (player.color === 'rainbow') {
                         drawRainbowDecor(d, breezeX);
                     } else {
-                        // Pure Gold: every decoration renders gilded the entire time the skin
-                        // is equipped (not just ones the player has personally brushed against -
-                        // that per-speck `d.golden` flag still gets set on touch, for the
-                        // permanent trail left behind after switching skins, but is no longer
-                        // the only thing gating the gold color here).
-                        let dcolor = (player.color === 'gold' || d.golden) ? '#ffcc00' : d.color;
+                        // Pure Gold (Midas): decorations the player has brushed against stay
+                        // gilded forever - same shapes, just swapped to a gold fill/stroke.
+                        let dcolor = d.golden ? '#ffcc00' : d.color;
                         ctx.fillStyle = dcolor; ctx.strokeStyle = dcolor; ctx.lineWidth = 2;
                         if (d.type === 0) { ctx.beginPath(); ctx.arc(d.x, d.y, 3, 0, Math.PI*2); ctx.fill(); } 
                         else if (d.type === 1) { ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x-4+breezeX*5, d.y-8); ctx.lineTo(d.x+4+breezeX*5, d.y-8); ctx.fill(); } 
@@ -6769,7 +6786,7 @@
             runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
             player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
             iceFrostedTiles.clear();
-            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear();
+            lavaScorchedTiles.clear(); toxicSludgeTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear();
             shootingStars = []; shootingStarTimer = 0;
             isSurvivalLevel = false; lastLevelWasSurvival = false; enemyTelegraphs = [];
             goalUnreachable = false; goalSeen = false;

@@ -278,11 +278,43 @@
             width: 100%;
             height: 100%;
             display: block;
+            touch-action: none;
         }
 
         .gacha-btn { font-size: 0.7rem; padding: 15px 20px; background: #ffcf33; color: #000; border: 2px solid rgba(0,0,0,0.3); border-radius: 4px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #ccac00; transition: transform 0.1s; margin-bottom: 6px; width: 80%; max-width: 300px; }
         .gacha-btn:active { transform: translateY(5px); box-shadow: none; }
         .gacha-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; cursor: not-allowed; }
+        /* Distinct color from the single-pull button so the two are easy to tell apart at a
+           glance rather than reading as one wide stack of identical yellow buttons. */
+        .gacha-btn-ten { background: #ff8c42; box-shadow: 0 5px 0 #b35a1f; }
+        .gacha-btn-ten:disabled { background: #555; box-shadow: 0 5px 0 #333; }
+
+        #gacha-ten-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            pointer-events: auto;
+            z-index: 1000;
+            background: rgba(8, 10, 18, 0.92);
+            cursor: pointer;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        .gacha-ten-panel { width: 100%; max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+        .gacha-ten-title { font-size: 1.1rem; color: #ffcf33; text-shadow: 0 2px 5px #000; text-align: center; }
+        .gacha-ten-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(64px, 1fr)); gap: 8px; width: 100%; }
+        .gacha-ten-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 8px 4px; text-align: center; border: 2px solid transparent; position: relative; animation: gachaPop 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) backwards; }
+        /* Rare pulls get the same gold treatment as the inventory grid's equipped highlight
+           idiom, so a legendary result visibly pops out of the row of commons around it. */
+        .gacha-ten-item.rare { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.6); background: rgba(255,215,0,0.12); }
+        .gacha-ten-item .inv-preview { width: 32px; height: 32px; margin: 0 auto 6px; }
+        .gacha-ten-new-badge { position: absolute; top: -6px; right: -6px; background: #ff477e; color: #fff; font-size: 0.45rem; padding: 2px 4px; border-radius: 6px; font-weight: bold; box-shadow: 0 2px 3px rgba(0,0,0,0.4); }
+        .gacha-ten-hint { font-size: 0.65rem; color: #bdc3c7; text-align: center; }
         
         .shop-coin-bag { margin: 4px auto 0 auto; padding: 6px 18px; background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #f1c40f; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; color: #f1c40f; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
         
@@ -429,6 +461,14 @@
             <canvas id="gacha-reveal-canvas" width="160" height="160"></canvas>
         </div>
         <div class="gacha-result" id="gacha-result"></div>
+    </div>
+
+    <div id="gacha-ten-overlay">
+        <div class="gacha-ten-panel">
+            <div class="gacha-ten-title">10-Pull Results!</div>
+            <div class="gacha-ten-grid" id="gacha-ten-grid"></div>
+            <div class="gacha-ten-hint">Tap anywhere to continue</div>
+        </div>
     </div>
 
     <div id="almanac-modal" class="modal">
@@ -2668,8 +2708,25 @@
             if (tiltPermissionRequested) return;
             tiltPermissionRequested = true;
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS resets this permission's in-page memory on every fresh load - a plain JS
+                // flag like tiltPermissionRequested can't survive the app being closed and
+                // reopened, only repeat prompts within the same still-open session. What we CAN
+                // persist across relaunches is the user's own past answer: once someone has
+                // explicitly denied motion access, stop asking them again every time they open
+                // the shop - respect that choice instead of re-prompting on every launch.
+                // For a past "granted" we still have to call requestPermission() again (iOS
+                // requires a fresh grant per page load for the events to actually fire), but per
+                // the current spec, once a choice has already been made for this origin, the
+                // call resolves with that remembered answer without showing the dialog again -
+                // showing UI is only supposed to happen the very first time.
+                if (storage.get('tiltPermissionDenied') === 'true') return;
                 DeviceOrientationEvent.requestPermission().then(state => {
-                    if (state === 'granted') window.addEventListener('deviceorientation', handleDeviceTilt);
+                    if (state === 'granted') {
+                        window.addEventListener('deviceorientation', handleDeviceTilt);
+                        storage.set('tiltPermissionDenied', 'false');
+                    } else {
+                        storage.set('tiltPermissionDenied', 'true');
+                    }
                 }).catch(() => {});
             } else if (typeof DeviceOrientationEvent !== 'undefined') {
                 window.addEventListener('deviceorientation', handleDeviceTilt);
@@ -2711,6 +2768,7 @@
                         <canvas id="gacha-canvas" width="300" height="240"></canvas>
                     </div>
                     <button class="gacha-btn" id="btn-pull" style="margin-top:8px;">Pull (100 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                    <button class="gacha-btn gacha-btn-ten" id="btn-pull-ten">Pull x10 (900 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
                     <div class="shop-coin-bag">
                         <img class="icon-img" style="width:1.1em;height:1.1em;" src="${iconDataURL('coin',24)}" alt=""> <span id="shop-coin-display">0</span>
                     </div>
@@ -2731,6 +2789,7 @@
             document.getElementById('tab-skins').addEventListener('click', () => switchShopTab('skins'));
             document.getElementById('tab-hats').addEventListener('click', () => switchShopTab('hats'));
             document.getElementById('btn-pull').addEventListener('click', pullGacha);
+            document.getElementById('btn-pull-ten').addEventListener('click', pullGachaTen);
             document.getElementById('promo-code-btn').addEventListener('click', openPromoModal);
             // Removing a hat also counts toward a hidden 20-CONSECUTIVE-click streak that
             // unlocks the secret Corrupted Data glitch slime. The streak is reset by the
@@ -2760,6 +2819,20 @@
                     }
                 });
             }
+            // Same dismiss pattern for the x10 results overlay - it doesn't touch the claw pool
+            // at all (see pullGachaTen), so no setupGachaPhysics() call is needed on dismiss,
+            // just refreshing the coin display/button disabled-state.
+            let tenOverlay = document.getElementById('gacha-ten-overlay');
+            if (tenOverlay) {
+                let newTenOverlay = tenOverlay.cloneNode(true);
+                tenOverlay.parentNode.replaceChild(newTenOverlay, tenOverlay);
+                newTenOverlay.addEventListener('click', (e) => {
+                    if (e.currentTarget.style.display === 'flex') {
+                        e.currentTarget.style.display = 'none';
+                        updateShopButtons();
+                    }
+                });
+            }
 
             setupGachaPhysics();
             updateShopButtons();
@@ -2785,6 +2858,22 @@
         // that kept firing (and costing CPU) for the rest of the session, including during
         // normal gameplay dragging. That accumulation was the source of the "sometimes" lag.
         let gachaListenersAttached = false;
+        // Loot odds for a single gacha pull - shared by the physical claw machine (each slime
+        // in the pool is pre-rolled with this at setupGachaPhysics time) and the bulk x10 pull
+        // below (which rolls 10 of these directly, with no claw/pool involved). Kept as one
+        // function so the two pull paths can never drift out of sync with each other.
+        const GACHA_RARE_CHANCE = 0.05;
+        const GACHA_HAT_CHANCE = 0.20;
+        function rollGachaItem() {
+            let roll = Math.random();
+            if (roll < GACHA_RARE_CHANCE) {
+                return { category: 'rare', itemData: rareSkins[Math.floor(Math.random() * rareSkins.length)], radius: 16 };
+            } else if (roll < GACHA_RARE_CHANCE + GACHA_HAT_CHANCE) {
+                return { category: 'hat', itemData: hats[Math.floor(Math.random() * hats.length)], radius: 14 };
+            } else {
+                return { category: 'basic', itemData: basicSkins[Math.floor(Math.random() * basicSkins.length)], radius: 16 };
+            }
+        }
         function getGachaCanvasMousePos(e) {
             let rect = gachaCanvas.getBoundingClientRect();
             let clientX = e.touches ? e.touches[0].clientX : e.clientX;
@@ -2801,6 +2890,11 @@
         }
         function handleGachaMove(e) {
             if (!draggedGachaSlime || crane.state !== 'idle') return;
+            // Stops the drag gesture from also scrolling the shop modal underneath it. The
+            // listener below is already registered with { passive: false } for exactly this,
+            // it just never actually called preventDefault. Gated on draggedGachaSlime so a
+            // normal swipe (nothing currently grabbed) can still scroll the modal as usual.
+            if (e.cancelable) e.preventDefault();
             let pos = getGachaCanvasMousePos(e);
             draggedGachaSlime.vx = (pos.x - draggedGachaSlime.x) * 0.4;
             draggedGachaSlime.vy = (pos.y - draggedGachaSlime.y) * 0.4;
@@ -2828,21 +2922,8 @@
             gachaAccumulator = 0;
 
             const GACHA_POOL_SIZE = 28;
-            const RARE_CHANCE = 0.05;
-            const HAT_CHANCE = 0.20;
             for (let i = 0; i < GACHA_POOL_SIZE; i++) {
-                let roll = Math.random();
-                let category, itemData, radius;
-                if (roll < RARE_CHANCE) {
-                    category = 'rare';
-                    itemData = rareSkins[Math.floor(Math.random() * rareSkins.length)]; radius = 16;
-                } else if (roll < RARE_CHANCE + HAT_CHANCE) {
-                    category = 'hat';
-                    itemData = hats[Math.floor(Math.random() * hats.length)]; radius = 14;
-                } else {
-                    category = 'basic';
-                    itemData = basicSkins[Math.floor(Math.random() * basicSkins.length)]; radius = 16;
-                }
+                let { category, itemData, radius } = rollGachaItem();
                 gachaSlimes.push({
                     x: 40 + Math.random() * 220,
                     y: 100 + Math.random() * 100,
@@ -3083,7 +3164,14 @@
             if (revealOverlay) revealOverlay.style.display = 'none';
 
             let shopModal = document.getElementById('shop-modal');
-            if (shopModal) shopModal.style.overflowY = tab === 'gacha' ? 'hidden' : 'auto';
+            // Previously forced to 'hidden' while on the gacha tab to stop a slime-drag from
+            // also scrolling the modal underneath it - that's now handled directly in
+            // handleGachaMove (preventDefault while a slime is actively grabbed) and via
+            // touch-action: none on #gacha-canvas, so the modal can go back to scrolling
+            // normally here like every other tab. Needed once the x10 pull button made this
+            // tab's content taller than the modal - with scrolling force-disabled there was no
+            // way to reach the coin total sitting below it.
+            if (shopModal) shopModal.style.overflowY = 'auto';
             
             if (gachaAnimId) { cancelAnimationFrame(gachaAnimId); gachaAnimId = null; }
             if (tab === 'gacha') {
@@ -3098,6 +3186,8 @@
         function updateShopButtons() {
             let pullBtn = document.getElementById('btn-pull');
             if (pullBtn) pullBtn.disabled = totalCoins < 100 || (crane && crane.state !== 'idle');
+            let pullTenBtn = document.getElementById('btn-pull-ten');
+            if (pullTenBtn) pullTenBtn.disabled = totalCoins < GACHA_TEN_COST || (crane && crane.state !== 'idle');
             let coinDisplay = document.getElementById('shop-coin-display');
             if (coinDisplay) coinDisplay.innerText = totalCoins;
         }
@@ -3117,6 +3207,67 @@
             crane.targetSlime = gachaSlimes[Math.floor(Math.random() * gachaSlimes.length)];
             crane.x = crane.targetSlime.x;
             crane.state = 'descending';
+        }
+
+        // Bulk pull: a modest discount off 10x the single-pull price (900 vs. 1000), the usual
+        // "buy in bulk" incentive gacha games use to make the x10 button worth reaching for.
+        // Skips the physical claw entirely - animating the crane ten times in a row would take
+        // far too long to feel good - and instead rolls 10 independent items directly via the
+        // same rollGachaItem() odds the claw pool itself is built from, then shows all 10 at
+        // once in a results grid rather than ten sequential single-item reveals.
+        const GACHA_TEN_COST = 900;
+        function pullGachaTen() {
+            if (totalCoins < GACHA_TEN_COST || crane.state !== 'idle') return;
+            totalCoins -= GACHA_TEN_COST; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
+            storage.set('gachaPullCount', (parseInt(storage.get('gachaPullCount') || 0)) + 10);
+
+            let results = [];
+            let gotNewRare = false;
+            for (let i = 0; i < 10; i++) {
+                let { category, itemData } = rollGachaItem();
+                let invKey = 'inv_' + itemData.id;
+                let count = parseInt(storage.get(invKey) || 0);
+                let isNew = count === 0;
+                storage.set(invKey, count + 1);
+                if (category === 'rare' && isNew) gotNewRare = true;
+                results.push({ category, itemData, isNew });
+            }
+            checkAchievements();
+
+            // Same escalating fanfare as a single-pull legendary reveal (see revealGachaReward)
+            // when the batch happens to contain a brand-new rare, otherwise the normal pull SFX.
+            playSFX('chest');
+            if (gotNewRare) {
+                setTimeout(() => playSFX('powerup_pickup'), 150);
+                setTimeout(() => playSFX('coin', 1.5), 300);
+            } else {
+                setTimeout(() => playSFX('powerup_pickup'), 150);
+            }
+
+            renderGachaTenResults(results);
+        }
+
+        function renderGachaTenResults(results) {
+            let grid = document.getElementById('gacha-ten-grid');
+            if (!grid) return;
+            grid.innerHTML = '';
+            results.forEach((r, i) => {
+                let itemObj = r.itemData;
+                let bgStyle = r.category === 'hat' ? '#2b2d42' : (itemObj.isAnimated ? itemObj.preview : itemObj.color);
+                let previewInner = r.category === 'hat' ? `<img class="icon-img" style="width:20px;height:20px;" src="${iconDataURL(itemObj.id, 32)}" alt="">` : '';
+                let div = document.createElement('div');
+                div.className = `gacha-ten-item ${r.category === 'rare' ? 'rare' : ''}`;
+                // Staggered pop-in so all 10 results don't snap into place in one flat instant.
+                div.style.animationDelay = (i * 0.05) + 's';
+                div.innerHTML = `
+                    ${r.isNew ? '<div class="gacha-ten-new-badge">NEW</div>' : ''}
+                    <div class="inv-preview" style="background:${bgStyle}; display:flex; justify-content:center; align-items:center;">${previewInner}</div>
+                    <div class="inv-name" style="font-size:${invNameFontSize(itemObj.name)}">${itemObj.name}</div>
+                `;
+                grid.appendChild(div);
+            });
+            let overlay = document.getElementById('gacha-ten-overlay');
+            if (overlay) overlay.style.display = 'flex';
         }
 
         function revealGachaReward(chosenItem, itemCategory) {

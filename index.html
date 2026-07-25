@@ -318,7 +318,7 @@
            idiom, so a legendary result visibly pops out of the row of commons around it. */
         .gacha-ten-item.rare { border-color: #ffd700; box-shadow: 0 0 12px rgba(255,215,0,0.6); background: rgba(255,215,0,0.12); }
         .gacha-ten-item .inv-preview { width: 32px; height: 32px; margin: 0 auto 6px; }
-        .gacha-ten-new-badge { position: absolute; top: -6px; right: -6px; background: #ff477e; color: #fff; font-size: 0.45rem; padding: 2px 4px; border-radius: 6px; font-weight: bold; box-shadow: 0 2px 3px rgba(0,0,0,0.4); }
+        .gacha-ten-new-badge { position: absolute; top: 3px; right: 3px; background: #ff477e; color: #fff; font-size: 0.45rem; padding: 2px 4px; border-radius: 6px; font-weight: bold; box-shadow: 0 2px 3px rgba(0,0,0,0.4); z-index: 2; }
         .gacha-ten-hint { font-size: 0.65rem; color: #bdc3c7; text-align: center; }
         
         .shop-coin-bag { margin: 4px auto 0 auto; padding: 6px 18px; background: linear-gradient(135deg, #2c3e50, #34495e); border: 2px solid #f1c40f; border-radius: 20px; display: inline-flex; align-items: center; gap: 5px; color: #f1c40f; font-weight: bold; font-size: 1.1rem; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
@@ -372,7 +372,7 @@
             width: 100%;
         }
 
-        .inv-count { position: absolute; top: -5px; right: -5px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; }
+        .inv-count { position: absolute; top: 3px; right: 3px; background: #ffcf33; color: #000; font-size: 0.7rem; font-weight: bold; width: 20px; height: 20px; border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #2b2d42; z-index: 2; }
 
         @keyframes gacha-spin { from { transform: translate(-50%, -50%) rotate(0deg); } to { transform: translate(-50%, -50%) rotate(360deg); } }
         @keyframes gachaShake { 0% { transform: translate(2px, 2px) rotate(0deg); } 25% { transform: translate(-2px, -2px) rotate(-2deg); } 50% { transform: translate(-4px, 0px) rotate(2deg); } 75% { transform: translate(4px, 2px) rotate(0deg); } 100% { transform: translate(2px, -2px) rotate(-2deg); } }

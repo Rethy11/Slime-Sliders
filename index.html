@@ -252,6 +252,25 @@
         .enemy-desc { font-size: 0.85rem; color: #ccc; margin-top: 5px; }
         .locked-entry { filter: grayscale(100%) brightness(0.5); opacity: 0.6; }
 
+        /* Compact almanac rows (enemies/items/achievements): just an icon + name that opens
+           the shared detail modal on tap, rather than the old always-expanded icon+description
+           row. Overrides the space-between/no-gap layout it shares with .shop-item/.setting-item
+           since those still need their price/toggle pinned to the right edge. */
+        .almanac-item { justify-content: flex-start; gap: 15px; cursor: pointer; position: relative; touch-action: manipulation; }
+        .almanac-item:active { background: rgba(255,255,255,0.2); }
+        .locked-entry { cursor: default; }
+
+        /* Persists until the entry is tapped open at least once (separate from the
+           unlocked/locked flag itself, which never re-locks). Positioned inside the row's own
+           bounds - not hanging off the corner - so it can't get clipped the way the gacha/inv
+           duplicate badges were before. */
+        .almanac-new-badge { position: absolute; top: 6px; right: 10px; background: #ff477e; color: #fff; font-size: 0.6rem; padding: 3px 7px; border-radius: 6px; font-weight: bold; box-shadow: 0 2px 3px rgba(0,0,0,0.4); z-index: 2; }
+
+        .almanac-detail-icon-wrap { width: 90px; height: 90px; background: rgba(0,0,0,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 10px auto 15px auto; border: 3px solid #fff; }
+        .almanac-detail-name { font-weight: bold; color: #ffcf33; font-size: 1.2rem; margin-bottom: 12px; }
+        .almanac-detail-desc { font-size: 0.9rem; color: #ccc; line-height: 1.6; }
+        .almanac-detail-close-btn { margin: 0; background: #8d99ae; }
+
         /* Gacha & Inventory UI Styles */
         .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 8px; flex-wrap: wrap; }
         .shop-tab { background: #6c7a89; border: none; padding: 8px 14px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; white-space: nowrap; }
@@ -490,6 +509,16 @@
         </div>
         <p id="almanac-tab-hint" style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Die to an enemy to learn its secrets.</p>
         <div id="almanac-items"></div>
+    </div>
+
+    <div id="almanac-detail-modal" class="modal">
+        <div class="modal-header">
+            <h2 id="almanac-detail-title" style="color: #9b59b6;">Details</h2>
+            <button id="almanac-detail-close-btn" class="almanac-detail-close-btn">Close</button>
+        </div>
+        <div class="almanac-detail-icon-wrap"><img id="almanac-detail-icon" class="icon-img" style="width:56px;height:56px;" src="" alt=""></div>
+        <div id="almanac-detail-name" class="almanac-detail-name"></div>
+        <div id="almanac-detail-desc" class="almanac-detail-desc"></div>
     </div>
 
     <div id="settings-modal" class="modal">
@@ -3685,14 +3714,34 @@
             initAudio();
         }
 
+        // Shared detail modal for all three almanac tabs. seenKey is null for locked entries
+        // (nothing to mark seen yet); for unlocked entries, opening the detail the first time
+        // clears the NEW badge permanently by persisting seenKey and re-rendering the calling
+        // tab's list so the badge disappears immediately.
+        function openAlmanacDetail(iconSrc, name, desc, seenKey, refreshFn) {
+            document.getElementById('almanac-detail-icon').src = iconSrc;
+            document.getElementById('almanac-detail-name').innerText = name;
+            document.getElementById('almanac-detail-desc').innerText = desc;
+            document.getElementById('almanac-detail-modal').style.display = 'block';
+            if (seenKey && storage.get(seenKey) !== 'true') {
+                storage.set(seenKey, 'true');
+                if (refreshFn) refreshFn();
+            }
+        }
+
         function populateEnemyAlmanac() {
             const container = document.getElementById('almanac-items');
             container.innerHTML = '';
             Object.keys(enemyDB).forEach(key => {
                 let isUnlocked = storage.get('almanac_' + key) === 'true'; let data = enemyDB[key];
-                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let seenKey = 'almanac_seen_' + key;
+                let isNew = isUnlocked && storage.get(seenKey) !== 'true';
                 let iconSrc = iconDataURL(isUnlocked ? key : 'lock', 40);
-                div.innerHTML = `<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? data.name : 'Unknown Entity'}</div><div class="enemy-desc">${isUnlocked ? data.desc : 'Encounter this creature to unlock its details.'}</div></div>`;
+                let name = isUnlocked ? data.name : 'Unknown Entity';
+                let desc = isUnlocked ? data.desc : 'Encounter this creature to unlock its details.';
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
+                div.onclick = () => openAlmanacDetail(iconSrc, name, desc, isUnlocked ? seenKey : null, populateEnemyAlmanac);
                 container.appendChild(div);
             });
         }
@@ -3702,9 +3751,14 @@
             container.innerHTML = '';
             Object.keys(roguelikeItemDefs).forEach(key => {
                 let isUnlocked = storage.get('runitem_' + key) === 'true'; let data = roguelikeItemDefs[key];
-                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let seenKey = 'runitem_seen_' + key;
+                let isNew = isUnlocked && storage.get(seenKey) !== 'true';
                 let iconSrc = iconDataURL(isUnlocked ? key : 'lock', 40);
-                div.innerHTML = `<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? data.name : 'Unknown Item'}</div><div class="enemy-desc">${isUnlocked ? data.desc : 'Find this item during a run to unlock its details.'}</div></div>`;
+                let name = isUnlocked ? data.name : 'Unknown Item';
+                let desc = isUnlocked ? data.desc : 'Find this item during a run to unlock its details.';
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
+                div.onclick = () => openAlmanacDetail(iconSrc, name, desc, isUnlocked ? seenKey : null, populateItemsAlmanac);
                 container.appendChild(div);
             });
         }
@@ -3714,9 +3768,13 @@
             container.innerHTML = '';
             achievementDB.forEach(a => {
                 let isUnlocked = storage.get('ach_' + a.id) === 'true';
-                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let seenKey = 'ach_seen_' + a.id;
+                let isNew = isUnlocked && storage.get(seenKey) !== 'true';
                 let iconSrc = iconDataURL(isUnlocked ? 'star' : 'lock', 40);
-                div.innerHTML = `<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-details"><div class="enemy-name">${isUnlocked ? a.name : '???'}</div><div class="enemy-desc">${a.desc}</div></div>`;
+                let name = isUnlocked ? a.name : '???';
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
+                div.onclick = () => openAlmanacDetail(iconSrc, name, a.desc, isUnlocked ? seenKey : null, populateAchievements);
                 container.appendChild(div);
             });
         }
@@ -3900,6 +3958,9 @@
         document.getElementById('tab-almanac-achievements').addEventListener('click', () => switchAlmanacTab('achievements'));
         document.getElementById('title-settings-btn').addEventListener('click', toggleSettings);
         document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
+        document.getElementById('almanac-detail-close-btn').addEventListener('click', () => {
+            document.getElementById('almanac-detail-modal').style.display = 'none';
+        });
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { 
                 e.target.closest('.modal').style.display = 'none'; 

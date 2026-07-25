@@ -2688,6 +2688,16 @@
         // step; x/y hold it after. loopGachaPhysics() blends between the two with gAlpha so the
         // claw doesn't visibly stutter under an irregular rAF cadence.
         let crane = { state: 'idle', x: 150, y: 20, prevX: 150, prevY: 20, speed: 5, targetSlime: null, restY: 20 };
+        // All active crane rigs currently on screen. `crane` above is always cranes[0] - the
+        // single-pull path only ever touches `crane` directly and never has to know this array
+        // exists. A x10 pull temporarily grows this to 10 rigs (see pullGachaTen); stepGachaSlimes
+        // and the draw loop both iterate this array generically so neither path needs special-casing.
+        let cranes = [crane];
+        // Bulk-pull bookkeeping: true for the whole span from a x10 pull starting until every
+        // crane in that batch has landed its slime and the results grid is up.
+        let gachaTenInProgress = false;
+        let pendingGachaTenResults = [];
+        let pendingGachaTenGotNewRare = false;
         let gachaGravityX = 0, gachaGravityY = 0.25;
         let gachaHatBubbleGradCache = null, gachaHatBubbleGradRadius = null;
         let tiltPermissionRequested = false;
@@ -2923,6 +2933,13 @@
             crane.y = crane.restY;
             crane.prevX = crane.x; crane.prevY = crane.y;
             crane.targetSlime = null;
+            crane.isBatch = false;
+            // In case the shop was closed/reopened mid x10-pull, drop any leftover batch rigs
+            // and reset the bookkeeping so a fresh pull starts clean.
+            cranes = [crane];
+            gachaTenInProgress = false;
+            pendingGachaTenResults = [];
+            pendingGachaTenGotNewRare = false;
 
             // Reset the gacha loop's clock/accumulator so re-opening the shop (or dismissing a
             // reveal) never sees a huge elapsed-time gap from being closed/idle - that would
@@ -2984,11 +3001,16 @@
                 let s = gachaSlimes[i];
                 s.prevX = s.x; s.prevY = s.y;
             }
-            crane.prevX = crane.x; crane.prevY = crane.y;
+            for (let c of cranes) { c.prevX = c.x; c.prevY = c.y; }
 
             for (let i = 0; i < gachaSlimes.length; i++) {
                 let s = gachaSlimes[i];
-                if (s !== draggedGachaSlime && (!crane.targetSlime || s !== crane.targetSlime || crane.state !== 'ascending')) {
+                // A slime is only pulled out of normal physics once some crane has actually
+                // clamped onto it and is hauling it up - while a crane is still sliding in,
+                // bouncing off its neighbors, settling into position, or descending toward it,
+                // the slime keeps living in the bowl like any other.
+                let heldByAscendingCrane = cranes.some(c => c.targetSlime === s && c.state === 'ascending');
+                if (s !== draggedGachaSlime && !heldByAscendingCrane) {
                     s.vx += gachaGravityX;
                     s.vy += gachaGravityY;
                     s.vx *= 0.98;
@@ -3029,25 +3051,104 @@
                 }
             }
 
-            if (crane.state === 'descending') {
-                crane.y += crane.speed;
-                let targetY = crane.targetSlime.y - crane.targetSlime.radius;
-                if (crane.y >= targetY) {
-                    crane.state = 'ascending';
-                    playSFX('click');
+            for (let c of cranes) {
+                if (c.state === 'entering') {
+                    // Sliding in from off-screen at its own fixed velocity, bouncing off the
+                    // play-field edges like a wall. Purely horizontal - y stays pinned to the rail.
+                    c.x += c.vx;
+                    if (c.x < 14) { c.x = 14; c.vx = Math.abs(c.vx) * 0.8; }
+                    if (c.x > 286) { c.x = 286; c.vx = -Math.abs(c.vx) * 0.8; }
+                    c.enterTimer--;
+                    if (c.enterTimer <= 0) c.state = 'settling';
+                } else if (c.state === 'settling') {
+                    // Eases toward its own assigned slime's current x (that slime may itself
+                    // still be drifting/hopping in the bowl, so this tracks a moving target).
+                    let dx = c.targetSlime.x - c.x;
+                    c.vx = dx * 0.15;
+                    c.x += c.vx;
+                    if (Math.abs(dx) < 2) { c.x = c.targetSlime.x; c.state = 'descending'; }
+                } else if (c.state === 'descending') {
+                    c.y += c.speed;
+                    let targetY = c.targetSlime.y - c.targetSlime.radius;
+                    if (c.y >= targetY) {
+                        c.state = 'ascending';
+                        playSFX('click');
+                    }
+                } else if (c.state === 'ascending') {
+                    c.y -= c.speed;
+                    c.targetSlime.x = c.x;
+                    c.targetSlime.y = c.y + c.targetSlime.radius;
+                    if (c.y <= c.restY) {
+                        let won = c.targetSlime;
+                        gachaSlimes = gachaSlimes.filter(s => s !== won);
+                        c.targetSlime = null;
+                        if (c.isBatch) {
+                            handleBatchCraneComplete(c, won);
+                        } else {
+                            c.state = 'idle';
+                            c.x = 150; c.y = c.restY;
+                            revealGachaReward(won.skinData, won.category);
+                        }
+                    }
                 }
-            } else if (crane.state === 'ascending') {
-                crane.y -= crane.speed;
-                crane.targetSlime.x = crane.x;
-                crane.targetSlime.y = crane.y + crane.targetSlime.radius;
-                if (crane.y <= crane.restY) {
-                    crane.state = 'idle';
-                    let won = crane.targetSlime;
-                    gachaSlimes = gachaSlimes.filter(s => s !== won);
-                    crane.targetSlime = null;
-                    crane.x = 150; crane.y = crane.restY;
-                    revealGachaReward(won.skinData, won.category);
+            }
+
+            // While two or more cranes are still airborne (entering or easing into position),
+            // they can collide with each other on the rail and bounce apart - same overlap+
+            // closing-speed impulse style as the slime-vs-slime collision above, just 1D.
+            for (let i = 0; i < cranes.length; i++) {
+                let a = cranes[i];
+                if (a.state !== 'entering' && a.state !== 'settling') continue;
+                for (let j = i + 1; j < cranes.length; j++) {
+                    let b = cranes[j];
+                    if (b.state !== 'entering' && b.state !== 'settling') continue;
+                    let dx = b.x - a.x;
+                    let minDist = 24;
+                    if (Math.abs(dx) < minDist) {
+                        let dir = dx < 0 ? -1 : 1;
+                        let overlap = minDist - Math.abs(dx);
+                        a.x -= dir * overlap * 0.5;
+                        b.x += dir * overlap * 0.5;
+                        let avx = a.vx, bvx = b.vx;
+                        a.vx = bvx * 0.85;
+                        b.vx = avx * 0.85;
+                    }
                 }
+            }
+        }
+
+        // Called once a crane that belongs to a x10-pull batch finishes hauling its slime up to
+        // the rail. Collects the reward (same inventory/new-item bookkeeping the old instant-roll
+        // bulk pull did) instead of popping the single-pull reveal overlay, and once all 10 rigs
+        // in the batch have reported in, shows the results grid and retracts the cranes back down
+        // to just the one primary rig.
+        function handleBatchCraneComplete(c, won) {
+            c.state = 'done';
+            let invKey = 'inv_' + won.skinData.id;
+            let count = parseInt(storage.get(invKey) || 0);
+            let isNew = count === 0;
+            storage.set(invKey, count + 1);
+            if (won.category === 'rare' && isNew) pendingGachaTenGotNewRare = true;
+            pendingGachaTenResults.push({ category: won.category, itemData: won.skinData, isNew });
+
+            if (pendingGachaTenResults.length >= 10) {
+                checkAchievements();
+                playSFX('powerup_pickup');
+                if (pendingGachaTenGotNewRare) {
+                    setTimeout(() => playSFX('coin', 1.5), 150);
+                }
+                renderGachaTenResults(pendingGachaTenResults);
+
+                cranes = [crane];
+                crane.state = 'idle';
+                crane.x = 150; crane.y = crane.restY;
+                crane.prevX = crane.x; crane.prevY = crane.y;
+                crane.targetSlime = null;
+                crane.isBatch = false;
+                gachaTenInProgress = false;
+                pendingGachaTenResults = [];
+                pendingGachaTenGotNewRare = false;
+                updateShopButtons();
             }
         }
 
@@ -3115,10 +3216,24 @@
                 }
             }
 
-            // Interpolated crane rig position for this render frame (see gAlpha above).
-            let craneX = crane.prevX !== undefined ? crane.prevX + (crane.x - crane.prevX) * gAlpha : crane.x;
-            let craneY = crane.prevY !== undefined ? crane.prevY + (crane.y - crane.prevY) * gAlpha : crane.y;
+            // Draw every crane rig currently in play (just the primary rig for a single pull,
+            // up to ten during a x10 pull's slide-in/bounce/settle/descend sequence). Rigs that
+            // have already delivered their slime in a batch pull (state 'done') are skipped -
+            // they retract instantly rather than sliding back off screen.
+            for (let c of cranes) {
+                if (c.state === 'done') continue;
+                let cx = c.prevX !== undefined ? c.prevX + (c.x - c.prevX) * gAlpha : c.x;
+                let cy = c.prevY !== undefined ? c.prevY + (c.y - c.prevY) * gAlpha : c.y;
+                drawCraneRig(cx, cy, c.state === 'ascending');
+            }
 
+            gachaAnimId = requestAnimationFrame(loopGachaPhysics);
+        }
+
+        // Renders a single crane rig (rail mount, cable, housing, claw) at the given interpolated
+        // position. Pulled out of the draw loop above so it can be called once per active crane
+        // during a x10 pull instead of just for the single primary rig.
+        function drawCraneRig(craneX, craneY, clawShut) {
             gachaCtx.save();
             gachaCtx.fillStyle = '#232b33';
             gachaCtx.fillRect(craneX - 22, 0, 44, 9);
@@ -3137,7 +3252,6 @@
             gachaCtx.strokeStyle = '#333'; gachaCtx.lineWidth = 1; gachaCtx.stroke();
             gachaCtx.fillStyle = '#2c3540'; gachaCtx.beginPath(); gachaCtx.arc(craneX - 6, craneY, 1.5, 0, Math.PI*2);
             gachaCtx.arc(craneX + 6, craneY, 1.5, 0, Math.PI*2); gachaCtx.fill();
-            let clawShut = crane.state === 'ascending';
             let spread = clawShut ? 5 : 15;
             let dip = clawShut ? 16 : 12;
             gachaCtx.strokeStyle = '#b6bfc2';
@@ -3156,8 +3270,6 @@
             gachaCtx.fillStyle = '#dfe4e6';
             gachaCtx.beginPath(); gachaCtx.arc(craneX - spread, craneY + dip, 2, 0, Math.PI*2); gachaCtx.arc(craneX + spread, craneY + dip, 2, 0, Math.PI*2); gachaCtx.fill();
             gachaCtx.restore();
-
-            gachaAnimId = requestAnimationFrame(loopGachaPhysics);
         }
 
         function switchShopTab(tab) {
@@ -3220,40 +3332,88 @@
 
         // Bulk pull: a modest discount off 10x the single-pull price (900 vs. 1000), the usual
         // "buy in bulk" incentive gacha games use to make the x10 button worth reaching for.
-        // Skips the physical claw entirely - animating the crane ten times in a row would take
-        // far too long to feel good - and instead rolls 10 independent items directly via the
-        // same rollGachaItem() odds the claw pool itself is built from, then shows all 10 at
-        // once in a results grid rather than ten sequential single-item reveals.
+        // Unlike a single pull (one claw, already resting over the bowl), a x10 pull brings in
+        // 9 extra crane rigs that slide in from either side of the play field at varied speeds,
+        // jostle/bounce off each other for about a second, then ease into position and descend
+        // together onto their slimes. Each crane is bound to its target slime the instant it's
+        // created here - before it's slid a single pixel on screen - so the whole sequence is
+        // deterministic: the physics just has to get each claw to the slime it was already
+        // promised, never pick one on arrival.
         const GACHA_TEN_COST = 900;
         function pullGachaTen() {
-            if (totalCoins < GACHA_TEN_COST || crane.state !== 'idle') return;
+            if (totalCoins < GACHA_TEN_COST || crane.state !== 'idle' || gachaTenInProgress) return;
+
+            // A x10 pull needs 10 distinct physical slimes to send claws after. Single pulls
+            // whittle the 28-slime bowl down over time, so top it back up first if it's run low -
+            // this never happens on a freshly opened shop (bowl starts full) but keeps a bulk
+            // pull from ever coming up short deep into a session.
+            while (gachaSlimes.length < 10) {
+                let { category, itemData, radius } = rollGachaItem();
+                gachaSlimes.push({
+                    x: 40 + Math.random() * 220,
+                    y: 100 + Math.random() * 100,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    radius: radius,
+                    color: itemData.color || '#3498db',
+                    isAnimated: itemData.isAnimated,
+                    preview: itemData.preview,
+                    category: category,
+                    skinData: itemData
+                });
+            }
+
             totalCoins -= GACHA_TEN_COST; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
             storage.set('gachaPullCount', (parseInt(storage.get('gachaPullCount') || 0)) + 10);
+            gachaTenInProgress = true;
+            pendingGachaTenResults = [];
+            pendingGachaTenGotNewRare = false;
 
-            let results = [];
-            let gotNewRare = false;
+            let revealOverlay = document.getElementById('gacha-reveal-overlay');
+            if (revealOverlay) revealOverlay.style.display = 'none';
+            let tenOverlay = document.getElementById('gacha-ten-overlay');
+            if (tenOverlay) tenOverlay.style.display = 'none';
+
+            // Pick 10 distinct slimes from the current bowl as this batch's targets, then sort
+            // them left-to-right so the left-entering claws and right-entering claws each get a
+            // run of neighboring targets rather than being assigned crossed/scattered ones -
+            // that's what lets them settle into a sensible left-to-right arrangement instead of
+            // tangling with each other on the way in.
+            let pool = gachaSlimes.slice();
+            let chosen = [];
             for (let i = 0; i < 10; i++) {
-                let { category, itemData } = rollGachaItem();
-                let invKey = 'inv_' + itemData.id;
-                let count = parseInt(storage.get(invKey) || 0);
-                let isNew = count === 0;
-                storage.set(invKey, count + 1);
-                if (category === 'rare' && isNew) gotNewRare = true;
-                results.push({ category, itemData, isNew });
+                let idx = Math.floor(Math.random() * pool.length);
+                chosen.push(pool[idx]);
+                pool.splice(idx, 1);
             }
-            checkAchievements();
+            chosen.sort((a, b) => a.x - b.x);
+            let leftTargets = chosen.slice(0, 5);   // 5 leftmost slimes - approached from the left
+            let rightTargets = chosen.slice(5, 10); // 5 rightmost slimes - approached from the right
 
-            // Same escalating fanfare as a single-pull legendary reveal (see revealGachaReward)
-            // when the batch happens to contain a brand-new rare, otherwise the normal pull SFX.
+            // Reuse the primary crane as one of the left-side rigs, and build 9 fresh rigs for
+            // the rest. All ten start off-screen and converge toward the middle, closer targets
+            // getting gentler speeds and farther ones more, so they naturally arrive roughly in
+            // the order they'll need to settle rather than all slamming into the middle at once.
+            cranes = [];
+            function makeCraneRig(target, fromLeft, orderIndex) {
+                let speed = 3.5 + orderIndex * 1.1 + Math.random() * 1.5;
+                let startX = fromLeft ? -20 - orderIndex * 14 : 320 + orderIndex * 14;
+                return {
+                    state: 'entering',
+                    x: startX, y: crane.restY,
+                    prevX: startX, prevY: crane.restY,
+                    speed: 5,
+                    targetSlime: target,
+                    restY: crane.restY,
+                    vx: fromLeft ? speed : -speed,
+                    enterTimer: 55 + Math.floor(Math.random() * 20),
+                    isBatch: true
+                };
+            }
+            leftTargets.forEach((t, i) => cranes.push(i === 0 ? Object.assign(crane, makeCraneRig(t, true, i), { isBatch: true }) : makeCraneRig(t, true, i)));
+            rightTargets.forEach((t, i) => cranes.push(makeCraneRig(t, false, i)));
+
             playSFX('chest');
-            if (gotNewRare) {
-                setTimeout(() => playSFX('powerup_pickup'), 150);
-                setTimeout(() => playSFX('coin', 1.5), 300);
-            } else {
-                setTimeout(() => playSFX('powerup_pickup'), 150);
-            }
-
-            renderGachaTenResults(results);
         }
 
         function renderGachaTenResults(results) {

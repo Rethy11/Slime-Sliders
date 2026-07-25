@@ -5133,7 +5133,11 @@
         // equipped.
         function drawRainbowArcs() {
             ctx.save();
-            let cx = 400, cy = 260, baseR = 460;
+            // Anchored to the bottom of the canvas (not a fixed y that happened to land near
+            // the player, who always renders at screen-center) so the arch reads as a real
+            // horizon backdrop rising up from the bottom of the screen, same on every device
+            // regardless of canvas height.
+            let cx = canvas.width / 2, cy = canvas.height, baseR = Math.max(canvas.width, canvas.height) * 0.75;
             const bands = ['#ff3b3b', '#ff9f1c', '#ffe135', '#4caf50', '#3399ff', '#8e44ad'];
             ctx.lineWidth = 15; ctx.lineCap = 'round';
             for (let i = 0; i < bands.length; i++) {

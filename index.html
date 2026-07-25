@@ -3168,6 +3168,19 @@
             if (resultText) resultText.innerHTML = `${title}<span style="color:${itemCategory === 'rare' ? '#ffd700' : '#fff'};">${name}</span>${duplicateTag}`;
         }
 
+        // Skins/Hats grid: item names sit in a fixed-width box and only wrap at spaces
+        // (.inv-name keeps word-break: normal so "Baseball Cap" can break into two lines, but
+        // a single long word like "Baseball", "Rainbow", or "Corrupted" can't break at all and
+        // was overflowing the grey box at the fixed 0.75rem size). Scales the font down based
+        // on the longest individual word in the name - that word's own width is what actually
+        // risks poking outside the box, not the full name's length - so it keeps working for
+        // any name added later without needing a hand-tuned lookup table.
+        function invNameFontSize(name) {
+            let longest = name.split(' ').reduce((max, w) => Math.max(max, w.length), 1);
+            let remSize = Math.min(0.75, 4.2 / longest);
+            return Math.max(remSize, 0.42).toFixed(2) + "rem";
+        }
+
         function populateInventory() {
             const skinsContainer = document.getElementById('inv-skins');
             const hatsContainer = document.getElementById('inv-hats');
@@ -3179,9 +3192,8 @@
                     let count = parseInt(storage.get('inv_' + h.id) || 0);
                     let div = document.createElement('div');
                     let isEquipped = player.hat === h.id;
-                    let fontSize = h.name.length > 6 ? "0.55rem" : "0.75rem";
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
-                    div.innerHTML = `<div class="inv-preview" style="background:#2b2d42; display:flex; justify-content:center; align-items:center;"><img class="icon-img" style="width:26px;height:26px;" src="${iconDataURL(h.id, 40)}" alt=""></div><div class="inv-name">${h.name}</div>`;
+                    div.innerHTML = `<div class="inv-preview" style="background:#2b2d42; display:flex; justify-content:center; align-items:center;"><img class="icon-img" style="width:26px;height:26px;" src="${iconDataURL(h.id, 40)}" alt=""></div><div class="inv-name" style="font-size:${invNameFontSize(h.name)}">${h.name}</div>`;
                     if (count > 0) {
                         div.innerHTML += `<div class="inv-count">${count}</div>`;
                         div.onclick = () => equipItem('hat', h.id);
@@ -3199,9 +3211,8 @@
                     let div = document.createElement('div');
                     let isEquipped = player.color === s.id;
                     let bgStyle = s.isAnimated ? s.preview : s.color;
-                    let fontSize = displayName.length > 6 ? "0.55rem" : "0.75rem";
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
-                    div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name">${displayName}</div>`;
+                    div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name" style="font-size:${invNameFontSize(displayName)}">${displayName}</div>`;
                     if (count > 0) {
                         div.innerHTML += `<div class="inv-count">${count}</div>`;
                         div.onclick = () => equipItem('skin', s.id);

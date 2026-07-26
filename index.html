@@ -279,6 +279,52 @@
         .achievement-icon-tile:active { background: rgba(255,255,255,0.2); }
         .achievement-icon-tile.locked-entry { cursor: default; }
 
+        /* Unlocked medals only (locked-entry is already flat grey, nothing to catch the light):
+           a diagonal light-bar sweeps across every unlocked medal AT ONCE, on the same fixed
+           cycle, so it reads as one uniform "catch the light" moment across the whole grid
+           rather than each medal glinting on its own schedule. clip-path (not overflow:hidden)
+           clips the sweep to the tile's own circle instead of its square box - overflow:hidden
+           would leave the bar visibly cut off square behind the round border. The 0%->92% hold
+           then a quick 97%->100% traverse is what makes the sweep occasional (mostly parked off
+           to the left) rather than a constant back-and-forth shimmer. */
+        .achievement-icon-tile:not(.locked-entry) { clip-path: circle(50% at 50% 50%); }
+        .achievement-icon-tile:not(.locked-entry)::before {
+            content: ''; position: absolute; top: -20%; left: -160%; width: 55%; height: 140%;
+            background: linear-gradient(75deg, transparent 0%, rgba(255,255,255,0.85) 50%, transparent 100%);
+            transform: skewX(-20deg); pointer-events: none; z-index: 2;
+            animation: medalGlint 6s ease-in-out infinite;
+        }
+        @keyframes medalGlint {
+            0%, 92% { left: -160%; }
+            97%, 100% { left: 180%; }
+        }
+
+        /* Rare per-medal sparkle: a tiny cross-shaped twinkle at a random spot on the medal,
+           independent of the uniform glint above. Position/delay/duration are set per-tile as
+           inline custom properties in populateAchievements (Math.random per medal) rather than
+           fixed here, specifically so every medal sparkles at its own random moment instead of
+           all together - "rare" here means a long (20-34s) individual cycle where the sparkle
+           itself is only actually visible for a sliver of it (see the 96/97/98.5% keyframe
+           spacing), unlike the glint above, which is a rare event shared across the whole grid. */
+        .achievement-icon-tile:not(.locked-entry)::after {
+            content: ''; position: absolute; width: 7px; height: 7px; z-index: 3; pointer-events: none;
+            top: var(--sparkle-y, 30%); left: var(--sparkle-x, 60%);
+            background:
+                radial-gradient(circle, #fff 0%, rgba(255,255,255,0) 65%),
+                linear-gradient(#fff, #fff), linear-gradient(#fff, #fff);
+            background-size: 100% 100%, 100% 1.5px, 1.5px 100%;
+            background-position: center, center, center;
+            background-repeat: no-repeat;
+            opacity: 0; transform: scale(0.3);
+            animation: medalSparkle var(--sparkle-duration, 24s) ease-in-out infinite;
+            animation-delay: var(--sparkle-delay, 0s);
+        }
+        @keyframes medalSparkle {
+            0%, 96%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+            97% { opacity: 1; transform: scale(1.4) rotate(20deg); }
+            98.5% { opacity: 0; transform: scale(0.3) rotate(20deg); }
+        }
+
         /* "Unlocks:" callout inside the achievement detail modal - only shown when the
            achievement being viewed actually grants an item/skin (see achievementRewards). */
         .almanac-unlocks-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.15); }
@@ -4866,6 +4912,16 @@
                 let name = isUnlocked ? a.name : '???';
                 const div = document.createElement('div'); div.className = 'achievement-icon-tile' + (isUnlocked ? '' : ' locked-entry');
                 div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<img class="icon-img" style="width:82%;height:82%;" src="${iconSrc}" alt="">`;
+                // Per-tile sparkle randomness (see .achievement-icon-tile::after in CSS): each
+                // unlocked medal gets its own random spot on its face plus its own random point
+                // in a long cycle, so sparkles land on a different medal at a different moment
+                // each time rather than every medal twinkling in lockstep.
+                if (isUnlocked) {
+                    div.style.setProperty('--sparkle-x', (20 + Math.random() * 55) + '%');
+                    div.style.setProperty('--sparkle-y', (20 + Math.random() * 55) + '%');
+                    div.style.setProperty('--sparkle-duration', (20 + Math.random() * 14) + 's');
+                    div.style.setProperty('--sparkle-delay', (-Math.random() * 30) + 's');
+                }
                 div.onclick = () => {
                     // Only reveal the "Unlocks:" reward preview once the achievement is
                     // actually earned - keeps it in step with the '???' secrecy locked entries

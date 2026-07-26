@@ -529,7 +529,9 @@
             <h2 id="item-preview-title" style="color: #f1c40f;">Preview</h2>
             <button id="item-preview-close-btn" class="almanac-detail-close-btn">Close</button>
         </div>
-        <div class="almanac-detail-icon-wrap" id="item-preview-icon-wrap" style="width:90px;height:90px;"></div>
+        <div class="almanac-detail-icon-wrap" id="item-preview-icon-wrap" style="width:150px;height:150px;border-radius:20px;overflow:hidden;">
+            <canvas id="item-preview-canvas" width="150" height="150" style="width:100%;height:100%;"></canvas>
+        </div>
         <div id="item-preview-name" class="almanac-detail-name"></div>
         <div id="item-preview-desc" class="almanac-detail-desc"></div>
         <button id="item-preview-equip-btn" class="menu-btn" style="display:none; margin-top:15px;"></button>
@@ -3722,6 +3724,46 @@
             fitInvNameLabels(skinsContainer);
         }
 
+        // Live-rendered preview for the item-preview modal: reuses the same drawCharacterModel
+        // renderer the gacha reveal uses, so tapping a skin or hat shows an actual animated
+        // slime wearing it instead of a flat color swatch / static icon. Runs its own rAF loop
+        // (independent of the main game loop, which is paused while any modal/menu is open) so
+        // animated skins (rainbow, lava, sparkle, etc.) keep moving while the modal is on screen;
+        // started in openItemPreview and stopped wherever the modal is dismissed.
+        let itemPreviewAnimId = null;
+        let itemPreviewKind = null;
+        let itemPreviewItemId = null;
+
+        function stopItemPreviewAnim() {
+            if (itemPreviewAnimId) {
+                cancelAnimationFrame(itemPreviewAnimId);
+                itemPreviewAnimId = null;
+            }
+        }
+
+        function startItemPreviewAnim() {
+            stopItemPreviewAnim();
+            let canvas = document.getElementById('item-preview-canvas');
+            if (!canvas) return;
+            let pctx = canvas.getContext('2d');
+            // Same radius-to-canvas ratio the gacha reveal uses (46 on a 160px canvas), so hats
+            // and the slime's leg/lean sway stay comfortably inside the frame at any size.
+            let radius = canvas.width * (46 / 160);
+            let cx = canvas.width / 2, cy = canvas.height / 2 + canvas.height * (10 / 160);
+            function frame() {
+                pctx.clearRect(0, 0, canvas.width, canvas.height);
+                if (itemPreviewKind === 'hat') {
+                    // Preview the hat on whatever skin color the player currently has equipped,
+                    // same convention as the gacha reveal (revealGachaReward).
+                    drawCharacterModel(cx, cy, 0, 0, radius, player.color, false, itemPreviewItemId, pctx);
+                } else {
+                    drawCharacterModel(cx, cy, 0, 0, radius, itemPreviewItemId, false, null, pctx);
+                }
+                itemPreviewAnimId = requestAnimationFrame(frame);
+            }
+            frame();
+        }
+
         // Opens the enlarged preview modal for a tapped skin or hat tile - owned items show an
         // Equip button (or "Equipped" if already worn); locked ones show a hint explaining how
         // to unlock them instead. kind is 'skin' or 'hat'.
@@ -3735,22 +3777,13 @@
             let owned = count > 0;
             let isRareOrSecret = kind === 'skin' && (rareSkins.some(s => s.id === id) || secretSkinsById.has(id));
 
-            let iconWrap = document.getElementById('item-preview-icon-wrap');
             let nameEl = document.getElementById('item-preview-name');
             let descEl = document.getElementById('item-preview-desc');
             let equipBtn = document.getElementById('item-preview-equip-btn');
 
-            iconWrap.innerHTML = '';
-            if (kind === 'skin') {
-                iconWrap.style.background = def.isAnimated ? def.preview : def.color;
-            } else {
-                iconWrap.style.background = '#2b2d42';
-                let img = document.createElement('img');
-                img.className = 'icon-img';
-                img.style.width = '56px'; img.style.height = '56px';
-                img.src = iconDataURL(id, 56);
-                iconWrap.appendChild(img);
-            }
+            itemPreviewKind = kind;
+            itemPreviewItemId = id;
+            startItemPreviewAnim();
 
             nameEl.innerText = (owned || !isRareOrSecret) ? def.name : '???';
 
@@ -3763,6 +3796,7 @@
                 equipBtn.onclick = () => {
                     equipItem(kind, id);
                     document.getElementById('item-preview-modal').style.display = 'none';
+                    stopItemPreviewAnim();
                 };
             } else {
                 descEl.innerText = kind === 'skin' ? skinUnlockHint(id) : hatUnlockHint(id);
@@ -4139,6 +4173,7 @@
         });
         document.getElementById('item-preview-close-btn').addEventListener('click', () => {
             document.getElementById('item-preview-modal').style.display = 'none';
+            stopItemPreviewAnim();
         });
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { 

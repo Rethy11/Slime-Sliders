@@ -3757,7 +3757,9 @@
                     // same convention as the gacha reveal (revealGachaReward).
                     drawCharacterModel(cx, cy, 0, 0, radius, player.color, false, itemPreviewItemId, pctx);
                 } else {
-                    drawCharacterModel(cx, cy, 0, 0, radius, itemPreviewItemId, false, null, pctx);
+                    // Preview the skin with whatever hat the player currently has equipped, so
+                    // the preview matches how the character will actually look, not skin alone.
+                    drawCharacterModel(cx, cy, 0, 0, radius, itemPreviewItemId, false, player.hat, pctx);
                 }
                 itemPreviewAnimId = requestAnimationFrame(frame);
             }

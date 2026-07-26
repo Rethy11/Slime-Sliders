@@ -271,6 +271,20 @@
         .almanac-detail-desc { font-size: 0.9rem; color: #ccc; line-height: 1.6; }
         .almanac-detail-close-btn { margin: 0; background: #8d99ae; }
 
+        /* Achievements tab: reworked from the icon+name row list the other two almanac tabs
+           still use into a plain grid of tappable icon badges - name/description only ever
+           show up in the shared detail modal after tapping one. */
+        .achievement-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 14px; }
+        .achievement-icon-tile { position: relative; aspect-ratio: 1 / 1; background: rgba(255,255,255,0.1); border-radius: 50%; display: flex; justify-content: center; align-items: center; border: 2px solid #fff; cursor: pointer; touch-action: manipulation; }
+        .achievement-icon-tile:active { background: rgba(255,255,255,0.2); }
+        .achievement-icon-tile.locked-entry { cursor: default; }
+
+        /* "Unlocks:" callout inside the achievement detail modal - only shown when the
+           achievement being viewed actually grants an item/skin (see achievementRewards). */
+        .almanac-unlocks-row { margin-top: 16px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.15); }
+        .almanac-unlocks-label { font-size: 0.75rem; color: #9b59b6; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+        .almanac-unlocks-icon-wrap { width: 46px; height: 46px; background: rgba(0,0,0,0.3); border-radius: 50%; display: flex; justify-content: center; align-items: center; margin: 0 auto; border: 2px solid #fff; }
+
         /* Gacha & Inventory UI Styles */
         .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 8px; flex-wrap: wrap; }
         .shop-tab { background: #6c7a89; border: none; padding: 8px 14px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; white-space: nowrap; }
@@ -516,11 +530,11 @@
             <button class="close-modal-btn">Close</button>
         </div>
         <div class="shop-tabs">
-            <button class="shop-tab active" id="tab-almanac-enemies">Enemies</button>
+            <button class="shop-tab active" id="tab-almanac-achievements">Achievements</button>
+            <button class="shop-tab" id="tab-almanac-enemies">Enemies</button>
             <button class="shop-tab" id="tab-almanac-items">Items</button>
-            <button class="shop-tab" id="tab-almanac-achievements">Achievements</button>
         </div>
-        <p id="almanac-tab-hint" style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Die to an enemy to learn its secrets.</p>
+        <p id="almanac-tab-hint" style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Complete challenges to unlock achievements.</p>
         <div id="almanac-items"></div>
     </div>
 
@@ -532,6 +546,10 @@
         <div class="almanac-detail-icon-wrap"><img id="almanac-detail-icon" class="icon-img" style="width:56px;height:56px;" src="" alt=""></div>
         <div id="almanac-detail-name" class="almanac-detail-name"></div>
         <div id="almanac-detail-desc" class="almanac-detail-desc"></div>
+        <div id="almanac-detail-unlocks" class="almanac-unlocks-row" style="display:none;">
+            <div class="almanac-unlocks-label">Unlocks:</div>
+            <div class="almanac-unlocks-icon-wrap"><img id="almanac-detail-unlocks-icon" class="icon-img" style="width:30px;height:30px;" src="" alt=""></div>
+        </div>
     </div>
 
     <!-- Tapping any skin/hat in the Skin Shop's Skins/Hats tabs (owned or still locked) opens
@@ -1241,39 +1259,42 @@
         // runs after any of those change and flips 'ach_<id>' to 'true' the first time check()
         // passes; once set, an achievement stays unlocked even if the underlying stat regresses
         // (e.g. spending coins) since checkAchievements() only ever sets the flag, never clears it.
+        // icon (added alongside the icon-grid rework of the Achievements almanac tab) names a
+        // drawPixelIcon/IconSprites type - every entry here is unique so each achievement gets
+        // its own recognizable badge in the grid instead of the old one-size-fits-all star.
         const achievementDB = [
-            { id: 'level3',          name: 'First Steps',        desc: 'Reach Level 3.',                              check: () => highestLevel >= 3 },
-            { id: 'level10',         name: 'Deep Dive',          desc: 'Reach Level 10.',                             check: () => highestLevel >= 10 },
-            { id: 'level20',         name: 'Going the Distance', desc: 'Reach Level 20.',                             check: () => highestLevel >= 20 },
-            { id: 'bug_hunter',      name: 'Bug Hunter',         desc: 'Encounter 3 different enemies.',              check: () => Object.keys(enemyDB).filter(k => storage.get('almanac_' + k) === 'true').length >= 3 },
-            { id: 'bestiary',        name: 'Bestiary Complete',  desc: 'Encounter every enemy in the game.',          check: () => Object.keys(enemyDB).every(k => storage.get('almanac_' + k) === 'true') },
-            { id: 'centurion',       name: 'Centurion',          desc: 'Defeat 100 enemies.',                         check: () => (parseInt(storage.get('totalEnemyKills')) || 0) >= 100 },
-            { id: 'loadout_ready',   name: 'Loadout Ready',      desc: 'Find every run item at least once.',         check: () => Object.keys(roguelikeItemDefs).every(id => storage.get('runitem_' + id) === 'true') },
-            { id: 'legendary_find',  name: 'Legendary Find',     desc: 'Pick up a Shuriken.',                          check: () => storage.get('runitem_shuriken') === 'true' },
-            { id: 'my_slime',        name: 'My Slime',           desc: 'Recruit a Slime Squad companion.',            check: () => storage.get('runitem_slimefriend') === 'true' },
-            { id: 'cult_leader',     name: 'Cult Leader',        desc: 'Have 5 Slime Squad companions at once.',      check: () => (parseInt(storage.get('maxSlimefriendStack')) || 0) >= 5 },
-            { id: 'gacha_addict',    name: 'Gacha Addict',       desc: 'Pull the gacha crane 10 times.',              check: () => (parseInt(storage.get('gachaPullCount') || 0)) >= 10 },
-            { id: 'rare_collector',  name: 'Rare Collector',     desc: 'Unlock all 10 rare skins.',                   check: () => rareSkins.every(s => parseInt(storage.get('inv_' + s.id) || 0) > 0) },
-            { id: 'hatalogue',       name: 'Hatalogue',          desc: 'Unlock all 10 hats.',                         check: () => hats.every(h => parseInt(storage.get('inv_' + h.id) || 0) > 0) },
-            { id: 'glitch_hunter',   name: 'Glitch Hunter',      desc: 'Discover the secret Corrupted Data skin.',    check: () => parseInt(storage.get('inv_corrupted') || 0) > 0 },
-            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length },
+            { id: 'level3',          name: 'First Steps',        desc: 'Reach Level 3.',                              icon: 'ach_footprint',    check: () => highestLevel >= 3 },
+            { id: 'level10',         name: 'Deep Dive',          desc: 'Reach Level 10.',                             icon: 'ach_medal_silver', check: () => highestLevel >= 10 },
+            { id: 'level20',         name: 'Going the Distance', desc: 'Reach Level 20.',                             icon: 'ach_medal_gold',   check: () => highestLevel >= 20 },
+            { id: 'bug_hunter',      name: 'Bug Hunter',         desc: 'Encounter 3 different enemies.',              icon: 'ach_bug',          check: () => Object.keys(enemyDB).filter(k => storage.get('almanac_' + k) === 'true').length >= 3 },
+            { id: 'bestiary',        name: 'Bestiary Complete',  desc: 'Encounter every enemy in the game.',          icon: 'book',             check: () => Object.keys(enemyDB).every(k => storage.get('almanac_' + k) === 'true') },
+            { id: 'centurion',       name: 'Centurion',          desc: 'Defeat 100 enemies.',                         icon: 'ach_helmet',       check: () => (parseInt(storage.get('totalEnemyKills')) || 0) >= 100 },
+            { id: 'loadout_ready',   name: 'Loadout Ready',      desc: 'Find every run item at least once.',         icon: 'ach_backpack',     check: () => Object.keys(roguelikeItemDefs).every(id => storage.get('runitem_' + id) === 'true') },
+            { id: 'legendary_find',  name: 'Legendary Find',     desc: 'Pick up a Shuriken.',                          icon: 'shuriken',         check: () => storage.get('runitem_shuriken') === 'true' },
+            { id: 'my_slime',        name: 'My Slime',           desc: 'Recruit a Slime Squad companion.',            icon: 'slimefriend',      check: () => storage.get('runitem_slimefriend') === 'true' },
+            { id: 'cult_leader',     name: 'Cult Leader',        desc: 'Have 5 Slime Squad companions at once.',      icon: 'horns',            check: () => (parseInt(storage.get('maxSlimefriendStack')) || 0) >= 5 },
+            { id: 'gacha_addict',    name: 'Gacha Addict',       desc: 'Pull the gacha crane 10 times.',              icon: 'ach_crane',        check: () => (parseInt(storage.get('gachaPullCount') || 0)) >= 10 },
+            { id: 'rare_collector',  name: 'Rare Collector',     desc: 'Unlock all 10 rare skins.',                   icon: 'ach_gem',          check: () => rareSkins.every(s => parseInt(storage.get('inv_' + s.id) || 0) > 0) },
+            { id: 'hatalogue',       name: 'Hatalogue',          desc: 'Unlock all 10 hats.',                         icon: 'tophat',           check: () => hats.every(h => parseInt(storage.get('inv_' + h.id) || 0) > 0) },
+            { id: 'glitch_hunter',   name: 'Glitch Hunter',      desc: 'Discover the secret Corrupted Data skin.',    icon: 'ach_glitchbadge',  check: () => parseInt(storage.get('inv_corrupted') || 0) > 0 },
+            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', icon: 'ach_scroll',      check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length },
             // Unlike every other entry here, this can't be phrased as a check() against
             // persisted stats - it depends on the specific level the player died on (goal
             // fenced off entirely) plus having actually seen that goal before dying. Both are
             // transient per-level state, so triggerGameOver() sets 'ach_sometimes_in_life'
             // directly instead of this check ever running. check() always returns false so
             // checkAchievements() never double-unlocks it once storage already has it.
-            { id: 'sometimes_in_life', name: 'Sometimes in Life', desc: 'Die in an unavoidable way.', check: () => false },
+            { id: 'sometimes_in_life', name: 'Sometimes in Life', desc: 'Die in an unavoidable way.', icon: 'ach_skull', check: () => false },
             // Endless Waves mode has its own best-level record (bestEndlessLevel), kept entirely
             // separate from Classic's highestLevel above, so these can't be earned by Classic
             // play and vice versa.
-            { id: 'endless_level3',  name: 'Wave Rider',         desc: 'Reach Level 3 in Endless Waves.',             check: () => bestEndlessLevel >= 3 },
-            { id: 'endless_level6',  name: 'Wave Breaker',       desc: 'Reach Level 6 in Endless Waves.',             check: () => bestEndlessLevel >= 6 },
-            { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             check: () => bestEndlessLevel >= 9 },
+            { id: 'endless_level3',  name: 'Wave Rider',         desc: 'Reach Level 3 in Endless Waves.',             icon: 'ach_wave_small',   check: () => bestEndlessLevel >= 3 },
+            { id: 'endless_level6',  name: 'Wave Breaker',       desc: 'Reach Level 6 in Endless Waves.',             icon: 'ach_wave_medium',  check: () => bestEndlessLevel >= 6 },
+            { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             icon: 'ach_wave_large',   check: () => bestEndlessLevel >= 9 },
             // Checked against the live in-memory balance rather than a persisted high-water
             // mark, matching "hoard" - the achievement fires the moment the player is actually
             // sitting on 50,000 coins at once, not merely on having earned that much lifetime.
-            { id: 'avarice',         name: 'Avarice',            desc: 'Hoard 50,000 coins.',                         check: () => totalCoins >= 50000 }
+            { id: 'avarice',         name: 'Avarice',            desc: 'Hoard 50,000 coins.',                         icon: 'coin',             check: () => totalCoins >= 50000 }
         ];
 
         // Shared lock check used by both the run-item drop table (rollRoguelikeItem) and the
@@ -1310,6 +1331,28 @@
                     populateInventory();
                 }
             }
+        }
+
+        // Sprite for the achievement-detail "Unlocks:" row (see populateAchievements /
+        // openAlmanacDetail): reuses the same badge icon a granted run item already shows
+        // everywhere else in the almanac, or - for the one skin reward (Avarice -> Midas) -
+        // renders a small static character preview the same way the shop's item-preview does.
+        const rewardIconCache = {};
+        function achievementRewardIconSrc(achId) {
+            let reward = achievementRewards[achId];
+            if (!reward) return null;
+            if (reward.type === 'runitem') return iconDataURL(reward.id, 32);
+            if (reward.type === 'skin') {
+                let key = 'skin_' + reward.id;
+                if (rewardIconCache[key]) return rewardIconCache[key];
+                let c = document.createElement('canvas'); c.width = 32; c.height = 32;
+                let cx = c.getContext('2d');
+                drawCharacterModel(16, 18, 0, 0, 13, reward.id, false, null, cx);
+                let url = c.toDataURL();
+                rewardIconCache[key] = url;
+                return url;
+            }
+            return null;
         }
 
         // Builds the "how to unlock this" hint text shown in place of an item/skin/hat's real
@@ -2008,6 +2051,119 @@
                     tctx.strokeStyle = '#b8860b'; tctx.lineWidth = 1*s;
                     tctx.beginPath(); tctx.moveTo(0,-2*s); tctx.lineTo(0,6*s); tctx.stroke();
                     tctx.beginPath(); tctx.moveTo(-9*s,-1*s); tctx.quadraticCurveTo(-8*s,4*s,0,6*s); tctx.quadraticCurveTo(8*s,4*s,9*s,-1*s); tctx.stroke();
+                    break;
+
+                // ---- Achievement badges (unique icon per achievementDB entry - see the
+                // 'icon' field there). A handful of achievements reuse an existing type above
+                // instead (shuriken/slimefriend/horns/tophat/coin/book) when it already fits. ----
+                case 'ach_footprint':
+                    tctx.fillStyle = '#ffd7a8';
+                    tctx.beginPath(); tctx.ellipse(-3.5*s, -2.5*s, 3*s, 4.3*s, -0.3, 0, Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.arc(-6*s, -7.5*s, 1.2*s, 0, Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.ellipse(3.5*s, 3.5*s, 3*s, 4.3*s, 0.3, 0, Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.arc(6*s, 8.5*s, 1.2*s, 0, Math.PI*2); tctx.fill();
+                    break;
+                case 'ach_medal_silver':
+                case 'ach_medal_gold': {
+                    let gold = type === 'ach_medal_gold';
+                    tctx.fillStyle = gold ? '#f9e08a' : '#e4e7eb';
+                    tctx.beginPath(); tctx.moveTo(-4*s,-9*s); tctx.lineTo(-1*s,-2*s); tctx.lineTo(-6*s,-2*s); tctx.closePath(); tctx.fill();
+                    tctx.beginPath(); tctx.moveTo(4*s,-9*s); tctx.lineTo(1*s,-2*s); tctx.lineTo(6*s,-2*s); tctx.closePath(); tctx.fill();
+                    tctx.fillStyle = gold ? '#f1c40f' : '#dfe4ea';
+                    tctx.beginPath(); tctx.arc(0,3*s,7*s,0,Math.PI*2); tctx.fill();
+                    tctx.lineWidth = 1.3*s; tctx.strokeStyle = gold ? '#b8860b' : '#9aa0a6'; tctx.stroke();
+                    tctx.fillStyle = gold ? '#b8860b' : '#9aa0a6'; tctx.beginPath(); tctx.arc(0,3*s,3*s,0,Math.PI*2); tctx.fill();
+                    break;
+                }
+                case 'ach_bug':
+                    tctx.fillStyle = '#e74c3c';
+                    tctx.beginPath(); tctx.ellipse(0,1*s,7*s,8*s,0,0,Math.PI*2); tctx.fill();
+                    tctx.strokeStyle = '#000'; tctx.lineWidth = 1*s;
+                    tctx.beginPath(); tctx.moveTo(0,-7*s); tctx.lineTo(0,9*s); tctx.stroke();
+                    tctx.fillStyle = '#000';
+                    [[-3,-2],[3,-2],[-4,3],[4,3]].forEach(p => { tctx.beginPath(); tctx.arc(p[0]*s,p[1]*s,1.1*s,0,Math.PI*2); tctx.fill(); });
+                    tctx.beginPath(); tctx.arc(0,-7*s,3*s,0,Math.PI*2); tctx.fill();
+                    tctx.lineWidth = 0.8*s;
+                    tctx.beginPath(); tctx.moveTo(-1.5*s,-9*s); tctx.lineTo(-3.5*s,-11.5*s); tctx.stroke();
+                    tctx.beginPath(); tctx.moveTo(1.5*s,-9*s); tctx.lineTo(3.5*s,-11.5*s); tctx.stroke();
+                    break;
+                case 'ach_helmet':
+                    tctx.fillStyle = '#d4af37';
+                    tctx.beginPath(); tctx.arc(0,1*s,7*s,Math.PI,0); tctx.fill();
+                    tctx.fillRect(-7*s,1*s,14*s,3*s);
+                    tctx.fillStyle = '#c0392b';
+                    tctx.beginPath(); tctx.moveTo(-1.5*s,-10*s); tctx.quadraticCurveTo(0,-13*s,1.5*s,-10*s); tctx.lineTo(3*s,6*s); tctx.lineTo(-3*s,6*s); tctx.closePath(); tctx.fill();
+                    tctx.strokeStyle = '#8a6d1f'; tctx.lineWidth = 1*s; tctx.beginPath(); tctx.arc(0,1*s,7*s,Math.PI,0); tctx.stroke();
+                    break;
+                case 'ach_backpack':
+                    tctx.fillStyle = '#6b4f2a';
+                    tctx.beginPath(); tctx.roundRect(-6*s,-5*s,12*s,14*s,3*s); tctx.fill();
+                    tctx.fillStyle = '#8b6b3d';
+                    tctx.beginPath(); tctx.roundRect(-4*s,-8*s,8*s,5*s,2*s); tctx.fill();
+                    tctx.strokeStyle = '#4a3620'; tctx.lineWidth = 1*s;
+                    tctx.beginPath(); tctx.moveTo(-3*s,-1*s); tctx.lineTo(3*s,-1*s); tctx.stroke();
+                    tctx.fillStyle = '#4a3620'; tctx.beginPath(); tctx.arc(0,3*s,1.4*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'ach_gem':
+                    tctx.fillStyle = '#7fd8f7';
+                    tctx.beginPath(); tctx.moveTo(-8*s,-2*s); tctx.lineTo(0,-9*s); tctx.lineTo(8*s,-2*s); tctx.lineTo(0,9*s); tctx.closePath(); tctx.fill();
+                    tctx.strokeStyle = '#2a8fb8'; tctx.lineWidth = 1*s; tctx.stroke();
+                    tctx.fillStyle = 'rgba(255,255,255,0.6)';
+                    tctx.beginPath(); tctx.moveTo(-8*s,-2*s); tctx.lineTo(0,-9*s); tctx.lineTo(-2*s,-2*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'ach_crane':
+                    tctx.strokeStyle = '#bbb'; tctx.lineWidth = 1.5*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(0,-10*s); tctx.lineTo(0,-3*s); tctx.stroke();
+                    tctx.fillStyle = '#e74c3c';
+                    tctx.beginPath(); tctx.moveTo(-6*s,-3*s); tctx.quadraticCurveTo(-8*s,4*s,-3*s,9*s); tctx.lineTo(-1*s,6*s); tctx.quadraticCurveTo(-3*s,2*s,0,-3*s); tctx.closePath(); tctx.fill();
+                    tctx.beginPath(); tctx.moveTo(6*s,-3*s); tctx.quadraticCurveTo(8*s,4*s,3*s,9*s); tctx.lineTo(1*s,6*s); tctx.quadraticCurveTo(3*s,2*s,0,-3*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'ach_glitchbadge':
+                    tctx.fillStyle = '#111'; tctx.beginPath(); tctx.roundRect(-9*s,-9*s,18*s,18*s,3*s); tctx.fill();
+                    tctx.fillStyle = '#0ff'; tctx.fillRect(-8*s,-6*s,10*s,3*s);
+                    tctx.fillStyle = '#f0f'; tctx.fillRect(-4*s,-1*s,12*s,3*s);
+                    tctx.fillStyle = '#0ff'; tctx.fillRect(-8*s,4*s,7*s,3*s);
+                    tctx.fillStyle = '#fff'; tctx.fillRect(2*s,-6*s,3*s,3*s);
+                    break;
+                case 'ach_scroll':
+                    tctx.fillStyle = '#f4ecd8';
+                    tctx.beginPath(); tctx.roundRect(-7*s,-6*s,14*s,12*s,2*s); tctx.fill();
+                    tctx.strokeStyle = '#c0a875'; tctx.lineWidth = 0.8*s;
+                    tctx.beginPath(); tctx.moveTo(-5*s,-2*s); tctx.lineTo(5*s,-2*s); tctx.stroke();
+                    tctx.beginPath(); tctx.moveTo(-5*s,1*s); tctx.lineTo(5*s,1*s); tctx.stroke();
+                    tctx.beginPath(); tctx.moveTo(-5*s,4*s); tctx.lineTo(2*s,4*s); tctx.stroke();
+                    tctx.fillStyle = '#d8c48f';
+                    tctx.beginPath(); tctx.ellipse(-7*s,0,2*s,6*s,0,0,Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.ellipse(7*s,0,2*s,6*s,0,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'ach_skull':
+                    tctx.fillStyle = '#eee';
+                    tctx.beginPath(); tctx.arc(0,-2*s,7*s,Math.PI,0); tctx.fill();
+                    tctx.fillRect(-7*s,-2*s,14*s,7*s);
+                    tctx.beginPath(); tctx.moveTo(-7*s,5*s); tctx.quadraticCurveTo(0,10*s,7*s,5*s); tctx.closePath(); tctx.fill();
+                    tctx.fillStyle = '#000';
+                    tctx.beginPath(); tctx.arc(-3*s,-1*s,2.2*s,0,Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.arc(3*s,-1*s,2.2*s,0,Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.moveTo(0,2*s); tctx.lineTo(-1.5*s,5*s); tctx.lineTo(1.5*s,5*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'ach_wave_small':
+                    tctx.strokeStyle = '#7fdbff'; tctx.lineWidth = 2*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(-9*s,2*s); tctx.quadraticCurveTo(-5*s,-4*s,-1*s,2*s); tctx.quadraticCurveTo(3*s,-4*s,7*s,2*s); tctx.stroke();
+                    tctx.fillStyle = 'rgba(127,219,255,0.4)';
+                    tctx.beginPath(); tctx.moveTo(-9*s,2*s); tctx.quadraticCurveTo(-5*s,-4*s,-1*s,2*s); tctx.quadraticCurveTo(3*s,-4*s,7*s,2*s); tctx.lineTo(7*s,9*s); tctx.lineTo(-9*s,9*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'ach_wave_medium':
+                    tctx.strokeStyle = '#3ba7d6'; tctx.lineWidth = 2.2*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(-9*s,0); tctx.quadraticCurveTo(-4.5*s,-8*s,0,0); tctx.quadraticCurveTo(4.5*s,-8*s,9*s,0); tctx.stroke();
+                    tctx.fillStyle = 'rgba(59,167,214,0.5)';
+                    tctx.beginPath(); tctx.moveTo(-9*s,0); tctx.quadraticCurveTo(-4.5*s,-8*s,0,0); tctx.quadraticCurveTo(4.5*s,-8*s,9*s,0); tctx.lineTo(9*s,9*s); tctx.lineTo(-9*s,9*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'ach_wave_large':
+                    tctx.strokeStyle = '#1b4f72'; tctx.lineWidth = 2.4*s; tctx.lineCap = 'round';
+                    tctx.beginPath(); tctx.moveTo(-10*s,-1*s); tctx.quadraticCurveTo(-5*s,-11*s,0,-1*s); tctx.quadraticCurveTo(5*s,-11*s,10*s,-1*s); tctx.stroke();
+                    tctx.fillStyle = 'rgba(27,79,114,0.6)';
+                    tctx.beginPath(); tctx.moveTo(-10*s,-1*s); tctx.quadraticCurveTo(-5*s,-11*s,0,-1*s); tctx.quadraticCurveTo(5*s,-11*s,10*s,-1*s); tctx.lineTo(10*s,9*s); tctx.lineTo(-10*s,9*s); tctx.closePath(); tctx.fill();
+                    tctx.fillStyle = '#f1c40f'; tctx.beginPath(); tctx.arc(6*s,-6*s,1.6*s,0,Math.PI*2); tctx.fill();
                     break;
             }
             tctx.restore();
@@ -4068,12 +4224,26 @@
         // Shared detail modal for all three almanac tabs. seenKey is null for locked entries
         // (nothing to mark seen yet); for unlocked entries, opening the detail the first time
         // clears the NEW badge permanently by persisting seenKey and re-rendering the calling
-        // tab's list so the badge disappears immediately.
-        function openAlmanacDetail(iconSrc, name, desc, seenKey, refreshFn) {
-            document.getElementById('almanac-detail-icon').src = iconSrc;
+        // tab's list so the badge disappears immediately. unlockIconSrc is achievements-only:
+        // when present, shows the "Unlocks:" callout with that reward's sprite underneath the
+        // description; omitted/null on every Enemies/Items call so it just stays hidden there.
+        // iconGreyed (achievements-only) matches the grid's own .locked-entry grayscale filter,
+        // since locked achievements now show a dimmed version of their real icon here too
+        // instead of the generic lock glyph.
+        function openAlmanacDetail(iconSrc, name, desc, seenKey, refreshFn, unlockIconSrc, iconGreyed) {
+            const detailIcon = document.getElementById('almanac-detail-icon');
+            detailIcon.src = iconSrc;
+            detailIcon.style.filter = iconGreyed ? 'grayscale(100%) brightness(0.5)' : '';
             document.getElementById('almanac-detail-name').innerText = name;
             document.getElementById('almanac-detail-desc').innerText = desc;
             document.getElementById('almanac-detail-modal').style.display = 'block';
+            const unlocksRow = document.getElementById('almanac-detail-unlocks');
+            if (unlockIconSrc) {
+                document.getElementById('almanac-detail-unlocks-icon').src = unlockIconSrc;
+                unlocksRow.style.display = 'block';
+            } else {
+                unlocksRow.style.display = 'none';
+            }
             if (seenKey && storage.get(seenKey) !== 'true') {
                 storage.set(seenKey, 'true');
                 if (refreshFn) refreshFn();
@@ -4082,6 +4252,7 @@
 
         function populateEnemyAlmanac() {
             const container = document.getElementById('almanac-items');
+            container.className = '';
             container.innerHTML = '';
             Object.keys(enemyDB).forEach(key => {
                 let isUnlocked = storage.get('almanac_' + key) === 'true'; let data = enemyDB[key];
@@ -4099,6 +4270,7 @@
 
         function populateItemsAlmanac() {
             const container = document.getElementById('almanac-items');
+            container.className = '';
             container.innerHTML = '';
             Object.keys(roguelikeItemDefs).forEach(key => {
                 let isFound = storage.get('runitem_' + key) === 'true'; let data = roguelikeItemDefs[key];
@@ -4121,18 +4293,29 @@
             });
         }
 
+        // Achievements tab: just a grid of tappable icon badges (each achievement's own unique
+        // `icon`, dimmed via .locked-entry's grayscale filter while still locked, rather than a
+        // generic lock glyph) - no inline name/description here, those only appear once the
+        // badge is tapped and the shared detail modal opens.
         function populateAchievements() {
             const container = document.getElementById('almanac-items');
+            container.className = 'achievement-grid';
             container.innerHTML = '';
             achievementDB.forEach(a => {
                 let isUnlocked = storage.get('ach_' + a.id) === 'true';
                 let seenKey = 'ach_seen_' + a.id;
                 let isNew = isUnlocked && storage.get(seenKey) !== 'true';
-                let iconSrc = iconDataURL(isUnlocked ? 'star' : 'lock', 40);
+                let iconSrc = iconDataURL(a.icon, 40);
                 let name = isUnlocked ? a.name : '???';
-                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
-                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
-                div.onclick = () => openAlmanacDetail(iconSrc, name, a.desc, isUnlocked ? seenKey : null, populateAchievements);
+                const div = document.createElement('div'); div.className = 'achievement-icon-tile' + (isUnlocked ? '' : ' locked-entry');
+                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<img class="icon-img" style="width:34px;height:34px;" src="${iconSrc}" alt="">`;
+                div.onclick = () => {
+                    // Only reveal the "Unlocks:" reward preview once the achievement is
+                    // actually earned - keeps it in step with the '???' secrecy locked entries
+                    // already get everywhere else in the almanac.
+                    let unlockIconSrc = isUnlocked ? achievementRewardIconSrc(a.id) : null;
+                    openAlmanacDetail(iconSrc, name, a.desc, isUnlocked ? seenKey : null, populateAchievements, unlockIconSrc, !isUnlocked);
+                };
                 container.appendChild(div);
             });
         }
@@ -4153,7 +4336,7 @@
             gameState = 'paused'; }
             else if (gameState !== 'paused') { previousState = gameState;
             gameState = 'paused'; }
-            document.getElementById('almanac-modal').style.display = 'block'; switchAlmanacTab('enemies'); initAudio();
+            document.getElementById('almanac-modal').style.display = 'block'; switchAlmanacTab('achievements'); initAudio();
         }
 
         function toggleSettings() {

@@ -292,7 +292,7 @@
             content: ''; position: absolute; top: -20%; left: -160%; width: 55%; height: 140%;
             background: linear-gradient(75deg, transparent 0%, rgba(255,255,255,0.85) 50%, transparent 100%);
             transform: skewX(-20deg); pointer-events: none; z-index: 2;
-            animation: medalGlint 6s ease-in-out infinite;
+            animation: medalGlint 9s ease-in-out infinite;
         }
         @keyframes medalGlint {
             0%, 92% { left: -160%; }
@@ -303,8 +303,8 @@
            independent of the uniform glint above. Position/delay/duration are set per-tile as
            inline custom properties in populateAchievements (Math.random per medal) rather than
            fixed here, specifically so every medal sparkles at its own random moment instead of
-           all together - "rare" here means a long (20-34s) individual cycle where the sparkle
-           itself is only actually visible for a sliver of it (see the 96/97/98.5% keyframe
+           all together - "rare" here means a per-medal (11-20s) individual cycle where the
+           sparkle itself is only actually visible for a sliver of it (see the 93/95/98% keyframe
            spacing), unlike the glint above, which is a rare event shared across the whole grid. */
         .achievement-icon-tile:not(.locked-entry)::after {
             content: ''; position: absolute; width: 7px; height: 7px; z-index: 3; pointer-events: none;
@@ -316,13 +316,13 @@
             background-position: center, center, center;
             background-repeat: no-repeat;
             opacity: 0; transform: scale(0.3);
-            animation: medalSparkle var(--sparkle-duration, 24s) ease-in-out infinite;
+            animation: medalSparkle var(--sparkle-duration, 15s) ease-in-out infinite;
             animation-delay: var(--sparkle-delay, 0s);
         }
         @keyframes medalSparkle {
-            0%, 96%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); }
-            97% { opacity: 1; transform: scale(1.4) rotate(20deg); }
-            98.5% { opacity: 0; transform: scale(0.3) rotate(20deg); }
+            0%, 93%, 100% { opacity: 0; transform: scale(0.2) rotate(0deg); }
+            95% { opacity: 1; transform: scale(1.5) rotate(20deg); }
+            98% { opacity: 0; transform: scale(0.3) rotate(20deg); }
         }
 
         /* "Unlocks:" callout inside the achievement detail modal - only shown when the
@@ -4919,8 +4919,8 @@
                 if (isUnlocked) {
                     div.style.setProperty('--sparkle-x', (20 + Math.random() * 55) + '%');
                     div.style.setProperty('--sparkle-y', (20 + Math.random() * 55) + '%');
-                    div.style.setProperty('--sparkle-duration', (20 + Math.random() * 14) + 's');
-                    div.style.setProperty('--sparkle-delay', (-Math.random() * 30) + 's');
+                    div.style.setProperty('--sparkle-duration', (11 + Math.random() * 9) + 's');
+                    div.style.setProperty('--sparkle-delay', (-Math.random() * 20) + 's');
                 }
                 div.onclick = () => {
                     // Only reveal the "Unlocks:" reward preview once the achievement is

@@ -7910,7 +7910,7 @@
                             // moonlight overlay applied at the end of draw() (SECTION 8) -
                             // registering the world position here keeps the glow pinned exactly
                             // to where the flower itself is actually drawn.
-                            if (player.color === 'sparkle') fairyLightSources.push({ x: px, y: py, radius: 30 });
+                            if (player.color === 'sparkle') fairyLightSources.push({ x: px, y: py, radius: 90 });
                         }
                     }
                     ctx.restore();
@@ -8244,7 +8244,7 @@
                             // Fairy Dust: same light-source registration as the ground bloom
                             // flowers above, so blossomed trees glow too under the moonlight
                             // overlay at the end of draw().
-                            if (player.color === 'sparkle') fairyLightSources.push({ x: fx, y: fy, radius: 30 });
+                            if (player.color === 'sparkle') fairyLightSources.push({ x: fx, y: fy, radius: 90 });
                         }
                         ctx.restore();
                     }
@@ -8628,7 +8628,7 @@
                     // registered here (rather than drawn directly) so the actual glow renders
                     // in the moonlight overlay pass at the end of draw(), on top of the
                     // darkening tint instead of underneath it.
-                    if (player.color === 'sparkle') fairyLightSources.push({ x: pdrawX, y: pdrawY, radius: p.radius + 95, bright: true });
+                    if (player.color === 'sparkle') fairyLightSources.push({ x: pdrawX, y: pdrawY, radius: p.radius + 240, bright: true });
                     if (p.activePowerup === 'rampage') {
                         ctx.save();
                         ctx.translate(pdrawX, pdrawY);
@@ -8729,16 +8729,26 @@
             // applied here in plain screen space, after every world layer above (sky, ground,
             // trees, entities, player) has already been drawn, so it darkens everything
             // uniformly no matter where the camera is. 'multiply' darkens/tints without fully
-            // flattening whatever shape or color was underneath. The player and every currently
-            // visible flower registered their world position into fairyLightSources as they
-            // were drawn above (see the player block and both flower-drawing spots); each one
-            // gets its light punched back through this darkness immediately after via an
-            // additive ('lighter') pass, converted to this frame's screen position with the
-            // same camera/shake/tilt offset the world layers used.
+            // flattening whatever shape or color was underneath. A darker vignette toward the
+            // screen edges layers on top of that base tint (also via 'multiply', so it stacks
+            // rather than replaces), then the player and every currently visible flower - which
+            // registered their world position into fairyLightSources as they were drawn above
+            // (see the player block and both flower-drawing spots) - get their light punched
+            // back through BOTH darkening layers via an additive ('lighter') pass, so a light
+            // sitting near the screen edge visibly pushes back the vignette there too, not just
+            // the base tint.
             if (player.color === 'sparkle') {
                 ctx.save();
                 ctx.globalCompositeOperation = 'multiply';
                 ctx.fillStyle = 'rgba(18,22,64,0.78)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                let vignetteR = Math.max(canvas.width, canvas.height) * 0.68;
+                let vignette = ctx.createRadialGradient(canvas.width/2, canvas.height/2, vignetteR*0.35, canvas.width/2, canvas.height/2, vignetteR);
+                vignette.addColorStop(0, 'rgba(255,255,255,1)');
+                vignette.addColorStop(0.6, 'rgba(120,120,140,1)');
+                vignette.addColorStop(1, 'rgba(15,15,35,1)');
+                ctx.fillStyle = vignette;
                 ctx.fillRect(0, 0, canvas.width, canvas.height);
                 ctx.restore();
 
@@ -8748,23 +8758,39 @@
                     let ls = fairyLightSources[li];
                     let sx = ls.x - camX + shakeX + tiltX, sy = ls.y - camY + shakeY + tiltY;
                     if (sx < -ls.radius || sx > canvas.width + ls.radius || sy < -ls.radius || sy > canvas.height + ls.radius) continue;
+                    // Gentle per-light flicker (seeded off position so lights don't pulse in
+                    // lockstep) - a natural breathing candle/firefly waver rather than a static
+                    // disc.
+                    let seed = (ls.x * 0.013 + ls.y * 0.021) % 1;
+                    let flicker = ls.bright ? (0.92 + 0.08 * Math.sin(Date.now()/500)) : (0.75 + 0.25 * Math.sin(Date.now()/900 + seed*40));
                     let grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, ls.radius);
                     if (ls.bright) {
-                        // The player's own light - brightest and widest-reaching.
-                        grad.addColorStop(0, 'rgba(255,250,230,0.55)');
-                        grad.addColorStop(0.4, 'rgba(210,230,255,0.28)');
-                        grad.addColorStop(1, 'rgba(210,230,255,0)');
+                        // The player's own light - biggest, softest, and brightest at its core,
+                        // but still a hazy gradual falloff rather than a flat bright disc.
+                        grad.addColorStop(0, `rgba(255,246,222,${0.22*flicker})`);
+                        grad.addColorStop(0.2, `rgba(255,238,208,${0.15*flicker})`);
+                        grad.addColorStop(0.45, `rgba(225,232,255,${0.09*flicker})`);
+                        grad.addColorStop(0.75, `rgba(200,215,255,${0.04*flicker})`);
+                        grad.addColorStop(1, 'rgba(200,215,255,0)');
                     } else {
-                        // Flower light - noticeably dimmer/tighter than the player's, per the
-                        // "a bit dimmer" ask.
-                        grad.addColorStop(0, 'rgba(255,246,210,0.28)');
-                        grad.addColorStop(0.5, 'rgba(255,225,235,0.12)');
-                        grad.addColorStop(1, 'rgba(255,225,235,0)');
+                        // Flower light - same hazy shape, noticeably dimmer/softer overall per
+                        // the "a bit dimmer" ask.
+                        grad.addColorStop(0, `rgba(255,240,210,${0.11*flicker})`);
+                        grad.addColorStop(0.3, `rgba(255,230,215,${0.07*flicker})`);
+                        grad.addColorStop(0.65, `rgba(255,220,225,${0.03*flicker})`);
+                        grad.addColorStop(1, 'rgba(255,220,225,0)');
                     }
                     ctx.fillStyle = grad;
                     ctx.beginPath(); ctx.arc(sx, sy, ls.radius, 0, Math.PI * 2); ctx.fill();
                 }
                 ctx.restore();
+
+                // The player's own light was drawn as a flat additive circle above, which would
+                // otherwise wash out on top of the character it's meant to be glowing behind -
+                // redrawing the slime here, after its light, puts the character back on top so
+                // the glow reads as coming from behind/around it rather than sitting in front.
+                let pScreenX = pdrawX - camX + shakeX + tiltX, pScreenY = pdrawY - camY + shakeY + tiltY;
+                drawCharacterModel(pScreenX, pScreenY, player.vx, player.vy, player.radius, player.color, Math.abs(player.jiggleForceX) + Math.abs(player.jiggleForceY) > 0, player.hat);
             }
 
             if (gameState === 'playing' && goal.active && timeLeft <= MAX_TIME / 2) {

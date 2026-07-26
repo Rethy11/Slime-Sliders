@@ -626,7 +626,7 @@
         // Tiny offscreen canvas used purely to downsample the buffer for the chunky pixel look.
         const pixelCanvas = document.createElement('canvas');
         const pixelCtx = pixelCanvas.getContext('2d');
-        const PIXEL_SCALE = 2; // higher = chunkier "8-bit" pixels; does not change what's visible
+        const PIXEL_SCALE = 1.5; // higher = chunkier "8-bit" pixels; does not change what's visible
 
         // Void skin's map-wide desaturation used to rely on `ctx.filter = 'grayscale(1)'`.
         // Support for CanvasRenderingContext2D.filter is inconsistent across browsers/webviews
@@ -1187,9 +1187,10 @@
         // Roguelite: Plasma Beam item - transient zap-line visuals, one per target hit, each
         // {x1,y1,x2,y2,life}. Purely cosmetic bookkeeping, faded out and removed in update().
         let plasmaBeamFX = [];
-        // Very rare ambient vignette: a man and boy sitting at the water's edge, fishing (see
-        // the spawn logic in generateLevel and drawFishingScene below). At most one per level,
-        // and only ever beside a genuine water-type hazard - lava/ice themes never get one.
+        // Ambient vignette: a man and boy sitting at the water's edge, fishing (see the spawn
+        // logic in generateLevel and drawFishingScene below). At most one per level. Guaranteed
+        // on level 1 no matter what theme/hazard is in play; a rare water-only treat on every
+        // level after that.
         let fishingScene = null;
 
         // Roguelite run-items state: items acquired from chests/mimics that persist and stack
@@ -2470,33 +2471,46 @@
                 }
             }
 
-            // Very rare ambient vignette: a man and boy sitting at the edge of the water,
-            // fishing. Only ever appears next to a genuine water-type hazard (lava/ice themes
-            // never roll one), and only on a land hex edge that actually borders a hazard hole,
-            // found via the same fenceCandidateDirs the fence pass just computed. The chosen
-            // tile gets an element so the scatter pass below skips it (no tree/rock/coin
-            // spawning on top of the pair), and hexEdgeCorners gives the exact edge midpoint to
-            // face the figures toward, the same helper fences use to orient themselves.
-            if (currentTheme.hazard.type === 'water') {
+            // Ambient vignette: a man and boy sitting at the edge of the water, fishing.
+            // Guaranteed on level 1 (spawnChance 1) regardless of theme/hazard type - the very
+            // first level always introduces the pair - and stays a rare 6%-on-water-only treat
+            // on every level after that (lava/ice themes never roll it past level 1). Placement
+            // still needs a land hex edge that actually borders a hazard hole, found via the
+            // same fenceCandidateDirs the fence pass just computed - but only the pair's own
+            // left/right sides count: on this pointy-top grid, HEX_DIRS[0] ({q:1,r:0}, due
+            // east) and HEX_DIRS[3] ({q:-1,r:0}, due west) are the only two neighbor directions
+            // whose shared edge is a vertical left/right side of the hexagon; the other four
+            // directions land on one of the four slanted upper/lower edges, which is why they're
+            // filtered out below. The chosen tile gets an element so the scatter pass below
+            // skips it (no tree/rock/coin spawning on top of the pair), and hexEdgeCorners gives
+            // the exact edge midpoint to face the figures toward, the same helper fences use to
+            // orient themselves.
+            {
                 let waterEdges = [];
                 for (let tile of borderHexList) {
                     if (tile.element) continue;
                     for (let dirIdx of tile.fenceCandidateDirs) {
+                        if (dirIdx !== 0 && dirIdx !== 3) continue; // only the hex's left/right sides
                         let d = HEX_DIRS[dirIdx];
                         let nb = hexTiles.get(hexKey(tile.q + d.q, tile.r + d.r));
                         if (nb && nb.type === 'hole') waterEdges.push({ tile, dirIdx });
                     }
                 }
-                if (waterEdges.length && Math.random() < 0.06) {
+                let spawnChance = (level === 1) ? 1 : (currentTheme.hazard.type === 'water' ? 0.06 : 0);
+                if (waterEdges.length && Math.random() < spawnChance) {
                     let pick = waterEdges[Math.floor(Math.random() * waterEdges.length)];
                     let d = HEX_DIRS[pick.dirIdx];
                     let [p1, p2] = hexEdgeCorners(pick.tile, d.q, d.r);
                     let edgeMidX = (p1.x + p2.x) / 2, edgeMidY = (p1.y + p2.y) / 2;
                     let angle = Math.atan2(edgeMidY - pick.tile.y, edgeMidX - pick.tile.x);
+                    // faceLeft only ever matters for drawing (see drawFishingScene): the pair
+                    // is drawn facing right by default, and mirrored horizontally - never
+                    // rotated - to face left instead, since a 180-degree rotation would also
+                    // flip them upside down.
                     fishingScene = {
                         x: pick.tile.x + Math.cos(angle) * HEX_SIZE * 0.25,
                         y: pick.tile.y + Math.sin(angle) * HEX_SIZE * 0.25,
-                        angle, seed: Math.random() * 1000, triggered: false
+                        faceLeft: pick.dirIdx === 3, seed: Math.random() * 1000, triggered: false
                     };
                     pick.tile.element = { type: 'fishingScene' };
                 }
@@ -4626,7 +4640,7 @@
                         }
                     }
 
-                    // Rare fishing scene: purely decorative, but physically touching the pair
+                    // Fishing scene (guaranteed level 1, rare after): purely decorative, but touching the pair
                     // pops the next two lines of their story - only fires once per spawn (a
                     // fresh scene only ever appears again on a later level).
                     if (fishingScene && !fishingScene.triggered && dist(player.worldX, player.worldY, fishingScene.x, fishingScene.y) < player.radius + 34) {
@@ -6557,32 +6571,124 @@
             }
         }
 
+        // Mixes a hex color toward black (amt < 0) or white (amt > 0) by |amt| (0..1). Used to
+        // fake soft directional shading (shadow/highlight passes) on the fishing-scene figures
+        // and props below without needing per-shape gradients or clip paths.
+        function shadeHex(hex, amt) {
+            let c = hex.replace('#', '');
+            if (c.length === 3) c = c.split('').map(ch => ch + ch).join('');
+            let num = parseInt(c, 16);
+            let r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+            if (amt < 0) { r *= (1 + amt); g *= (1 + amt); b *= (1 + amt); }
+            else { r += (255 - r) * amt; g += (255 - g) * amt; b += (255 - b) * amt; }
+            r = Math.max(0, Math.min(255, Math.round(r)));
+            g = Math.max(0, Math.min(255, Math.round(g)));
+            b = Math.max(0, Math.min(255, Math.round(b)));
+            return 'rgb(' + r + ',' + g + ',' + b + ')';
+        }
+
         // Draws one seated figure of a fishing pair, in a local space already translated/rotated
         // so +x faces the water: legs stretch out over the edge in +x, torso/head sit back over
         // the shore in -x. `scale` shrinks the whole figure for the boy; `bobSeed` staggers the
-        // idle leg-swing so the two figures don't move in lockstep.
-        function drawSeatedFisher(ox, oy, scale, shirtColor, hairColor, wearsHat, bobSeed) {
+        // idle leg-swing/breathing so the two figures don't move in lockstep. Upgraded from the
+        // original flat-color silhouette: a bent-knee sitting pose (thigh+shin per leg instead
+        // of one straight stick), shadeHex shadow/highlight passes on the jacket, pants and
+        // head, two-tone shoes, a forward-reaching gripping arm+hand, simple eye/mouth/ear/hair-
+        // strand detail, and a hat with a brimmed shadow across the forehead.
+        function drawSeatedFisher(ox, oy, scale, shirtColor, pantsColor, hairColor, skinColor, wearsHat, bobSeed) {
             ctx.save();
             ctx.translate(ox, oy); ctx.scale(scale, scale);
             let legSwing = Math.sin(Date.now() / 700 + bobSeed) * 2;
-            ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 5; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(20, 5 + legSwing); ctx.stroke();
-            ctx.beginPath(); ctx.moveTo(-2, 4); ctx.lineTo(18, 11 - legSwing); ctx.stroke();
-            ctx.fillStyle = '#5a4632';
-            ctx.beginPath(); ctx.ellipse(19, 6 + legSwing, 4, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(17, 12 - legSwing, 4, 2.5, 0.3, 0, Math.PI * 2); ctx.fill();
-            // Torso, leaning slightly forward toward the water.
+            let breathe = Math.sin(Date.now() / 1500 + bobSeed) * 0.4;
+            let pantsShadow = shadeHex(pantsColor, -0.35);
+            let pantsHi = shadeHex(pantsColor, 0.18);
+            let shirtShadow = shadeHex(shirtColor, -0.3);
+            let shirtHi = shadeHex(shirtColor, 0.22);
+            let skinShadow = shadeHex(skinColor, -0.22);
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+
+            // Far leg: thigh + shin bent at the knee, shadow-toned so it reads as set back
+            // behind the near leg and torso rather than one flat stick to the foot.
+            ctx.strokeStyle = pantsShadow; ctx.lineWidth = 6.5;
+            ctx.beginPath(); ctx.moveTo(-3, 3); ctx.lineTo(7, 8.5); ctx.lineTo(16, 11 - legSwing); ctx.stroke();
+            ctx.fillStyle = shadeHex('#5a4632', -0.15);
+            ctx.beginPath(); ctx.ellipse(16.5, 12 - legSwing, 4.2, 2.6, 0.35, 0, Math.PI * 2); ctx.fill();
+
+            // Torso/jacket, leaning slightly forward toward the water. A dark underside pass
+            // and a highlight pass (both clipped to the torso via source-atop) fake a light
+            // source from the upper-left, plus a small chest pocket for texture.
             ctx.fillStyle = shirtColor;
-            ctx.beginPath(); ctx.ellipse(-6, -8, 9, 12, -0.15, 0, Math.PI * 2); ctx.fill();
-            // Head + hair.
-            ctx.fillStyle = '#f0c090';
-            ctx.beginPath(); ctx.arc(-10, -22, 7, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(-6, -8 + breathe, 9.5, 12.5, -0.15, 0, Math.PI * 2); ctx.fill();
+            ctx.save(); ctx.globalCompositeOperation = 'source-atop';
+            ctx.globalAlpha = 0.5; ctx.fillStyle = shirtShadow;
+            ctx.beginPath(); ctx.ellipse(-3, -2 + breathe, 8, 9, -0.15, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.55; ctx.fillStyle = shirtHi;
+            ctx.beginPath(); ctx.ellipse(-9, -14 + breathe, 5, 6, -0.15, 0, Math.PI * 2); ctx.fill();
+            ctx.restore(); ctx.globalAlpha = 0.8;
+            ctx.strokeStyle = shirtShadow; ctx.lineWidth = 0.8;
+            ctx.strokeRect(-9, -6 + breathe, 4, 3);
+            ctx.globalAlpha = 1;
+
+            // Near leg: thigh + shin in full-brightness tone with a thin highlight stripe,
+            // drawn over the torso hem so it sits in front.
+            ctx.strokeStyle = pantsColor; ctx.lineWidth = 7;
+            ctx.beginPath(); ctx.moveTo(-1, 5); ctx.lineTo(10, 7.5); ctx.lineTo(20, 5 + legSwing); ctx.stroke();
+            ctx.globalAlpha = 0.5; ctx.strokeStyle = pantsHi; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(-1, 3.7); ctx.lineTo(10, 6); ctx.lineTo(19, 4 + legSwing); ctx.stroke();
+            ctx.globalAlpha = 1;
+            // Shoe: darker sole beneath a lighter upper.
+            ctx.fillStyle = '#3a2c1e';
+            ctx.beginPath(); ctx.ellipse(20, 6 + legSwing, 4.6, 2.8, 0.3, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#6b503a';
+            ctx.beginPath(); ctx.ellipse(19.3, 5 + legSwing, 3.6, 2.1, 0.3, 0, Math.PI * 2); ctx.fill();
+
+            // Near arm, bent at the elbow and reaching forward - the hand lands roughly where
+            // drawFishingScene grips its rod, so the pose reads as actually holding it.
+            ctx.strokeStyle = shirtColor; ctx.lineWidth = 4.5;
+            ctx.beginPath(); ctx.moveTo(-4, -14 + breathe); ctx.lineTo(6, -12); ctx.lineTo(13, -17); ctx.stroke();
+            ctx.fillStyle = skinColor;
+            ctx.beginPath(); ctx.arc(13, -17, 2.4, 0, Math.PI * 2); ctx.fill();
+
+            // Head, with a small ear and a soft shadow pass along the jaw/cheek.
+            ctx.fillStyle = skinColor;
+            ctx.beginPath(); ctx.arc(-10, -22 + breathe, 7.2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-16.5, -21 + breathe, 2, 0, Math.PI * 2); ctx.fill();
+            ctx.save(); ctx.globalCompositeOperation = 'source-atop'; ctx.globalAlpha = 0.35;
+            ctx.fillStyle = skinShadow;
+            ctx.beginPath(); ctx.ellipse(-8, -18 + breathe, 5, 4, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.restore(); ctx.globalAlpha = 1;
+
+            // Simple face detail, oriented toward the water (+x): one eye dot and a faint smile.
+            ctx.fillStyle = '#2d1a10';
+            ctx.beginPath(); ctx.arc(-6, -23 + breathe, 0.9, 0, Math.PI * 2); ctx.fill();
+            ctx.globalAlpha = 0.8; ctx.strokeStyle = '#a56b45'; ctx.lineWidth = 0.8;
+            ctx.beginPath(); ctx.arc(-6, -20 + breathe, 1.6, 0.1, Math.PI - 0.1); ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Hair, with a couple of lighter strand strokes for a bit of texture.
             ctx.fillStyle = hairColor;
-            ctx.beginPath(); ctx.arc(-10, -24.5, 7.2, Math.PI, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-10, -24.7 + breathe, 7.4, Math.PI * 0.92, Math.PI * 2.08); ctx.fill();
+            ctx.globalAlpha = 0.6; ctx.strokeStyle = shadeHex(hairColor, 0.3); ctx.lineWidth = 0.8;
+            ctx.beginPath();
+            ctx.moveTo(-15, -27 + breathe); ctx.lineTo(-13, -24 + breathe);
+            ctx.moveTo(-11, -29 + breathe); ctx.lineTo(-9, -26 + breathe);
+            ctx.stroke(); ctx.globalAlpha = 1;
+
             if (wearsHat) {
-                ctx.fillStyle = '#7a5c3e';
-                ctx.beginPath(); ctx.ellipse(-9, -27, 10, 3, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.beginPath(); ctx.arc(-9, -30, 6, Math.PI, Math.PI * 2); ctx.fill();
+                let hatColor = '#7a5c3e';
+                ctx.fillStyle = hatColor;
+                ctx.beginPath(); ctx.ellipse(-9, -27.5 + breathe, 10.5, 3.2, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = shadeHex(hatColor, -0.2);
+                ctx.beginPath(); ctx.ellipse(-9, -28 + breathe, 10.5, 2.4, 0, 0, Math.PI); ctx.fill();
+                ctx.fillStyle = hatColor;
+                ctx.beginPath(); ctx.arc(-9, -31 + breathe, 6.3, Math.PI, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = shadeHex(hatColor, 0.25);
+                ctx.beginPath(); ctx.arc(-11, -32 + breathe, 3, Math.PI * 1.05, Math.PI * 1.75); ctx.fill();
+                ctx.strokeStyle = shadeHex(hatColor, -0.4); ctx.lineWidth = 1.2;
+                ctx.beginPath(); ctx.ellipse(-9, -30.5 + breathe, 6.3, 1.1, 0, 0, Math.PI, true); ctx.stroke();
+                // The brim's shadow, cast across the upper forehead.
+                ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                ctx.beginPath(); ctx.ellipse(-9, -25.5 + breathe, 6, 2, 0, 0, Math.PI); ctx.fill();
             }
             ctx.restore();
         }
@@ -6613,9 +6719,9 @@
         // 1-Bit: same rod/line/float layout as drawFishingScene, redrawn in flat black/white
         // instead of the themed wood/red-and-white palette - white-haloed black rod and line,
         // and a black/white split float so it stays legible on either checker tone.
-        function drawOnebitFishingScene(x, y, angle, seed) {
+        function drawOnebitFishingScene(x, y, faceLeft, seed) {
             ctx.save();
-            ctx.translate(x, y); ctx.rotate(angle);
+            ctx.translate(x, y); if (faceLeft) ctx.scale(-1, 1);
             drawGroundShadow(ctx, 6, 6, 30, 11);
             let bob = Math.sin(Date.now() / 500 + seed) * 2;
             let rodTipX = 46, rodTipY = -30;
@@ -6639,36 +6745,96 @@
             ctx.restore();
         }
 
-        // Very rare ambient vignette (see the spawn logic in generateLevel): a man and boy
-        // sitting on the shore at a water hazard's edge, a fishing line cast out into the
-        // water with a bobbing red-and-white float. Oriented so the pair always faces the
-        // water regardless of which hex edge they landed on, the same way fences orient to
-        // their edge. Purely decorative - no collision, nothing to interact with.
-        function drawFishingScene(x, y, angle, seed) {
+        // Ambient vignette (see the spawn logic in generateLevel - guaranteed on level 1, rare
+        // after): a man and boy sitting on the shore at a water hazard's edge, a fishing line
+        // cast out into the water with a bobbing red-and-white float. The pair is always drawn
+        // facing right (+x) and, for a left-side spawn, mirrored horizontally via ctx.scale(-1,1)
+        // rather than rotated - a 180-degree rotation would flip them upside down along with
+        // left/right, so a pure horizontal flip is what keeps them right-side up on both sides.
+        // Purely decorative - no collision, nothing to interact with. Upgraded from the original
+        // bare rod+line+float: a grass patch grounds the pair instead of them floating on flat
+        // tile color, the rod has a wood-grain shading pass plus a small reel and a hand
+        // actually gripping it, the line sags on a curve instead of a ruler-straight segment,
+        // the float has a drop shadow and a highlight glint, the ripples are two staggered/
+        // elongated waves instead of one circle, and a small tackle bucket with a fish tail
+        // sits beside the boy for a bit of extra storytelling detail.
+        function drawFishingScene(x, y, faceLeft, seed) {
             // 1-Bit: flat black/white silhouettes instead of the themed color palette below,
             // the same override pattern used for trees/rocks/chests under this skin.
-            if (player.color === 'onebit') { drawOnebitFishingScene(x, y, angle, seed); return; }
+            if (player.color === 'onebit') { drawOnebitFishingScene(x, y, faceLeft, seed); return; }
             ctx.save();
-            ctx.translate(x, y); ctx.rotate(angle);
-            drawGroundShadow(ctx, 6, 6, 30, 11);
-            // Rod held by the man, arcing out over the water, with a taut line down to the float.
+            ctx.translate(x, y); if (faceLeft) ctx.scale(-1, 1);
+            drawGroundShadow(ctx, 6, 6, 34, 12);
+
+            // Grass patch under the pair, with a few blade tufts, so they read as sitting on
+            // the shore rather than floating on the plain ground fill.
+            ctx.fillStyle = 'rgba(0,0,0,0.08)';
+            ctx.beginPath(); ctx.ellipse(2, 4, 30, 13, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = 'rgba(30,90,40,0.5)'; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
+            for (let i = 0; i < 5; i++) {
+                let gx = -18 + i * 9 + Math.sin(seed + i) * 3, gy = 10 + (i % 2) * 3;
+                ctx.beginPath(); ctx.moveTo(gx, gy); ctx.lineTo(gx - 1.5, gy - 5); ctx.stroke();
+            }
+
             let bob = Math.sin(Date.now() / 500 + seed) * 2;
             let rodTipX = 46, rodTipY = -30;
             let floatX = 68, floatY = 4 + bob;
-            ctx.strokeStyle = '#6b4a2b'; ctx.lineWidth = 3; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(-8, -18); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
-            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.lineTo(floatX, floatY); ctx.stroke();
-            // Small ripple rings pulsing outward from the float.
-            ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1.5;
-            let ripplePhase = (Date.now() / 900 + seed * 0.01) % 1;
-            ctx.beginPath(); ctx.arc(floatX, floatY, 4 + ripplePhase * 14, 0, Math.PI * 2); ctx.globalAlpha = 1 - ripplePhase; ctx.stroke();
+            let gripX = 13, gripY = -17; // matches the man's near-hand position in drawSeatedFisher
+
+            // Rod: wood-grain shaded shaft from the man's hand to the tip, a small reel with a
+            // crank line, and a line that sags on a gentle curve down to the float instead of a
+            // taut straight segment.
+            ctx.strokeStyle = '#4a3524'; ctx.lineWidth = 3.5; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(gripX, gripY); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
+            ctx.globalAlpha = 0.7; ctx.strokeStyle = '#8a6a45'; ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(gripX, gripY); ctx.lineTo(rodTipX, rodTipY); ctx.stroke();
             ctx.globalAlpha = 1;
+            ctx.fillStyle = '#2c2018';
+            ctx.beginPath(); ctx.arc(gripX + 3, gripY + 2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#1a130d'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(gripX + 3, gripY + 2); ctx.lineTo(gripX + 5.5, gripY + 4); ctx.stroke();
+
+            let lineMidX = (gripX + floatX) / 2, lineMidY = (rodTipY + floatY) / 2 + 4;
+            ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(rodTipX, rodTipY); ctx.quadraticCurveTo(lineMidX + 6, lineMidY, floatX, floatY); ctx.stroke();
+
+            // Ripple rings pulsing outward from the float - two staggered, slightly elongated
+            // waves for more texture than a single circle.
+            let ripplePhase = (Date.now() / 900 + seed * 0.01) % 1;
+            ctx.strokeStyle = 'rgba(255,255,255,0.4)'; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.ellipse(floatX, floatY + 1, (4 + ripplePhase * 15) * 1.3, 4 + ripplePhase * 15, 0, 0, Math.PI * 2);
+            ctx.globalAlpha = 1 - ripplePhase; ctx.stroke();
+            let ripplePhase2 = (ripplePhase + 0.5) % 1;
+            ctx.beginPath(); ctx.ellipse(floatX, floatY + 1, (4 + ripplePhase2 * 15) * 1.3, 4 + ripplePhase2 * 15, 0, 0, Math.PI * 2);
+            ctx.globalAlpha = (1 - ripplePhase2) * 0.6; ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Float/bobber: drop shadow on the water, red-and-white body with an outline and a
+            // small highlight glint for shape/depth.
+            ctx.fillStyle = 'rgba(0,0,0,0.15)';
+            ctx.beginPath(); ctx.ellipse(floatX, floatY + 3.5, 4.5, 1.6, 0, 0, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, Math.PI, Math.PI * 2); ctx.fill();
             ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, 0, Math.PI); ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 0.6;
+            ctx.beginPath(); ctx.arc(floatX, floatY, 3.5, 0, Math.PI * 2); ctx.stroke();
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.beginPath(); ctx.arc(floatX - 1.2, floatY - 1.2, 1, 0, Math.PI * 2); ctx.fill();
+
+            // Small tackle bucket beside the boy, with a fish tail poking out.
+            ctx.save(); ctx.translate(24, 12);
+            ctx.fillStyle = '#4a4a4a';
+            ctx.beginPath(); ctx.moveTo(-5, -4); ctx.lineTo(5, -4); ctx.lineTo(4, 5); ctx.lineTo(-4, 5); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = '#6b6b6b';
+            ctx.beginPath(); ctx.ellipse(0, -4, 5, 1.6, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#3a3a3a'; ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.moveTo(-5.5, -6); ctx.quadraticCurveTo(0, -10, 5.5, -6); ctx.stroke();
+            ctx.fillStyle = '#9fb8c9';
+            ctx.beginPath(); ctx.moveTo(2, -5); ctx.lineTo(7, -8); ctx.lineTo(6, -3); ctx.closePath(); ctx.fill();
+            ctx.restore();
+
             // The pair, side by side - man closer to the rod, boy tucked beside him.
-            drawSeatedFisher(-14, -2, 1.0, '#3a6ea5', '#4a3524', true, seed);
-            drawSeatedFisher(10, 6, 0.68, '#d98e3a', '#2e2115', false, seed + 40);
+            drawSeatedFisher(-14, -2, 1.0, '#3a6ea5', '#2c3e50', '#4a3524', '#f0c090', true, seed);
+            drawSeatedFisher(10, 6, 0.68, '#d98e3a', '#8a6d3b', '#2e2115', '#f4c9a0', false, seed + 40);
             ctx.restore();
         }
 
@@ -7400,7 +7566,7 @@
                 }
                 else if (item.type === 'fishingScene') {
                     let fs = item.obj;
-                    drawFishingScene(fs.x, fs.y, fs.angle, fs.seed);
+                    drawFishingScene(fs.x, fs.y, fs.faceLeft, fs.seed);
                 }
                 else if (item.type === 'leaf') {
                     let l = item.obj;

@@ -1033,6 +1033,20 @@
         let rainbowSkyGradientCache = null;
         let rainbowSkyGradientCacheH = -1;
         let sunGradientCache = null;
+        // Fairy Dust skin: deep midnight-blue night sky behind the full moon, replacing the
+        // normal daytime blue - cached the same way as the other sky gradients above.
+        let fairySkyGradientCache = null;
+        let fairySkyGradientCacheH = -1;
+        // Fairy Dust skin: cool pale-blue glow around the full moon, playing the same role
+        // sunGradientCache does for the normal sky (see drawSkyBackground) - built once and
+        // reused since the moon's world position/radius never change.
+        let fairyMoonGlowCache = null;
+        // Fairy Dust skin: every flower currently on screen (permanent ground blooms and
+        // blossomed-tree rings alike) registers its world position here each frame as it's
+        // drawn, so the moonlight overlay pass at the end of draw() (SECTION 8) knows exactly
+        // where to punch a dim light back through the darkness - rebuilt fresh every frame
+        // rather than persisted, since only currently-visible flowers need to glow.
+        let fairyLightSources = [];
         // Rainbow skin: flat coloring-book palette used for trees/rocks/decorations, plus a
         // softer pastel set used for the floor patchwork. Shared by every drawRainbow* helper
         // below so the whole theme reads as one consistent crayon-box set of colors.
@@ -5841,15 +5855,28 @@
                 rainbowSkyGradientCache.addColorStop(0.65, '#c8f7c5'); rainbowSkyGradientCache.addColorStop(1, '#bde0fe');
                 rainbowSkyGradientCacheH = canvas.height;
             }
-            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : (player.color === 'rainbow' ? rainbowSkyGradientCache : skyGradientCache));
+            // Fairy Dust skin: deep midnight-blue night sky, several shades darker/cooler than
+            // even the Void sky above rather than sharing it, since Void is meant to read as
+            // "colorless void" while this needs to stay recognizably blue-toned moonlight.
+            if (!fairySkyGradientCache || fairySkyGradientCacheH !== canvas.height) {
+                fairySkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                fairySkyGradientCache.addColorStop(0, '#03050f'); fairySkyGradientCache.addColorStop(0.55, '#0a1230');
+                fairySkyGradientCache.addColorStop(1, '#152049');
+                fairySkyGradientCacheH = canvas.height;
+            }
+            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : (player.color === 'rainbow' ? rainbowSkyGradientCache : (player.color === 'sparkle' ? fairySkyGradientCache : skyGradientCache)));
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
             // rather than following the player around. Void: skipped entirely rather than drawn
             // and grayscaled - it's a CanvasGradient, which the color interceptor above can't
             // convert (only solid hex/rgb/rgba strings), so leaving it in would tint the void
-            // sky warm/yellow regardless of the desaturation pass.
-            if (player.color !== 'void') {
+            // sky warm/yellow regardless of the desaturation pass. Fairy Dust: a full moon (with
+            // its own cool glow) stands in for the sun instead of being skipped like Void's is,
+            // since this theme is meant to read as moonlit rather than colorless.
+            if (player.color === 'sparkle') {
+                drawFullMoon();
+            } else if (player.color !== 'void') {
                 ctx.save();
                 let sunX = 500, sunY = -600;
                 if (!sunGradientCache) {
@@ -5864,9 +5891,12 @@
 
             // Galaxy: a faint twinkling starfield drifts across the sky, fixed in world space
             // like the sun glow above, backed by soft drifting nebula clouds and a couple of
-            // distant ringed planets. Rainbow: a soft multi-band arch does the same.
+            // distant ringed planets. Rainbow: a soft multi-band arch does the same. Fairy Dust:
+            // a sparse, pale-blue starfield behind the moon, dimmer/slower than Galaxy's since
+            // it's meant to sit quietly in the background rather than be the main attraction.
             if (player.color === 'galaxy') { drawNebulaClouds(); drawDistantPlanets(); drawGalaxyStars(); drawShootingStars(); }
             else if (player.color === 'rainbow') drawRainbowArcs();
+            else if (player.color === 'sparkle') drawFairyStars();
             ctx.restore();
             }
 
@@ -5879,7 +5909,7 @@
             if (player.color === 'galaxy') {
                 drawAsteroidLayer(900, 560, drift * 0.4, 32, 22, 9.13, '150,142,132', 0.5);
             } else {
-                ctx.fillStyle = 'rgba(255,255,255,0.45)';
+                ctx.fillStyle = player.color === 'sparkle' ? 'rgba(110,130,180,0.4)' : 'rgba(255,255,255,0.45)';
                 drawCloudLayer(600, 340, drift * 0.4, 18, 16, 9.13);
             }
             ctx.restore();
@@ -5899,7 +5929,7 @@
             if (player.color === 'galaxy') {
                 drawAsteroidLayer(760, 520, drift, 46, 34, 0, '190,180,166', 0.85);
             } else {
-                ctx.fillStyle = 'rgba(255,255,255,0.85)';
+                ctx.fillStyle = player.color === 'sparkle' ? 'rgba(150,168,210,0.75)' : 'rgba(255,255,255,0.85)';
                 drawCloudLayer(420, 260, drift, 30, 26, 0);
             }
             ctx.restore();
@@ -6100,6 +6130,57 @@
                 ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tailX, tailY); ctx.stroke();
                 ctx.fillStyle = `rgba(255,255,255,${s.life})`;
                 ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // Fairy Dust skin: a single full moon, fixed in world space at the same spot the normal
+        // sun sits (see drawSkyBackground) so it drifts past the same way as the camera moves.
+        // A soft two-stop halo first (same role as sunGradientCache), then a shaded disc with a
+        // few faint craters so it doesn't read as a flat circle - same crater trick drawMoonRock
+        // (Galaxy's rock reskin) uses, just bigger and softer since this one sits in the sky.
+        function drawFullMoon() {
+            ctx.save();
+            const moonX = 500, moonY = -600, moonR = 85;
+            if (!fairyMoonGlowCache) {
+                fairyMoonGlowCache = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 640);
+                fairyMoonGlowCache.addColorStop(0, 'rgba(190,215,255,0.55)');
+                fairyMoonGlowCache.addColorStop(0.45, 'rgba(150,185,255,0.2)');
+                fairyMoonGlowCache.addColorStop(1, 'rgba(150,185,255,0)');
+            }
+            ctx.fillStyle = fairyMoonGlowCache;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            let bodyGrad = ctx.createRadialGradient(moonX - moonR * 0.3, moonY - moonR * 0.3, moonR * 0.1, moonX, moonY, moonR);
+            bodyGrad.addColorStop(0, '#fbfeff'); bodyGrad.addColorStop(0.7, '#dbe9f8'); bodyGrad.addColorStop(1, '#a3b9d9');
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath(); ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2); ctx.fill();
+
+            ctx.fillStyle = 'rgba(150,175,205,0.4)';
+            const craters = [[-0.32, -0.22, 0.22], [0.24, 0.12, 0.16], [0.04, -0.42, 0.12], [-0.12, 0.36, 0.14]];
+            for (let i = 0; i < craters.length; i++) {
+                let c = craters[i];
+                ctx.beginPath(); ctx.arc(moonX + c[0] * moonR, moonY + c[1] * moonR, moonR * c[2], 0, Math.PI * 2); ctx.fill();
+            }
+            ctx.restore();
+        }
+
+        // Fairy Dust skin: a sparse, slow, pale-blue starfield behind the moon - same tiled/
+        // stable-seed approach as drawGalaxyStars, just dimmer and sparser so it sits quietly
+        // in the background rather than competing with the moon for attention.
+        function drawFairyStars() {
+            const spacingX = 170, spacingY = 170;
+            let iStart = Math.floor(camera.x / spacingX) - 2, iEnd = Math.ceil((camera.x + canvas.width) / spacingX) + 2;
+            let jStart = Math.floor(camera.y / spacingY) - 2, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 2;
+            ctx.save(); ctx.fillStyle = '#cfe0ff';
+            for (let i = iStart; i <= iEnd; i++) {
+                for (let j = jStart; j <= jEnd; j++) {
+                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + 91.7) * 43758.5453); seed -= Math.floor(seed);
+                    if (seed > 0.18) continue;
+                    let sx = i * spacingX + seed * 120, sy = j * spacingY + ((seed * 53) % 1) * 120;
+                    ctx.globalAlpha = 0.25 + 0.25 * Math.sin(Date.now()/700 + seed*25);
+                    ctx.beginPath(); ctx.arc(sx, sy, 1 + seed * 1.1, 0, Math.PI * 2); ctx.fill();
+                }
             }
             ctx.restore();
         }
@@ -7669,6 +7750,9 @@
             // drawVoidDecor, the tentacle eye-glow in drawVoidTentacle, and the player block
             // below) - those are the only things that stay in full color.
             voidGrayscaleActive = (player.color === 'void');
+            // Fairy Dust: rebuilt fresh every frame as flowers get drawn below, then consumed
+            // by the moonlight overlay pass at the end of this function.
+            fairyLightSources.length = 0;
             drawSkyBackground();
             drawHazardHoles();
             
@@ -7822,6 +7906,11 @@
                             let px = bt.x + Math.cos(pa) * 12, py = bt.y + Math.sin(pa) * 12;
                             ctx.fillStyle = (pi + Math.floor(bt.x)) % 2 === 0 ? '#ffb6c1' : '#fff59d';
                             ctx.beginPath(); ctx.arc(px, py, 2.6, 0, Math.PI*2); ctx.fill();
+                            // Fairy Dust: each bloom flower is a dim light source under the
+                            // moonlight overlay applied at the end of draw() (SECTION 8) -
+                            // registering the world position here keeps the glow pinned exactly
+                            // to where the flower itself is actually drawn.
+                            if (player.color === 'sparkle') fairyLightSources.push({ x: px, y: py, radius: 30 });
                         }
                     }
                     ctx.restore();
@@ -8152,6 +8241,10 @@
                             ctx.fillStyle = fi % 2 === 0 ? '#ffb6c1' : '#fff59d';
                             ctx.beginPath(); ctx.arc(fx, fy, 3.2, 0, Math.PI*2); ctx.fill();
                             ctx.fillStyle = '#ffeb3b'; ctx.beginPath(); ctx.arc(fx, fy, 1.2, 0, Math.PI*2); ctx.fill();
+                            // Fairy Dust: same light-source registration as the ground bloom
+                            // flowers above, so blossomed trees glow too under the moonlight
+                            // overlay at the end of draw().
+                            if (player.color === 'sparkle') fairyLightSources.push({ x: fx, y: fy, radius: 30 });
                         }
                         ctx.restore();
                     }
@@ -8531,6 +8624,11 @@
                     // stays in full color - only the map desaturates, not the character.
                     if (player.color === 'void') { ctx.save(); voidGrayscaleActive = false; }
                     drawGroundShadow(ctx, pdrawX, pdrawY + p.radius, p.radius * 0.9, p.radius * 0.4);
+                    // Fairy Dust: the player itself is the brightest light source on screen -
+                    // registered here (rather than drawn directly) so the actual glow renders
+                    // in the moonlight overlay pass at the end of draw(), on top of the
+                    // darkening tint instead of underneath it.
+                    if (player.color === 'sparkle') fairyLightSources.push({ x: pdrawX, y: pdrawY, radius: p.radius + 95, bright: true });
                     if (p.activePowerup === 'rampage') {
                         ctx.save();
                         ctx.translate(pdrawX, pdrawY);
@@ -8626,6 +8724,48 @@
             });
             ctx.restore(); 
             ctx.restore();
+
+            // Fairy Dust: aggressive, cool dark-blue "moonlight" cast over the whole scene -
+            // applied here in plain screen space, after every world layer above (sky, ground,
+            // trees, entities, player) has already been drawn, so it darkens everything
+            // uniformly no matter where the camera is. 'multiply' darkens/tints without fully
+            // flattening whatever shape or color was underneath. The player and every currently
+            // visible flower registered their world position into fairyLightSources as they
+            // were drawn above (see the player block and both flower-drawing spots); each one
+            // gets its light punched back through this darkness immediately after via an
+            // additive ('lighter') pass, converted to this frame's screen position with the
+            // same camera/shake/tilt offset the world layers used.
+            if (player.color === 'sparkle') {
+                ctx.save();
+                ctx.globalCompositeOperation = 'multiply';
+                ctx.fillStyle = 'rgba(18,22,64,0.78)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.restore();
+
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                for (let li = 0; li < fairyLightSources.length; li++) {
+                    let ls = fairyLightSources[li];
+                    let sx = ls.x - camX + shakeX + tiltX, sy = ls.y - camY + shakeY + tiltY;
+                    if (sx < -ls.radius || sx > canvas.width + ls.radius || sy < -ls.radius || sy > canvas.height + ls.radius) continue;
+                    let grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, ls.radius);
+                    if (ls.bright) {
+                        // The player's own light - brightest and widest-reaching.
+                        grad.addColorStop(0, 'rgba(255,250,230,0.55)');
+                        grad.addColorStop(0.4, 'rgba(210,230,255,0.28)');
+                        grad.addColorStop(1, 'rgba(210,230,255,0)');
+                    } else {
+                        // Flower light - noticeably dimmer/tighter than the player's, per the
+                        // "a bit dimmer" ask.
+                        grad.addColorStop(0, 'rgba(255,246,210,0.28)');
+                        grad.addColorStop(0.5, 'rgba(255,225,235,0.12)');
+                        grad.addColorStop(1, 'rgba(255,225,235,0)');
+                    }
+                    ctx.fillStyle = grad;
+                    ctx.beginPath(); ctx.arc(sx, sy, ls.radius, 0, Math.PI * 2); ctx.fill();
+                }
+                ctx.restore();
+            }
 
             if (gameState === 'playing' && goal.active && timeLeft <= MAX_TIME / 2) {
                 const screenBuffer = 50;

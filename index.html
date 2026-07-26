@@ -378,7 +378,7 @@
         .inv-item { background: rgba(255,255,255,0.1); border-radius: 10px; padding: 10px; text-align: center; cursor: pointer; border: 2px solid transparent; transition: 0.2s; position: relative; touch-action: manipulation; overflow: hidden; }
         .inv-item:hover { background: rgba(255,255,255,0.2); }
         .inv-item.equipped { border-color: #4caf50; background: rgba(76, 175, 80, 0.2); }
-        .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: not-allowed; }
+        .inv-item.locked { opacity: 0.4; filter: grayscale(100%); cursor: pointer; }
         .inv-preview { width: 40px; height: 40px; border-radius: 50%; margin: 0 auto 8px; border: 2px solid rgba(255,255,255,0.5); box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
 
         .inv-name { 
@@ -519,6 +519,20 @@
         <div class="almanac-detail-icon-wrap"><img id="almanac-detail-icon" class="icon-img" style="width:56px;height:56px;" src="" alt=""></div>
         <div id="almanac-detail-name" class="almanac-detail-name"></div>
         <div id="almanac-detail-desc" class="almanac-detail-desc"></div>
+    </div>
+
+    <!-- Tapping any skin/hat in the Skin Shop's Skins/Hats tabs (owned or still locked) opens
+         this preview: an enlarged swatch/icon, its name, and either an Equip button (owned) or
+         a hint explaining how to unlock it (see openItemPreview). -->
+    <div id="item-preview-modal" class="modal">
+        <div class="modal-header">
+            <h2 id="item-preview-title" style="color: #f1c40f;">Preview</h2>
+            <button id="item-preview-close-btn" class="almanac-detail-close-btn">Close</button>
+        </div>
+        <div class="almanac-detail-icon-wrap" id="item-preview-icon-wrap" style="width:90px;height:90px;"></div>
+        <div id="item-preview-name" class="almanac-detail-name"></div>
+        <div id="item-preview-desc" class="almanac-detail-desc"></div>
+        <button id="item-preview-equip-btn" class="menu-btn" style="display:none; margin-top:15px;"></button>
     </div>
 
     <div id="settings-modal" class="modal">
@@ -1189,15 +1203,19 @@
         let shootingStars = [];
         let shootingStarTimer = 0;
         let shurikenSpin = 0;
+        // lockedBy (when present) names an achievement id that must be unlocked before this
+        // item can ever be rolled - see isAchievementUnlocked/isItemUnlocked below and their
+        // use in rollRoguelikeItem. Purely a drop-table gate: the item's own definition,
+        // stacking, and almanac behavior are otherwise untouched.
         const roguelikeItemDefs = {
             magnet:      { id: 'magnet',      rarity: 'common',    name: 'Magnet',      desc: 'Pulls nearby coins and gems toward you. Each stack widens the pull radius.' },
             wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over a hazard longer before falling. Each stack adds more hover time.' },
             spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Periodically unleashes an icy shockwave around you. Each stack makes it fire more often.' },
-            wilkshirianknowledge: { id: 'wilkshirianknowledge', rarity: 'common', name: 'Wilkshirian Knowledge', desc: 'Grants brief invulnerability on a recurring timer. Each stack shortens the wait between activations.' },
-            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.' },
-            plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.' },
-            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.' },
-            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.' }
+            wilkshirianknowledge: { id: 'wilkshirianknowledge', rarity: 'common', name: 'Wilkshirian Knowledge', desc: 'Grants brief invulnerability on a recurring timer. Each stack shortens the wait between activations.', lockedBy: 'endless_level3' },
+            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.', lockedBy: 'level3' },
+            plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
+            shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.', lockedBy: 'centurion' },
+            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.', lockedBy: 'endless_level9' }
         };
 
         // Achievement definitions. Each check() reads from persisted storage / in-memory state
@@ -1235,8 +1253,74 @@
             // play and vice versa.
             { id: 'endless_level3',  name: 'Wave Rider',         desc: 'Reach Level 3 in Endless Waves.',             check: () => bestEndlessLevel >= 3 },
             { id: 'endless_level6',  name: 'Wave Breaker',       desc: 'Reach Level 6 in Endless Waves.',             check: () => bestEndlessLevel >= 6 },
-            { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             check: () => bestEndlessLevel >= 9 }
+            { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             check: () => bestEndlessLevel >= 9 },
+            // Checked against the live in-memory balance rather than a persisted high-water
+            // mark, matching "hoard" - the achievement fires the moment the player is actually
+            // sitting on 50,000 coins at once, not merely on having earned that much lifetime.
+            { id: 'avarice',         name: 'Avarice',            desc: 'Hoard 50,000 coins.',                         check: () => totalCoins >= 50000 }
         ];
+
+        // Shared lock check used by both the run-item drop table (rollRoguelikeItem) and the
+        // gacha rare-skin pool (rollGachaItem): an id with no lockedBy is always available;
+        // otherwise it stays out of the loot pools until the named achievement's 'ach_<id>'
+        // flag is set.
+        function isAchievementUnlocked(achId) { return !achId || storage.get('ach_' + achId) === 'true'; }
+        function isItemUnlocked(id) { let def = roguelikeItemDefs[id]; return !def || isAchievementUnlocked(def.lockedBy); }
+
+        // The flip side of lockedBy: the moment one of these achievements is first unlocked,
+        // hand over the item/skin it was gating immediately rather than making the player wait
+        // to stumble into it in a future chest/gacha pull.
+        const achievementRewards = {
+            level3:         { type: 'runitem', id: 'slimefriend' },
+            endless_level3: { type: 'runitem', id: 'wilkshirianknowledge' },
+            endless_level6: { type: 'runitem', id: 'plasmabeam' },
+            endless_level9: { type: 'runitem', id: 'skeletonkey' },
+            centurion:      { type: 'runitem', id: 'shuriken' },
+            avarice:        { type: 'skin',    id: 'gold' }
+        };
+
+        function grantAchievementReward(achId) {
+            let reward = achievementRewards[achId];
+            if (!reward) return;
+            if (reward.type === 'runitem') {
+                // Only meaningful mid-run (all five of these achievements are only ever checked
+                // from inside active gameplay - see highestLevel/bestEndlessLevel/totalEnemyKills
+                // updates), so the player is already playing when this fires and the buff kicks
+                // in immediately via the normal pickup path (toast, HUD badge, companion spawn).
+                grantRoguelikeItem(reward.id);
+            } else if (reward.type === 'skin') {
+                if (parseInt(storage.get('inv_' + reward.id) || 0) <= 0) {
+                    storage.set('inv_' + reward.id, 1);
+                    populateInventory();
+                }
+            }
+        }
+
+        // Builds the "how to unlock this" hint text shown in place of an item/skin/hat's real
+        // description while it's still locked behind an achievement - reuses the achievement's
+        // own desc so the two texts can never drift out of sync with each other.
+        function achievementUnlockHint(achId, noun) {
+            let ach = achievementDB.find(a => a.id === achId);
+            if (!ach) return '';
+            let base = ach.desc.replace(/\.\s*$/, '');
+            return `${base} to unlock this ${noun}!`;
+        }
+        function itemUnlockHint(id) {
+            let def = roguelikeItemDefs[id];
+            if (def && def.lockedBy) return achievementUnlockHint(def.lockedBy, 'item');
+            return 'Find this item during a run to unlock its details.';
+        }
+        function skinUnlockHint(id) {
+            let rare = rareSkins.find(r => r.id === id);
+            if (rare && rare.lockedBy) return achievementUnlockHint(rare.lockedBy, 'skin');
+            if (secretSkinsById.has(id)) return "Keep exploring - this secret skin unlocks in its own unique way!";
+            return 'Pull the Gacha Crane to find this skin!';
+        }
+        function hatUnlockHint(id) {
+            let hat = hats.find(h => h.id === id);
+            if (hat && hat.lockedBy) return achievementUnlockHint(hat.lockedBy, 'hat');
+            return 'Pull the Gacha Crane to find this hat!';
+        }
         
         let goal = { x: 0, y: 0, radius: 45, active: true, required: 5, collected: 0 };
         // Extremely rare generation edge case: the goal's own hex can end up as an isolated
@@ -1359,7 +1443,11 @@
 
         const rareSkins = [
             { id: "rainbow", name: "Rainbow", preview: "linear-gradient(45deg, red, orange, yellow, green, blue, purple)", isAnimated: true },
-            { id: "gold", name: "Midas", preview: "linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)", isAnimated: true },
+            // excludeFromGacha: unlike lockedBy on its own (which would let an id back into the
+            // pool once its achievement is unlocked), this keeps Midas out of rollGachaItem
+            // permanently - the ONLY way to get it is the Avarice achievement reward itself
+            // (see achievementRewards / grantAchievementReward below).
+            { id: "gold", name: "Midas", preview: "linear-gradient(45deg, #bf953f, #fcf6ba, #b38728)", isAnimated: true, lockedBy: 'avarice', excludeFromGacha: true },
             { id: "lava", name: "Magma", preview: "radial-gradient(circle, #ff9f1c, #d32f2f)", isAnimated: true },
             { id: "galaxy", name: "Galaxy", preview: "radial-gradient(circle, #7597de, #2b1055)", isAnimated: true },
             { id: "ice", name: "Glacier", preview: "linear-gradient(135deg, #a5f2f3, #ffffff)", isAnimated: true },
@@ -2019,7 +2107,15 @@
             if (r < 0.10 && !excludeLegendary) pool = legendaries;
             else if (r < 0.30) pool = epics;
             else pool = commons;
-            return pool[Math.floor(Math.random() * pool.length)];
+            // Some items in a tier may still be lockedBy an achievement the player hasn't
+            // earned yet - drop them from the roll and fall back down through the rarity
+            // chain (legendary -> epic -> common) until something unlocked is found. Magnet
+            // has no lockedBy, so the commons filter can never come back empty.
+            let filtered = pool.filter(isItemUnlocked);
+            if (!filtered.length && pool === legendaries) filtered = epics.filter(isItemUnlocked);
+            if (!filtered.length) filtered = commons.filter(isItemUnlocked);
+            if (!filtered.length) filtered = ['magnet'];
+            return filtered[Math.floor(Math.random() * filtered.length)];
         }
 
         // Adds companion slimes up to the current Slime Squad stack count, without touching
@@ -2939,7 +3035,13 @@
         function rollGachaItem() {
             let roll = Math.random();
             if (roll < GACHA_RARE_CHANCE) {
-                return { category: 'rare', itemData: rareSkins[Math.floor(Math.random() * rareSkins.length)], radius: 16 };
+                // Rare skins can carry a lockedBy achievement gate (e.g. Midas/Avarice) - keep
+                // them out of the pool until that achievement is unlocked. excludeFromGacha
+                // skins (Midas) are filtered out unconditionally - they're never rollable here
+                // no matter what's been unlocked; the achievement reward grants them directly.
+                let availableRares = rareSkins.filter(s => !s.excludeFromGacha && isAchievementUnlocked(s.lockedBy));
+                if (!availableRares.length) availableRares = rareSkins.filter(s => !s.excludeFromGacha);
+                return { category: 'rare', itemData: availableRares[Math.floor(Math.random() * availableRares.length)], radius: 16 };
             } else if (roll < GACHA_RARE_CHANCE + GACHA_HAT_CHANCE) {
                 return { category: 'hat', itemData: hats[Math.floor(Math.random() * hats.length)], radius: 14 };
             } else {
@@ -3593,10 +3695,8 @@
                     let isEquipped = player.hat === h.id;
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
                     div.innerHTML = `<div class="inv-preview" style="background:#2b2d42; display:flex; justify-content:center; align-items:center;"><img class="icon-img" style="width:26px;height:26px;" src="${iconDataURL(h.id, 40)}" alt=""></div><div class="inv-name" style="font-size:${invNameFontSize(h.name)}">${h.name}</div>`;
-                    if (count > 0) {
-                        div.innerHTML += `<div class="inv-count">${count}</div>`;
-                        div.onclick = () => equipItem('hat', h.id);
-                    }
+                    if (count > 0) div.innerHTML += `<div class="inv-count">${count}</div>`;
+                    div.onclick = () => openItemPreview('hat', h.id);
                     hatsContainer.appendChild(div);
                 });
             }
@@ -3612,16 +3712,65 @@
                     let bgStyle = s.isAnimated ? s.preview : s.color;
                     div.className = `inv-item ${count > 0 ? '' : 'locked'} ${isEquipped ? 'equipped' : ''}`;
                     div.innerHTML = `<div class="inv-preview" style="background:${bgStyle}"></div><div class="inv-name" style="font-size:${invNameFontSize(displayName)}">${displayName}</div>`;
-                    if (count > 0) {
-                        div.innerHTML += `<div class="inv-count">${count}</div>`;
-                        div.onclick = () => equipItem('skin', s.id);
-                    }
+                    if (count > 0) div.innerHTML += `<div class="inv-count">${count}</div>`;
+                    div.onclick = () => openItemPreview('skin', s.id);
                     skinsContainer.appendChild(div);
                 });
             }
 
             fitInvNameLabels(hatsContainer);
             fitInvNameLabels(skinsContainer);
+        }
+
+        // Opens the enlarged preview modal for a tapped skin or hat tile - owned items show an
+        // Equip button (or "Equipped" if already worn); locked ones show a hint explaining how
+        // to unlock them instead. kind is 'skin' or 'hat'.
+        function openItemPreview(kind, id) {
+            let def = kind === 'skin'
+                ? (basicSkinsById.get(id) || rareSkins.find(s => s.id === id) || secretSkinsById.get(id))
+                : hats.find(h => h.id === id);
+            if (!def) return;
+
+            let count = parseInt(storage.get('inv_' + id) || 0);
+            let owned = count > 0;
+            let isRareOrSecret = kind === 'skin' && (rareSkins.some(s => s.id === id) || secretSkinsById.has(id));
+
+            let iconWrap = document.getElementById('item-preview-icon-wrap');
+            let nameEl = document.getElementById('item-preview-name');
+            let descEl = document.getElementById('item-preview-desc');
+            let equipBtn = document.getElementById('item-preview-equip-btn');
+
+            iconWrap.innerHTML = '';
+            if (kind === 'skin') {
+                iconWrap.style.background = def.isAnimated ? def.preview : def.color;
+            } else {
+                iconWrap.style.background = '#2b2d42';
+                let img = document.createElement('img');
+                img.className = 'icon-img';
+                img.style.width = '56px'; img.style.height = '56px';
+                img.src = iconDataURL(id, 56);
+                iconWrap.appendChild(img);
+            }
+
+            nameEl.innerText = (owned || !isRareOrSecret) ? def.name : '???';
+
+            let isEquipped = kind === 'skin' ? player.color === id : player.hat === id;
+            if (owned) {
+                descEl.innerText = isEquipped ? 'Currently equipped.' : 'Tap Equip to wear this.';
+                equipBtn.style.display = 'inline-block';
+                equipBtn.disabled = isEquipped;
+                equipBtn.innerText = isEquipped ? 'Equipped' : 'Equip';
+                equipBtn.onclick = () => {
+                    equipItem(kind, id);
+                    document.getElementById('item-preview-modal').style.display = 'none';
+                };
+            } else {
+                descEl.innerText = kind === 'skin' ? skinUnlockHint(id) : hatUnlockHint(id);
+                equipBtn.style.display = 'none';
+                equipBtn.onclick = null;
+            }
+
+            document.getElementById('item-preview-modal').style.display = 'block';
         }
 
         // Grants the secret "Corrupted Data" skin the first time 20 consecutive Remove Hat
@@ -3770,15 +3919,22 @@
             const container = document.getElementById('almanac-items');
             container.innerHTML = '';
             Object.keys(roguelikeItemDefs).forEach(key => {
-                let isUnlocked = storage.get('runitem_' + key) === 'true'; let data = roguelikeItemDefs[key];
+                let isFound = storage.get('runitem_' + key) === 'true'; let data = roguelikeItemDefs[key];
+                // Still gated behind an achievement the player hasn't earned yet -> show the
+                // mystery lock icon. Once that achievement clears, the item is unlocked (and,
+                // per grantAchievementReward, handed over immediately) so this is really only
+                // ever true in the window before the achievement itself is done.
+                let isAchLocked = !isFound && data.lockedBy && !isAchievementUnlocked(data.lockedBy);
                 let seenKey = 'runitem_seen_' + key;
-                let isNew = isUnlocked && storage.get(seenKey) !== 'true';
-                let iconSrc = iconDataURL(isUnlocked ? key : 'lock', 40);
-                let name = isUnlocked ? data.name : 'Unknown Item';
-                let desc = isUnlocked ? data.desc : 'Find this item during a run to unlock its details.';
-                const div = document.createElement('div'); div.className = 'almanac-item' + (isUnlocked ? '' : ' locked-entry');
+                let isNew = isFound && storage.get(seenKey) !== 'true';
+                // Unlocked-but-not-found-yet items show their real (greyed-out via .locked-entry)
+                // icon instead of a lock, so players can recognize what they're still hunting for.
+                let iconSrc = iconDataURL(isFound ? key : (isAchLocked ? 'lock' : key), 40);
+                let name = isFound ? data.name : (isAchLocked ? 'Locked Item' : 'Unknown Item');
+                let desc = isFound ? data.desc : (isAchLocked ? itemUnlockHint(key) : 'Find this item during a run to unlock its details.');
+                const div = document.createElement('div'); div.className = 'almanac-item' + (isFound ? '' : ' locked-entry');
                 div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
-                div.onclick = () => openAlmanacDetail(iconSrc, name, desc, isUnlocked ? seenKey : null, populateItemsAlmanac);
+                div.onclick = () => openAlmanacDetail(iconSrc, name, desc, isFound ? seenKey : null, populateItemsAlmanac);
                 container.appendChild(div);
             });
         }
@@ -3980,6 +4136,9 @@
         document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
         document.getElementById('almanac-detail-close-btn').addEventListener('click', () => {
             document.getElementById('almanac-detail-modal').style.display = 'none';
+        });
+        document.getElementById('item-preview-close-btn').addEventListener('click', () => {
+            document.getElementById('item-preview-modal').style.display = 'none';
         });
         document.querySelectorAll('.close-modal-btn').forEach(btn => {
             btn.addEventListener('click', (e) => { 
@@ -7513,6 +7672,7 @@
                 if (storage.get(key) !== 'true' && a.check()) {
                     storage.set(key, 'true');
                     showAchievementPopup();
+                    grantAchievementReward(a.id);
                 }
             });
         }

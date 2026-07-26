@@ -252,6 +252,16 @@
         .enemy-desc { font-size: 0.85rem; color: #ccc; margin-top: 5px; }
         .locked-entry { filter: grayscale(100%) brightness(0.5); opacity: 0.6; }
 
+        /* Item almanac only: name color keyed to rarity instead of the flat yellow every
+           .enemy-name gets by default (enemies have no rarity, so that tab is untouched).
+           The extra .item-rarity-name class raises specificity above the plain .enemy-name
+           rule above without needing !important. rarity-unknown covers items still locked
+           behind an achievement, whose real rarity isn't known/shown yet - kept the same
+           white as common rather than teasing epic/legendary via color. */
+        .item-rarity-name.rarity-common, .item-rarity-name.rarity-unknown { color: #fff; }
+        .item-rarity-name.rarity-epic { color: #9b59b6; }
+        .item-rarity-name.rarity-legendary { color: #ffcf33; }
+
         /* Compact almanac rows (enemies/items/achievements): just an icon + name that opens
            the shared detail modal on tap, rather than the old always-expanded icon+description
            row. Overrides the space-between/no-gap layout it shares with .shop-item/.setting-item
@@ -1513,7 +1523,7 @@
             wanderer: { name: 'Slime', desc: 'Legend has it that eating slime can grant eternal life… Yuck.' },
             dasher:   { name: 'Bull', desc: 'Charges blindly. Easy to trick.' },
             chaser:   { name: 'Bee', desc: 'Defends its hive. Don’t get too close!' },
-            shooter:  { name: 'Turret Eye', desc: 'Keeps its distance and fires slow-moving plasma orbs.' },
+            shooter:  { name: 'Evil Eye', desc: 'Keeps its distance and fires slow-moving plasma orbs.' },
             hopper:   { name: 'Frog', desc: 'Targets a fly and jumps high to catch it. Apparently can’t swim.' },
             mimic:    { name: 'Chest Mimic', desc: 'Curiosity killed the… Slime?' }
         };
@@ -4889,8 +4899,11 @@
                 let iconSrc = iconDataURL(isFound ? key : (isAchLocked ? 'lock' : key), 40);
                 let name = isFound ? data.name : (isAchLocked ? 'Locked Item' : 'Unknown Item');
                 let desc = isFound ? data.desc : (isAchLocked ? itemUnlockHint(key) : 'Find this item during a run to unlock its details.');
+                // Real rarity once found; unfound/locked items don't reveal it yet, so they
+                // fall back to the same neutral white as common (see .rarity-unknown in CSS).
+                let rarityClass = isFound ? ('rarity-' + data.rarity) : 'rarity-unknown';
                 const div = document.createElement('div'); div.className = 'almanac-item' + (isFound ? '' : ' locked-entry');
-                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name">${name}</div>`;
+                div.innerHTML = `${isNew ? '<div class="almanac-new-badge">NEW</div>' : ''}<div class="enemy-pic"><img class="icon-img" style="width:28px;height:28px;" src="${iconSrc}" alt=""></div><div class="enemy-name item-rarity-name ${rarityClass}">${name}</div>`;
                 div.onclick = () => openAlmanacDetail(iconSrc, name, desc, isFound ? seenKey : null, populateItemsAlmanac);
                 container.appendChild(div);
             });
@@ -5550,7 +5563,7 @@
                             if (pth > 0 && pdx*pdx + pdy*pdy < pth*pth) {
                                 let slimesFriendly = e.type === 'wanderer' && (runItems.slimefriend || 0) > 0;
                                 if (e.type === 'shooter') {
-                                    // Turret Eye is fragile up close - it keeps its distance and
+                                    // Evil Eye is fragile up close - it keeps its distance and
                                     // snipes from range specifically because direct contact pops
                                     // it instead of hurting the player. Its plasma orbs are still
                                     // lethal (handled separately in the projectile collision code).

@@ -498,6 +498,20 @@
         <p id="promo-code-msg" style="font-size: 0.65rem; min-height: 1.4em; margin-top: 15px; line-height: 1.5;"></p>
     </div>
 
+    <!-- Rare traveling-trader shop, opened by triggerMerchantDialogue when the player touches
+         skinTrader or goldTrader (see the collision check in the main update loop). Same
+         pause-the-game/close-to-resume convention as the other modals - the Leave button carries
+         the shared close-modal-btn class so it's picked up by the generic handler that restores
+         gameState, plus its own listener (merchant-leave-btn) to clear activeMerchant. -->
+    <div id="merchant-dialogue" class="modal">
+        <div class="modal-header">
+            <h2 id="merchant-title">Trader</h2>
+            <button class="close-modal-btn" id="merchant-leave-btn">Leave</button>
+        </div>
+        <p id="merchant-subtitle" style="font-size: 0.6rem; opacity: 0.8; margin: 10px 0 15px; line-height: 1.6;"></p>
+        <div id="merchant-items"></div>
+    </div>
+
     <div id="gacha-reveal-overlay">
         <div class="reveal-visual">
             <div class="sun-rays" id="gacha-rays"></div>
@@ -1197,6 +1211,17 @@
         // on level 1 no matter what theme/hazard is in play; a rare water-only treat on every
         // level after that.
         let fishingScene = null;
+        // Two rare traveling-trader encounters, spawned/interacted with the same way as
+        // fishingScene above (one land-hex placement per level, one-shot touch trigger that
+        // pauses the game). skinTrader spends spare skin dupes, goldTrader spends gold; both
+        // sell a rotating two-item stock rolled fresh on spawn (see rollTraderStock), each slot
+        // only purchasable once before the trader has to be re-encountered on a later level.
+        let skinTrader = null;
+        let goldTrader = null;
+        // {kind: 'skin'|'gold', trader} for whichever trader modal is currently open - read by
+        // renderMerchantItems/buyMerchantItem so they don't need the trigger site to keep
+        // passing state through every call.
+        let activeMerchant = null;
 
         // Roguelite run-items state: items acquired from chests/mimics that persist and stack
         // for the duration of a run (cleared on resetGame(), re-applied fresh each level).
@@ -1999,6 +2024,12 @@
                     tctx.fillStyle = '#ff6b6b'; tctx.beginPath(); tctx.arc(0,2*s,7*s,Math.PI,0); tctx.fill();
                     tctx.fillStyle = '#c0392b'; tctx.beginPath(); tctx.roundRect(0,-1*s,9*s,2.5*s,1*s); tctx.fill();
                     break;
+                case 'skindupe':
+                    tctx.fillStyle = '#546e7a'; tctx.strokeStyle = '#2f3d42'; tctx.lineWidth = 1*s;
+                    tctx.beginPath(); tctx.roundRect(-8*s,-7*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
+                    tctx.fillStyle = '#90a4ae'; tctx.strokeStyle = '#37474f';
+                    tctx.beginPath(); tctx.roundRect(-2*s,-3*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
+                    break;
                 // skeletonkey/plasmabeam/wilkshirianknowledge item icons, and all 21
                 // ach_* achievement badge icons, now live in their own files under
                 // sprites/ (icon-skeletonkey.js, icon-plasmabeam.js,
@@ -2157,6 +2188,80 @@
             showItemToast(id);
             if (storage.get('runitem_' + id) !== 'true') storage.set('runitem_' + id, 'true');
             checkAchievements();
+        }
+
+        // ---- Rare traveling traders (skinTrader / goldTrader) ----
+        // Same three rarity tiers/ids as rollRoguelikeItem's local pools above, just exposed at
+        // module scope so the trader stock-roller can reuse them without duplicating the drop
+        // lists in two places.
+        const roguelikeTierPools = {
+            common: ['magnet', 'wings', 'spikes', 'wilkshirianknowledge'],
+            epic: ['slimefriend', 'plasmabeam'],
+            legendary: ['shuriken', 'skeletonkey']
+        };
+
+        // Picks a random unlocked item id from one tier, falling back to common (then a hard
+        // 'magnet' fallback) if every item in that tier is still behind an achievement gate -
+        // mirrors the fallback chain rollRoguelikeItem uses for its random drop table.
+        function pickTierItem(tier) {
+            let pool = roguelikeTierPools[tier].filter(isItemUnlocked);
+            if (!pool.length) pool = roguelikeTierPools.common.filter(isItemUnlocked);
+            if (!pool.length) pool = ['magnet'];
+            return pool[Math.floor(Math.random() * pool.length)];
+        }
+
+        // A trader's stock is always two slots: one common-tier item, and one higher-tier item
+        // (70% epic / 30% legendary) - rolled fresh whenever the trader spawns, so a new visit
+        // on a later level always offers a different pair.
+        function rollTraderStock() {
+            let hiTier = Math.random() < 0.7 ? 'epic' : 'legendary';
+            return [
+                { itemId: pickTierItem('common'), tier: 'common', purchased: false },
+                { itemId: pickTierItem(hiTier), tier: hiTier, purchased: false }
+            ];
+        }
+
+        // Cost of one stock slot, scaled by the item's rarity tier. The skin-dupe trader prices
+        // in regular ("basic") dupes for commons and rare-skin dupes for epic/legendary (rarer
+        // skins buy the rarer items); the gold trader prices everything in coins, steeply scaled
+        // by tier since it's the no-farming-required option.
+        function traderCost(kind, tier) {
+            if (kind === 'skin') {
+                if (tier === 'common') return { type: 'dupe', dupeTier: 'basic', amount: 3 };
+                if (tier === 'epic') return { type: 'dupe', dupeTier: 'rare', amount: 1 };
+                return { type: 'dupe', dupeTier: 'rare', amount: 3 }; // legendary
+            }
+            if (tier === 'common') return { type: 'gold', amount: 200 };
+            if (tier === 'epic') return { type: 'gold', amount: 800 };
+            return { type: 'gold', amount: 2500 }; // legendary
+        }
+
+        // Spare copies only: a skin the player owns exactly one of isn't spendable, since that
+        // would strip the skin itself away. 'basic' sums surplus across basicSkins, 'rare' sums
+        // surplus across rareSkins (secretSkins are never spendable - there's only ever one way
+        // to get them back).
+        function skinDupeCount(dupeTier) {
+            let list = dupeTier === 'rare' ? rareSkins : basicSkins;
+            let total = 0;
+            list.forEach(s => { let c = parseInt(storage.get('inv_' + s.id) || 0); if (c > 1) total += c - 1; });
+            return total;
+        }
+
+        // Spends `amount` spare dupes across whichever owned skins in the tier have surplus,
+        // never touching a skin down to zero. Assumes the caller already checked
+        // skinDupeCount(dupeTier) >= amount.
+        function spendSkinDupes(dupeTier, amount) {
+            let list = dupeTier === 'rare' ? rareSkins : basicSkins;
+            let remaining = amount;
+            for (let s of list) {
+                if (remaining <= 0) break;
+                let key = 'inv_' + s.id;
+                let c = parseInt(storage.get(key) || 0);
+                let surplus = Math.max(0, c - 1);
+                let take = Math.min(surplus, remaining);
+                if (take > 0) { storage.set(key, c - take); remaining -= take; }
+            }
+            return remaining <= 0;
         }
 
         // Renders the icon-only badges (with a small count number for stacks > 1) into the
@@ -2322,7 +2427,7 @@
 
         function generateLevel() {
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
-            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = [];
+            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = []; skinTrader = null; goldTrader = null;
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
@@ -2512,6 +2617,26 @@
                         faceLeft: pick.dirIdx === 3, seed: Math.random() * 1000, triggered: false
                     };
                     pick.tile.element = { type: 'fishingScene' };
+                }
+            }
+
+            // Rare traveling traders: same land-hex-placement pattern as fishingScene above,
+            // just without the water-edge requirement (any open land hex works - see
+            // pickLandHex). Unlike fishingScene's flat random chance, these are deterministic:
+            // exactly one trader (never both) shows up every third level starting at level 3,
+            // with a coin flip deciding which. Stock is rolled once at spawn time
+            // (rollTraderStock) and persists until the player touches the trader or the level
+            // ends, whichever comes first.
+            if (level >= 3 && level % 3 === 0) {
+                let t = pickLandHex(220);
+                if (t) {
+                    if (Math.random() < 0.5) {
+                        skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                        t.element = { type: 'skinTrader' };
+                    } else {
+                        goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                        t.element = { type: 'goldTrader' };
+                    }
                 }
             }
 
@@ -4266,6 +4391,83 @@
             showFishingDialogueStep();
         }
 
+        // Called once when the player physically touches a rare trader (see the collision
+        // check alongside fishingScene's in the main update loop). Pauses the game the same way
+        // triggerFishingDialogue does, then renders that trader's two-slot stock.
+        function triggerMerchantDialogue(kind, trader) {
+            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
+            activeMerchant = { kind, trader };
+            document.getElementById('merchant-title').innerText = kind === 'skin' ? 'Dupe Trader' : 'Gold Trader';
+            document.getElementById('merchant-subtitle').innerText = kind === 'skin'
+                ? "Spare skin dupes for a pick from today's stock. Each pick's a one-time deal."
+                : "Gold for a pick from today's stock. Each pick's a one-time deal.";
+            renderMerchantItems();
+            document.getElementById('merchant-dialogue').style.display = 'block';
+        }
+
+        // (Re)draws both stock slots for the currently open trader, greying out and disabling
+        // whichever slots are already purchased or unaffordable. Called on open and again after
+        // every purchase so cost/affordability stay in sync.
+        function renderMerchantItems() {
+            if (!activeMerchant) return;
+            let { kind, trader } = activeMerchant;
+            let container = document.getElementById('merchant-items');
+            container.innerHTML = '';
+            trader.stock.forEach((slot, idx) => {
+                let def = roguelikeItemDefs[slot.itemId];
+                let cost = traderCost(kind, slot.tier);
+                let affordable = cost.type === 'dupe' ? skinDupeCount(cost.dupeTier) >= cost.amount : totalCoins >= cost.amount;
+                let costIcon = cost.type === 'gold' ? 'coin' : 'skindupe';
+                let costLabel = cost.type === 'gold' ? '' : (cost.dupeTier === 'rare' ? ' rare' : '');
+                let div = document.createElement('div');
+                div.className = 'shop-item';
+                div.innerHTML =
+                    '<div style="display:flex;align-items:center;gap:10px;">' +
+                        '<img class="icon-img" style="width:28px;height:28px;" src="' + iconDataURL(slot.itemId, 28) + '" alt="">' +
+                        '<div style="text-align:left;">' +
+                            '<div class="item-rarity-name rarity-' + slot.tier + '" style="font-size:0.65rem;">' + def.name + '</div>' +
+                            '<div style="font-size:0.55rem;opacity:0.8;display:flex;align-items:center;gap:4px;margin-top:3px;">' +
+                                '<img class="icon-img" style="width:14px;height:14px;" src="' + iconDataURL(costIcon, 20) + '" alt=""> x' + cost.amount + costLabel +
+                            '</div>' +
+                        '</div>' +
+                    '</div>';
+                let btn = document.createElement('button');
+                btn.className = 'menu-btn';
+                btn.style.cssText = 'min-width:0;padding:8px 16px;font-size:0.6rem;margin:0;box-shadow:0 4px 0 rgba(0,0,0,0.3);';
+                if (slot.purchased) { btn.innerText = 'Sold'; btn.disabled = true; btn.style.opacity = 0.5; }
+                else {
+                    btn.innerText = 'Buy';
+                    if (!affordable) { btn.disabled = true; btn.style.opacity = 0.5; }
+                    else btn.addEventListener('click', () => buyMerchantItem(idx));
+                }
+                div.appendChild(btn);
+                container.appendChild(div);
+            });
+        }
+
+        // Spends the slot's cost (dupes or gold), grants the item straight into the current
+        // run (same grantRoguelikeItem chest/mimic loot uses), and marks the slot sold so it
+        // can't be bought twice on this visit.
+        function buyMerchantItem(idx) {
+            if (!activeMerchant) return;
+            let { kind, trader } = activeMerchant;
+            let slot = trader.stock[idx];
+            if (!slot || slot.purchased) return;
+            let cost = traderCost(kind, slot.tier);
+            if (cost.type === 'dupe') {
+                if (skinDupeCount(cost.dupeTier) < cost.amount) return;
+                spendSkinDupes(cost.dupeTier, cost.amount);
+            } else {
+                if (totalCoins < cost.amount) return;
+                totalCoins -= cost.amount; markCoinsDirty();
+            }
+            slot.purchased = true;
+            grantRoguelikeItem(slot.itemId);
+            playSFX('powerup_pickup');
+            updateHUD();
+            renderMerchantItems();
+        }
+
         function updateHUD() {
             domRefs.levelDisplay.innerText = level;
             domRefs.coinDisplay.innerText = totalCoins;
@@ -4395,6 +4597,10 @@
         // Tap/click anywhere on the fishing-scene story box to advance it - first tap reveals
         // the second sentence, second tap closes it and hands control back to the game.
         document.getElementById('fishing-dialogue').addEventListener('click', advanceFishingDialogue);
+        // The Leave button already has the close-modal-btn class (hides the modal + resumes
+        // gameState via the generic handler below) - this second listener just clears
+        // activeMerchant so a stale reference doesn't linger into the next trader encounter.
+        document.getElementById('merchant-leave-btn').addEventListener('click', () => { activeMerchant = null; });
         syncSettingsUI();
         function handleStart(e) {
             initAudio();
@@ -4687,6 +4893,17 @@
                     if (fishingScene && !fishingScene.triggered && dist(player.worldX, player.worldY, fishingScene.x, fishingScene.y) < player.radius + 34) {
                         fishingScene.triggered = true;
                         triggerFishingDialogue();
+                    }
+
+                    // Rare traders: touching either one opens its shop - same one-shot-per-spawn
+                    // convention as fishingScene above.
+                    if (skinTrader && !skinTrader.triggered && dist(player.worldX, player.worldY, skinTrader.x, skinTrader.y) < player.radius + 30) {
+                        skinTrader.triggered = true;
+                        triggerMerchantDialogue('skin', skinTrader);
+                    }
+                    if (goldTrader && !goldTrader.triggered && dist(player.worldX, player.worldY, goldTrader.x, goldTrader.y) < player.radius + 30) {
+                        goldTrader.triggered = true;
+                        triggerMerchantDialogue('gold', goldTrader);
                     }
 
                     // Roguelite: Magnet item pulls nearby coins/gems toward the player.
@@ -5932,6 +6149,57 @@
             ctx.restore();
         }
 
+        // Shared visual for both rare traders (skinTrader/goldTrader) - a small market stall
+        // with a swaying cloth awning in the trader's accent color (purple for the dupe trader,
+        // gold for the gold trader) and a floating badge icon overhead advertising what it
+        // deals in, drawn with the same drawPixelIcon used for HUD item badges. Simpler than a
+        // full posed character (see drawSeatedFisher) since there's no story beat riding on it -
+        // just something that visibly reads as "shop" from a distance and is worth walking up to.
+        function drawTraderStall(x, y, seed, accentColor, accentShadow, iconType) {
+            ctx.save();
+            ctx.translate(x, y);
+            drawGroundShadow(ctx, 0, 8, 26, 10);
+
+            let sway = Math.sin(Date.now() / 900 + seed) * 3;
+            let bob = Math.sin(Date.now() / 1200 + seed) * 1.5;
+
+            // Two support posts.
+            ctx.strokeStyle = '#6b4a2b'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(-16, 8); ctx.lineTo(-16, -26); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(16, 8); ctx.lineTo(16, -26); ctx.stroke();
+
+            // Scalloped awning, gently swaying, with a shaded underside.
+            let awnH = shadeHex(accentColor, 0.15);
+            let awnS = accentShadow;
+            ctx.fillStyle = awnS;
+            ctx.beginPath(); ctx.moveTo(-20, -24); ctx.lineTo(20, -24); ctx.lineTo(24 + sway * 0.2, -36); ctx.lineTo(-16 + sway * 0.2, -36); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = accentColor;
+            ctx.beginPath(); ctx.moveTo(-20, -27); ctx.lineTo(20, -27); ctx.lineTo(24 + sway * 0.2, -38); ctx.lineTo(-16 + sway * 0.2, -38); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = awnH;
+            for (let i = 0; i < 4; i++) {
+                let sx = -18 + i * 11 + sway * 0.15;
+                ctx.beginPath(); ctx.arc(sx, -24, 3.5, 0, Math.PI); ctx.fill();
+            }
+
+            // Counter/crate the goods sit on.
+            ctx.fillStyle = '#8a6135'; ctx.beginPath(); ctx.roundRect(-18, 2, 36, 14, 3); ctx.fill();
+            ctx.strokeStyle = '#5c3f1f'; ctx.lineWidth = 1.5; ctx.strokeRect(-18, 2, 36, 14);
+            ctx.beginPath(); ctx.moveTo(-18, 9); ctx.lineTo(18, 9); ctx.stroke();
+
+            // Floating badge icon overhead, gently bobbing, advertising what this trader deals
+            // in (skin dupes or gold) - same drawPixelIcon used for HUD item badges.
+            ctx.save();
+            ctx.translate(0, -46 + bob);
+            ctx.fillStyle = 'rgba(0,0,0,0.25)';
+            ctx.beginPath(); ctx.arc(0, 0, 11, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#1c1c1c'; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = accentColor; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, 10, 0, Math.PI * 2); ctx.stroke();
+            drawPixelIcon(iconType, ctx, 0, 0, 16);
+            ctx.restore();
+
+            ctx.restore();
+        }
+
         function draw() {
             let shakeX = 0; let shakeY = 0;
             if (screenShake > 0) { shakeX = (Math.random() - 0.5) * screenShake; shakeY = (Math.random() - 0.5) * screenShake; screenShake *= 0.85; if (screenShake < 0.5) screenShake = 0; }
@@ -6272,6 +6540,8 @@
             if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
             for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
+            if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
+            if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
             pushRQ('player', player, player.worldY + (player.radius || 0));
             renderQueue.length = rqCount;
             renderQueue.sort(rqSortCompare);
@@ -6651,6 +6921,14 @@
                 else if (item.type === 'fishingScene') {
                     let fs = item.obj;
                     drawFishingScene(fs.x, fs.y, fs.faceLeft, fs.seed);
+                }
+                else if (item.type === 'skinTrader') {
+                    let t = item.obj;
+                    drawTraderStall(t.x, t.y, t.seed, '#9b59b6', '#6c3483', 'skindupe');
+                }
+                else if (item.type === 'goldTrader') {
+                    let t = item.obj;
+                    drawTraderStall(t.x, t.y, t.seed, '#f1c40f', '#c77000', 'coin');
                 }
                 else if (item.type === 'leaf') {
                     let l = item.obj;

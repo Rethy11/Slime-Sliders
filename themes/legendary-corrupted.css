@@ -1,0 +1,4 @@
+/* Secret "Corrupted Data" glitch slime — unlocked via 20 consecutive Remove Hat clicks.
+   #gameCanvas is the only inverted element (UI/HUD divs sit outside the canvas), so
+   equipping the skin flips the world's colors without breaking HUD readability. */
+#gameCanvas.color-inverted { filter: invert(1) hue-rotate(180deg); }

@@ -1,0 +1,66 @@
+/* 1-Bit skin: a page-wide monochrome threshold filter - grayscale first, then extreme
+   contrast collapses every remaining shade toward pure black or white instead of just
+   removing hue (which is all Void's per-pixel canvas desaturation does). Applied to
+   <body> rather than #gameCanvas alone, so it reaches every sibling on the page too -
+   the HUD panels, menus, shop/gacha overlays, title screen - not just the game world.
+   NOTE: putting `filter` on <body> also makes <body> the containing block for every
+   position:absolute/fixed descendant that doesn't have a nearer positioned ancestor
+   (corner icons, #timer-container, .modal, etc.) - normally those anchor to the
+   viewport instead. That's harmless as long as <body>'s box is exactly the viewport
+   size, which is why `html, body { height: 100% }` (in index.html) is required: without
+   it, body's height is "auto" (sized by content) and any tiny mismatch between that and
+   the viewport - e.g. right after load, before resize() has sized the canvas - shows
+   up as the bottom-anchored UI being shifted down by the difference the moment this
+   skin is equipped (or preselected from storage on load).
+   The trailing blur() runs LAST, after the image is already pure black/white, so it
+   doesn't reintroduce mid-grays for contrast() to fight over - it just softens every
+   black/white edge by a fraction of a pixel, which is what gives old monochrome LCD/CRT
+   displays (Game Boy, B&W terminals, etc.) their characteristic hazy glow/bloom instead
+   of looking like flat, razor-sharp clip art. */
+body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08) blur(1px); }
+
+/* 1-Bit skin (cont.): the threshold filter above collapses lots of close-luminance
+   pairs (colored button + white text, gold bg + gray border, etc.) into the same flat
+   tone, which is what was making shop/goal/HUD/button chrome go invisible. Pure black
+   and pure white sit at the opposite extremes of that filter, so forcing a black+white
+   double edge around chrome, and white text with a black outline, guarantees at least
+   one half of every pair still reads no matter what the element's own color collapses
+   to - and the two guaranteed colors always read against each other. */
+body.onebit-page-filter button,
+body.onebit-page-filter .modal,
+body.onebit-page-filter .modal-header,
+body.onebit-page-filter .hud-panel,
+body.onebit-page-filter #timer-container,
+body.onebit-page-filter #powerup-indicator,
+body.onebit-page-filter #hazard-warning,
+body.onebit-page-filter #survive-announcement,
+body.onebit-page-filter #unlock-popup,
+body.onebit-page-filter #item-toast,
+body.onebit-page-filter #secret-unlock-toast,
+body.onebit-page-filter .corner-icon,
+body.onebit-page-filter .inv-item,
+body.onebit-page-filter .shop-tab,
+body.onebit-page-filter #fishing-dialogue {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 5px #000 !important;
+}
+body.onebit-page-filter #title-screen *,
+body.onebit-page-filter #game-over-screen *,
+body.onebit-page-filter .modal *,
+body.onebit-page-filter .hud-panel,
+body.onebit-page-filter .hud-panel *,
+body.onebit-page-filter #item-toast,
+body.onebit-page-filter #item-toast *,
+body.onebit-page-filter #unlock-popup,
+body.onebit-page-filter #survive-announcement,
+body.onebit-page-filter #secret-unlock-toast,
+body.onebit-page-filter #secret-unlock-toast *,
+body.onebit-page-filter #time-countdown,
+body.onebit-page-filter #fishing-dialogue,
+body.onebit-page-filter #fishing-dialogue *,
+body.onebit-page-filter button {
+    color: #ffffff !important;
+    text-shadow: 1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000, 0 0 4px #000 !important;
+}
+body.onebit-page-filter .icon-img {
+    filter: drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000);
+}

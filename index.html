@@ -1279,15 +1279,17 @@
             wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over a hazard longer before falling. Each stack adds more hover time.' },
             spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Periodically unleashes an icy shockwave around you. Each stack makes it fire more often.' },
             wilkshirianknowledge: { id: 'wilkshirianknowledge', rarity: 'common', name: 'Wilkshirian Knowledge', desc: 'Grants brief invulnerability on a recurring timer. Each stack shortens the wait between activations.', lockedBy: 'endless_level3' },
+            // Dupe Shop exclusive (common) - never in rollRoguelikeItem's chest/mimic pools or
+            // roguelikeTierPools (the Gold Trader's pool), so the only way to get it is buying
+            // it from the Dupe Trader (see dupeShopStock()).
+            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned by 100%. Each stack adds another 100%.' },
             slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.', lockedBy: 'level3' },
             plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
+            // Dupe Shop exclusive (epic) - see note on greedy above.
+            devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once, then is consumed. Each stack is another life saved.' },
             shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.', lockedBy: 'centurion' },
             skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.', lockedBy: 'endless_level9' },
-            // Dupe Shop exclusives - these three are never in rollRoguelikeItem's chest/mimic
-            // pools or roguelikeTierPools (the Gold Trader's pool), so the only way to get them
-            // is buying them from the Dupe Trader (see dupeShopStock()).
-            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned by 100%. Each stack adds another 100%.' },
-            devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once, then is consumed. Each stack is another life saved.' },
+            // Dupe Shop exclusive (legendary) - see note on greedy above.
             spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost each time. Each stack boosts it further.' }
         };
 
@@ -2283,17 +2285,20 @@
             ];
         }
 
-        // The Dupe Trader's stock is fixed rather than rolled: Greedy, Devil Deal, and Spectre
-        // are the only three items it ever offers, and they're the only way to get any of the
-        // three (they're deliberately left out of roguelikeTierPools/rollRoguelikeItem, so
-        // chests, mimics, and the Gold Trader never hand them out). All three slots are shown
-        // every visit - purchased still resets fresh each time the trader respawns, same as
-        // rollTraderStock's slots do.
+        // The Dupe Trader's stock is fixed to its three Dupe Shop exclusives rather than rolled
+        // from roguelikeTierPools, but still follows the same one-standard/one-specialty shape
+        // as rollTraderStock: Greedy (the only common exclusive) is always the standard slot,
+        // and the specialty slot is Devil Deal 70% of the time / Spectre 30% (matching the
+        // epic/legendary split rollTraderStock uses for its own hi-tier slot). All three are
+        // still kept out of roguelikeTierPools/rollRoguelikeItem, so none of them can be found
+        // anywhere except here.
         function dupeShopStock() {
+            let specialty = Math.random() < 0.7
+                ? { itemId: 'devildeal', tier: 'epic', purchased: false }
+                : { itemId: 'spectre', tier: 'legendary', purchased: false };
             return [
                 { itemId: 'greedy', tier: 'common', purchased: false },
-                { itemId: 'devildeal', tier: 'epic', purchased: false },
-                { itemId: 'spectre', tier: 'legendary', purchased: false }
+                specialty
             ];
         }
 
@@ -4508,7 +4513,7 @@
             activeMerchant = { kind, trader };
             document.getElementById('merchant-title').innerText = kind === 'skin' ? 'Dupe Trader' : 'Gold Trader';
             document.getElementById('merchant-subtitle').innerText = kind === 'skin'
-                ? "Spare skin dupes for one of these three exclusives. Each pick's a one-time deal."
+                ? "Spare skin dupes for one of these exclusives. Each pick's a one-time deal."
                 : "Gold for a pick from today's stock. Each pick's a one-time deal.";
             renderMerchantItems();
             document.getElementById('merchant-dialogue').style.display = 'block';
@@ -7451,18 +7456,22 @@
             // Dupe Shop item: Devil Deal. Burns one charge to cancel this death outright - the
             // single choke point here means it covers every death reason (hazard, time,
             // enemy contact, shooter's projectile) without needing a check at each call site.
-            // The charge is consumed and replaced by a greyed-out badge in the HUD (see
-            // updateItemsHUD/devilDealUsed) rather than just quietly disappearing.
+            // Just cancelling this one call isn't enough on its own: hazard/enemy/projectile
+            // contact deaths would otherwise re-trigger the very next frame since nothing else
+            // has changed (same enemy still overlapping, same hazard tile underfoot), so the
+            // "save" has to come with a real invulnerability window - every other death check
+            // in the game already guards itself with !isPlayerInvulnerable(), so setting this
+            // is what actually gives the player a chance to get clear instead of dying again
+            // 1/60th of a second later. The charge is consumed and replaced by a greyed-out
+            // badge in the HUD (see updateItemsHUD/devilDealUsed) rather than quietly vanishing.
             if ((runItems.devildeal || 0) > 0) {
                 runItems.devildeal--;
                 devilDealUsed++;
-                // Hazard and time-out deaths are both driven by a value that stays past its
-                // threshold every frame (hazardTimer, timeLeft) - without resetting it here,
-                // the very next frame would call triggerGameOver again and burn every
-                // remaining charge instantly. Enemy-contact deaths are one-off events and need
-                // no such reset. A brief reprieve either way, not full safety.
-                if (reason === 'hazard') { player.hazardTimer = 0; updateHazardVignette(0); }
-                else if (reason === 'time') { timeLeft = 3; }
+                player.invulnerableTimer = Math.max(player.invulnerableTimer || 0, 2.5);
+                // Time-out isn't gated by invulnerability at all (timeLeft just keeps counting
+                // down regardless), so it needs its own explicit reprieve.
+                if (reason === 'time') timeLeft = 3;
+                player.hazardTimer = 0; updateHazardVignette(0);
                 updateItemsHUD();
                 showDevilDealPopup();
                 return;

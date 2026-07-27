@@ -2626,19 +2626,10 @@
             // exactly one trader (never both) shows up every third level starting at level 3,
             // with a coin flip deciding which. Stock is rolled once at spawn time
             // (rollTraderStock) and persists until the player touches the trader or the level
-            // ends, whichever comes first.
-            if (level >= 3 && level % 3 === 0) {
-                let t = pickLandHex(220);
-                if (t) {
-                    if (Math.random() < 0.5) {
-                        skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
-                        t.element = { type: 'skinTrader' };
-                    } else {
-                        goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
-                        t.element = { type: 'goldTrader' };
-                    }
-                }
-            }
+            // ends, whichever comes first. Shared with generateSurvivalLevel (see
+            // spawnRareTrader) so a Survival stage standing in for a trader level still gets one
+            // instead of skipping it.
+            spawnRareTrader();
 
             // ---- Single-element scatter: every remaining empty land hex rolls independently
             // for a tree/rock or a coin. Chances are flat per-hex (scaling gently with level)
@@ -2723,6 +2714,24 @@
         // driving goal.collected up to goal.required over time instead of via pickups. Enemies
         // start at zero and are fed in over time by updateSurvivalMode() via telegraphed
         // spawns rather than being placed up front like a normal level.
+        // Rolls the deterministic every-3rd-level trader spawn (see rollTraderStock/traderCost
+        // above) and places it on an open land hex via pickLandHex - shared by both generateLevel
+        // (procedural blob-chain levels) and generateSurvivalLevel (fixed arena), since both
+        // build a landHexList pickLandHex can search. Exactly one trader, never both, with a coin
+        // flip deciding which.
+        function spawnRareTrader() {
+            if (level < 3 || level % 3 !== 0) return;
+            let t = pickLandHex(220);
+            if (!t) return;
+            if (Math.random() < 0.5) {
+                skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                t.element = { type: 'skinTrader' };
+            } else {
+                goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                t.element = { type: 'goldTrader' };
+            }
+        }
+
         function generateSurvivalLevel() {
             lastLevelWasSurvival = true;
             survivalElapsed = 0; survivalWaveNum = 0; survivalNextWaveAt = 2.5;
@@ -2816,6 +2825,10 @@
                     if (hTile) { hives.push({ x: hTile.x, y: hTile.y, radius: 25 }); hTile.element = { type: 'hive' }; }
                 }
             }
+
+            // A Survival stage standing in for a level that would've had a rare trader still
+            // gets one - see spawnRareTrader.
+            spawnRareTrader();
 
             // Sparse trees/rocks for cover and visual interest, kept away from the very center
             // so the goal area stays clear, and never placed on the goal's own hex.

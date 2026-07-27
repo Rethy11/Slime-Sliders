@@ -1792,6 +1792,47 @@
                 osc.frequency.setValueAtTime(200, t + 0.22); osc.frequency.exponentialRampToValueAtTime(1600, t + 0.5);
                 gain.gain.setValueAtTime(userSettings.sfxVol * 0.5, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.55);
                 osc.start(t); osc.stop(t + 0.55);
+            } else if (type === 'bull_windup') {
+                // Low anticipatory snort the Bull gives right before it charges - quiet and
+                // short so it reads as a tell to react to, not a jump-scare.
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(90, t); osc.frequency.linearRampToValueAtTime(135, t + 0.12);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.22, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.15);
+                osc.start(t); osc.stop(t + 0.15);
+            } else if (type === 'bull_charge') {
+                // Low stomping whoosh the instant the Bull actually launches into its dash.
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(180, t); osc.frequency.exponentialRampToValueAtTime(60, t + 0.25);
+                let osc2 = actx.createOscillator(); osc2.type = 'square'; osc2.frequency.setValueAtTime(50, t); osc2.frequency.exponentialRampToValueAtTime(28, t + 0.2);
+                let gain2 = actx.createGain(); gain2.gain.setValueAtTime(userSettings.sfxVol * 0.22, t); gain2.gain.exponentialRampToValueAtTime(0.01, t + 0.2);
+                osc2.connect(gain2); gain2.connect(actx.destination); osc2.start(t); osc2.stop(t + 0.2);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.3, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.25);
+                osc.start(t); osc.stop(t + 0.25);
+            } else if (type === 'eye_windup') {
+                // Rising charge-up tone as the Evil Eye winds up its next plasma orb.
+                osc.type = 'sine'; osc.frequency.setValueAtTime(300, t); osc.frequency.exponentialRampToValueAtTime(700, t + 0.3);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.16, t); gain.gain.linearRampToValueAtTime(0.01, t + 0.3);
+                osc.start(t); osc.stop(t + 0.3);
+            } else if (type === 'eye_fire') {
+                // Quick descending zap the instant the Evil Eye actually fires.
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(900, t); osc.frequency.exponentialRampToValueAtTime(200, t + 0.12);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.28, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.12);
+                osc.start(t); osc.stop(t + 0.12);
+            } else if (type === 'shop_yoohoo') {
+                // Muffled, higher-pitched two-note "yoo-hoo" greeting when a shop first scrolls
+                // into view. Routed through a lowpass filter (unlike every other SFX here) so
+                // it sounds distant/friendly rather than sharp, and kept quiet/short to stay
+                // non-intrusive - synced with the shopkeeper slime's two mouth-open squishes in
+                // drawTraderStall.
+                let yhFilter = actx.createBiquadFilter(); yhFilter.type = 'lowpass'; yhFilter.frequency.value = 1200;
+                osc.disconnect(); osc.connect(yhFilter); yhFilter.connect(gain);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(700, t); osc.frequency.setValueAtTime(920, t + 0.14);
+                osc.frequency.setValueAtTime(600, t + 0.28); osc.frequency.setValueAtTime(780, t + 0.4);
+                gain.gain.setValueAtTime(0.0001, t);
+                gain.gain.linearRampToValueAtTime(userSettings.sfxVol * 0.2, t + 0.03);
+                gain.gain.linearRampToValueAtTime(userSettings.sfxVol * 0.05, t + 0.15);
+                gain.gain.linearRampToValueAtTime(userSettings.sfxVol * 0.2, t + 0.29);
+                gain.gain.linearRampToValueAtTime(0.0001, t + 0.55);
+                osc.start(t); osc.stop(t + 0.55);
             }
         }
 
@@ -2838,11 +2879,17 @@
             if (level < 3 || level % 3 !== 0) return;
             let t = pickLandHex(220);
             if (!t) return;
+            // Random gacha-slime shopkeeper look (color + hat) for the stall - purely cosmetic,
+            // rerolled fresh each time a trader spawns. appeared/mouthAnimStart track the
+            // one-shot "yoo-hoo" greeting (sound + mouth-open/squish) fired the moment the
+            // stall first scrolls onscreen - see the isOnScreen checks in draw().
+            let shopkeeperSkin = basicSkins[Math.floor(Math.random() * basicSkins.length)].id;
+            let shopkeeperHat = hats[Math.floor(Math.random() * hats.length)].id;
             if (Math.random() < 0.5) {
-                skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: dupeShopStock() };
+                skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: dupeShopStock(), skinColorId: shopkeeperSkin, hatId: shopkeeperHat, appeared: false, mouthAnimStart: 0 };
                 t.element = { type: 'skinTrader' };
             } else {
-                goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock(), skinColorId: shopkeeperSkin, hatId: shopkeeperHat, appeared: false, mouthAnimStart: 0 };
                 t.element = { type: 'goldTrader' };
             }
         }
@@ -4867,6 +4914,12 @@
                             let target = playerTrail[histIdx] || { x: player.worldX, y: player.worldY };
                             comp.x += (target.x - comp.x) * 0.25;
                             comp.y += (target.y - comp.y) * 0.25;
+                            // Companion's own per-tick velocity, fed into drawCharacterModel at
+                            // render time (see the 'companion' branch further down) so it gasps
+                            // and squishes exactly like the player does when moving fast, rather
+                            // than always rendering with its mouth in the neutral idle smile.
+                            comp.vx = comp.x - comp.prevX;
+                            comp.vy = comp.y - comp.prevY;
                         }
                     }
 
@@ -5107,8 +5160,15 @@
                         } else if (e.type === 'dasher') {
                             if (isOnScreen(e.x, e.y, 60)) {
                                 e.stateTimer++;
-                                if (e.stateTimer < 80) e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
-                                else if (e.stateTimer < 110) { e.x += Math.cos(e.angle)*(e.speed*speedMod*3); e.y += Math.sin(e.angle)*(e.speed*speedMod*3); } 
+                                if (e.stateTimer < 80) {
+                                    e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                                    // Snort right near the end of the telegraph, shortly before the
+                                    // dash actually fires, so it reads as a "brace yourself" tell.
+                                    if (e.stateTimer === 60) playSFX('bull_windup');
+                                } else if (e.stateTimer < 110) {
+                                    if (e.stateTimer === 80) playSFX('bull_charge');
+                                    e.x += Math.cos(e.angle)*(e.speed*speedMod*3); e.y += Math.sin(e.angle)*(e.speed*speedMod*3);
+                                } 
                                 else e.stateTimer = 0;
                             } else { e.stateTimer = 0; e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x); }
                         } else if (e.type === 'shooter') {
@@ -5116,7 +5176,9 @@
                             let targetAngle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
                             if (dToPlayer < 300) { e.x -= Math.cos(targetAngle)*e.speed; e.y -= Math.sin(targetAngle)*e.speed; } 
                             else if (dToPlayer > 400) { e.x += Math.cos(targetAngle)*e.speed; e.y += Math.sin(targetAngle)*e.speed; }
-                            if (e.stateTimer > 120 && isOnScreen(e.x, e.y, 100)) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(targetAngle)*4, vy: Math.sin(targetAngle)*4, radius: 8 }); e.stateTimer = 0; }
+                            // Charge-up tone shortly before it fires, so the shot has a tell too.
+                            if (e.stateTimer === 90 && isOnScreen(e.x, e.y, 100)) playSFX('eye_windup');
+                            if (e.stateTimer > 120 && isOnScreen(e.x, e.y, 100)) { projectiles.push({ x: e.x, y: e.y, vx: Math.cos(targetAngle)*4, vy: Math.sin(targetAngle)*4, radius: 8 }); playSFX('eye_fire'); e.stateTimer = 0; }
                         } else if (e.type === 'hopper') {
                             if (e.state === 'idle') { if (isOnScreen(e.x, e.y, 50)) e.stateTimer++; else e.stateTimer = 0; } else { e.stateTimer++; }
                             if (e.stateTimer < 60) { e.state = 'idle'; e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x); e.targetX = e.x + Math.cos(e.angle)*(e.speed*speedMod*2.5)*30; e.targetY = e.y + Math.sin(e.angle)*(e.speed*speedMod*2.5)*30; }
@@ -6322,7 +6384,7 @@
         // deals in, drawn with the same drawPixelIcon used for HUD item badges. Simpler than a
         // full posed character (see drawSeatedFisher) since there's no story beat riding on it -
         // just something that visibly reads as "shop" from a distance and is worth walking up to.
-        function drawTraderStall(x, y, seed, accentColor, accentShadow, iconType) {
+        function drawTraderStall(x, y, seed, accentColor, accentShadow, iconType, trader) {
             ctx.save();
             ctx.translate(x, y);
             drawGroundShadow(ctx, 0, 8, 26, 10);
@@ -6352,6 +6414,23 @@
             ctx.fillStyle = '#8a6135'; ctx.beginPath(); ctx.roundRect(-18, 2, 36, 14, 3); ctx.fill();
             ctx.strokeStyle = '#5c3f1f'; ctx.lineWidth = 1.5; ctx.strokeRect(-18, 2, 36, 14);
             ctx.beginPath(); ctx.moveTo(-18, 9); ctx.lineTo(18, 9); ctx.stroke();
+
+            // Gacha-slime shopkeeper standing behind the counter (random skin/hat rolled once
+            // in spawnRareTrader). Reuses drawCharacterModel exactly like the player slime -
+            // feeding it a fake vx during the yoo-hoo window pops its mouth open (gaspAmount)
+            // AND squishes its body (stretchX/Y) at the same time, since both already key off
+            // speed there, so no separate mouth/squish logic is needed here. The pulse runs
+            // twice (two "yoo" / "hoo" pops) in sync with the shop_yoohoo chime.
+            if (trader) {
+                let yoohooElapsed = trader.mouthAnimStart ? (Date.now() - trader.mouthAnimStart) : Infinity;
+                let pulseDrive = 0;
+                if (yoohooElapsed >= 0 && yoohooElapsed < 900) {
+                    let local = yoohooElapsed % 450;
+                    pulseDrive = Math.sin((local / 450) * Math.PI);
+                }
+                let idleBob = Math.sin(Date.now() / 500 + seed) * 1;
+                drawCharacterModel(0, -14 + idleBob, pulseDrive * 13, 0, 14, trader.skinColorId || 'cyan', false, trader.hatId || null, ctx);
+            }
 
             // Floating badge icon overhead, gently bobbing, advertising what this trader deals
             // in (skin dupes or gold) - same drawPixelIcon used for HUD item badges.
@@ -6708,8 +6787,14 @@
             for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             for (let i = 0; i < surviveChests.length; i++) { let sv = surviveChests[i]; if (isOnScreen(sv.x + tiltX, sv.y + tiltY, cullBuffer)) pushRQ('chest', sv, sv.y + (sv.radius || 0)); }
             if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
-            if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
-            if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
+            if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) {
+                if (!skinTrader.appeared) { skinTrader.appeared = true; skinTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo'); }
+                pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
+            }
+            if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) {
+                if (!goldTrader.appeared) { goldTrader.appeared = true; goldTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo'); }
+                pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
+            }
             pushRQ('player', player, player.worldY + (player.radius || 0));
             renderQueue.length = rqCount;
             renderQueue.sort(rqSortCompare);
@@ -7092,11 +7177,11 @@
                 }
                 else if (item.type === 'skinTrader') {
                     let t = item.obj;
-                    drawTraderStall(t.x, t.y, t.seed, '#9b59b6', '#6c3483', 'skindupe');
+                    drawTraderStall(t.x, t.y, t.seed, '#9b59b6', '#6c3483', 'skindupe', t);
                 }
                 else if (item.type === 'goldTrader') {
                     let t = item.obj;
-                    drawTraderStall(t.x, t.y, t.seed, '#f1c40f', '#c77000', 'coin');
+                    drawTraderStall(t.x, t.y, t.seed, '#f1c40f', '#c77000', 'coin', t);
                 }
                 else if (item.type === 'leaf') {
                     let l = item.obj;
@@ -7241,7 +7326,7 @@
                     // Toxic Sludge: same radioactive glow overlay as enemies above, layered
                     // behind whatever skin the companion is already wearing.
                     if (cs.irradiated) drawRadioactiveGlow(ccx, ccy, cs.radius);
-                    drawCharacterModel(ccx, ccy, 0, 0, cs.radius, cs.colorId, false, null);
+                    drawCharacterModel(ccx, ccy, cs.vx || 0, cs.vy || 0, cs.radius, cs.colorId, false, null);
                     // Toxic Sludge: tint the companion's own body sickly green too, same as
                     // enemies above, on top of whatever skin it's already wearing.
                     if (cs.irradiated) drawIrradiatedTint(ccx, ccy, cs.radius);

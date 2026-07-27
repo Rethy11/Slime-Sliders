@@ -5100,15 +5100,33 @@
                         triggerFishingDialogue();
                     }
 
-                    // Rare traders: touching either one opens its shop - same one-shot-per-spawn
-                    // convention as fishingScene above.
-                    if (skinTrader && !skinTrader.triggered && dist(player.worldX, player.worldY, skinTrader.x, skinTrader.y) < player.radius + 30) {
-                        skinTrader.triggered = true;
-                        triggerMerchantDialogue('skin', skinTrader);
+                    // Shop greeting: fires once the player gets within three tiles, rather than
+                    // whenever the stall happens to scroll onscreen - the render cull buffer
+                    // (see cullBuffer in draw()) pre-renders stalls well before they're actually
+                    // visible, which made the old onscreen-triggered chime play too early.
+                    if (skinTrader && !skinTrader.appeared && dist(player.worldX, player.worldY, skinTrader.x, skinTrader.y) < HEX_TILE_DIST * 3) {
+                        skinTrader.appeared = true; skinTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo');
                     }
-                    if (goldTrader && !goldTrader.triggered && dist(player.worldX, player.worldY, goldTrader.x, goldTrader.y) < player.radius + 30) {
-                        goldTrader.triggered = true;
-                        triggerMerchantDialogue('gold', goldTrader);
+                    if (goldTrader && !goldTrader.appeared && dist(player.worldX, player.worldY, goldTrader.x, goldTrader.y) < HEX_TILE_DIST * 3) {
+                        goldTrader.appeared = true; goldTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo');
+                    }
+
+                    // Rare traders: touching either one opens its shop. `triggered` now just
+                    // tracks whether the player is currently standing in the trigger radius (armed
+                    // false while inside, reset true on exit) rather than being a permanent
+                    // one-shot - so walking off the stall's tile and back on reopens the same shop.
+                    // trader.stock itself is untouched here (built once in spawnRareTrader and only
+                    // ever mutated by buyMerchantItem's .purchased flag), so reopening never rerolls
+                    // the offer or forgets what's already been bought.
+                    if (skinTrader) {
+                        let skinInRange = dist(player.worldX, player.worldY, skinTrader.x, skinTrader.y) < player.radius + 30;
+                        if (skinInRange && !skinTrader.triggered) { skinTrader.triggered = true; triggerMerchantDialogue('skin', skinTrader); }
+                        else if (!skinInRange) { skinTrader.triggered = false; }
+                    }
+                    if (goldTrader) {
+                        let goldInRange = dist(player.worldX, player.worldY, goldTrader.x, goldTrader.y) < player.radius + 30;
+                        if (goldInRange && !goldTrader.triggered) { goldTrader.triggered = true; triggerMerchantDialogue('gold', goldTrader); }
+                        else if (!goldInRange) { goldTrader.triggered = false; }
                     }
 
                     // Roguelite: Magnet item pulls nearby coins/gems toward the player.
@@ -5324,58 +5342,64 @@
                 }
             }
 
-            for (let i = projectiles.length - 1; i >= 0; i--) {
-                let p = projectiles[i];
-                if (!isNearScreen(p.x, p.y)) { projectiles.splice(i, 1); continue; }
-                p.x += p.vx; p.y += p.vy; let hitObstacle = false;
-                    for (let j = companions.length - 1; j >= 0; j--) {
-                        let comp = companions[j];
-                        if (dist(p.x, p.y, comp.x, comp.y) < p.radius + comp.radius) {
-                            companions.splice(j, 1); // Slime dies
-                            projectiles.splice(i, 1); // Projectile eliminated
-                            playSFX('enemy_hit');
-                            hitObstacle = true;
-                            break;
+            // Gated on gameState==='playing' (rather than letting movement run unconditionally
+            // like before) so plasma orbs actually freeze while the game is paused - e.g. with
+            // a merchant dialogue or menu open - instead of silently continuing to travel/hit
+            // things offscreen while the player can't see or react to them.
+            if (gameState === 'playing') {
+                for (let i = projectiles.length - 1; i >= 0; i--) {
+                    let p = projectiles[i];
+                    if (!isNearScreen(p.x, p.y)) { projectiles.splice(i, 1); continue; }
+                    p.x += p.vx; p.y += p.vy; let hitObstacle = false;
+                        for (let j = companions.length - 1; j >= 0; j--) {
+                            let comp = companions[j];
+                            if (dist(p.x, p.y, comp.x, comp.y) < p.radius + comp.radius) {
+                                companions.splice(j, 1); // Slime dies
+                                projectiles.splice(i, 1); // Projectile eliminated
+                                playSFX('enemy_hit');
+                                hitObstacle = true;
+                                break;
+                            }
+                        }
+                        if (hitObstacle) continue;
+                    let nearTreesProj = getNearbyTrees(p.x, p.y);
+                    for (let ti = 0; ti < nearTreesProj.length; ti++) {
+                        let t = nearTreesProj[ti];
+                        let dx = p.x - t.x, dy = p.y - t.y;
+                        let th = p.radius + t.radius * 0.8;
+                        if (dx*dx + dy*dy < th*th) { hitObstacle = true; break; }
+                    }
+                    if (!hitObstacle) {
+                        let nearFencesProj = getNearbyFences(p.x, p.y);
+                        for (let fi = 0; fi < nearFencesProj.length; fi++) {
+                            let f = nearFencesProj[fi];
+                            let dx = f.x2 - f.x1, dy = f.y2 - f.y1;
+                            let lenSq = dx*dx + dy*dy;
+                            let t = lenSq > 0 ? ((p.x - f.x1) * dx + (p.y - f.y1) * dy) / lenSq : 0;
+                            t = Math.max(0, Math.min(1, t));
+                            let cx = f.x1 + t * dx, cy = f.y1 + t * dy;
+                            let ex = p.x - cx, ey = p.y - cy;
+                            let th = p.radius + fenceThickness;
+                            if (ex*ex + ey*ey < th*th) { hitObstacle = true; break; }
                         }
                     }
-                    if (hitObstacle) continue;
-                let nearTreesProj = getNearbyTrees(p.x, p.y);
-                for (let ti = 0; ti < nearTreesProj.length; ti++) {
-                    let t = nearTreesProj[ti];
-                    let dx = p.x - t.x, dy = p.y - t.y;
-                    let th = p.radius + t.radius * 0.8;
-                    if (dx*dx + dy*dy < th*th) { hitObstacle = true; break; }
-                }
-                if (!hitObstacle) {
-                    let nearFencesProj = getNearbyFences(p.x, p.y);
-                    for (let fi = 0; fi < nearFencesProj.length; fi++) {
-                        let f = nearFencesProj[fi];
-                        let dx = f.x2 - f.x1, dy = f.y2 - f.y1;
-                        let lenSq = dx*dx + dy*dy;
-                        let t = lenSq > 0 ? ((p.x - f.x1) * dx + (p.y - f.y1) * dy) / lenSq : 0;
-                        t = Math.max(0, Math.min(1, t));
-                        let cx = f.x1 + t * dx, cy = f.y1 + t * dy;
-                        let ex = p.x - cx, ey = p.y - cy;
-                        let th = p.radius + fenceThickness;
-                        if (ex*ex + ey*ey < th*th) { hitObstacle = true; break; }
+                    if (hitObstacle) { projectiles.splice(i, 1); continue; }
+                    
+                    if (dist(player.worldX, player.worldY, p.x, p.y) < player.radius + p.radius) {
+                        if (player.activePowerup === 'rampage') {
+                            let normAngle = Math.atan2(p.y - player.worldY, p.x - player.worldX); let speed = Math.hypot(p.vx, p.vy) * 1.3;
+                            p.vx = Math.cos(normAngle)*speed; p.vy = Math.sin(normAngle)*speed;
+                            let overlap = (player.radius + p.radius) - dist(player.worldX, player.worldY, p.x, p.y);
+                            p.x += Math.cos(normAngle)*overlap; p.y += Math.sin(normAngle)*overlap; p.deflected = true;
+                            screenShake = Math.max(screenShake, 5);
+                        } else if (isPlayerInvulnerable()) {
+                            spawnSplash(p.x, p.y); projectiles.splice(i, 1); continue;
+                        } else triggerGameOver('shooter');
                     }
-                }
-                if (hitObstacle) { projectiles.splice(i, 1); continue; }
-                
-                if (gameState === 'playing' && dist(player.worldX, player.worldY, p.x, p.y) < player.radius + p.radius) {
-                    if (player.activePowerup === 'rampage') {
-                        let normAngle = Math.atan2(p.y - player.worldY, p.x - player.worldX); let speed = Math.hypot(p.vx, p.vy) * 1.3;
-                        p.vx = Math.cos(normAngle)*speed; p.vy = Math.sin(normAngle)*speed;
-                        let overlap = (player.radius + p.radius) - dist(player.worldX, player.worldY, p.x, p.y);
-                        p.x += Math.cos(normAngle)*overlap; p.y += Math.sin(normAngle)*overlap; p.deflected = true;
-                        screenShake = Math.max(screenShake, 5);
-                    } else if (isPlayerInvulnerable()) {
-                        spawnSplash(p.x, p.y); projectiles.splice(i, 1); continue;
-                    } else triggerGameOver('shooter');
-                }
-                if (gameState === 'playing' && p.deflected) {
-                    for (let j = enemies.length - 1; j >= 0; j--) {
-                        if (dist(p.x, p.y, enemies[j].x, enemies[j].y) < p.radius + enemies[j].radius) { destroyEnemyByIndex(j, [1,2]); projectiles.splice(i, 1); break; }
+                    if (p.deflected) {
+                        for (let j = enemies.length - 1; j >= 0; j--) {
+                            if (dist(p.x, p.y, enemies[j].x, enemies[j].y) < p.radius + enemies[j].radius) { destroyEnemyByIndex(j, [1,2]); projectiles.splice(i, 1); break; }
+                        }
                     }
                 }
             }
@@ -6410,26 +6434,48 @@
                 ctx.beginPath(); ctx.arc(sx, -24, 3.5, 0, Math.PI); ctx.fill();
             }
 
-            // Counter/crate the goods sit on.
-            ctx.fillStyle = '#8a6135'; ctx.beginPath(); ctx.roundRect(-18, 2, 36, 14, 3); ctx.fill();
-            ctx.strokeStyle = '#5c3f1f'; ctx.lineWidth = 1.5; ctx.strokeRect(-18, 2, 36, 14);
-            ctx.beginPath(); ctx.moveTo(-18, 9); ctx.lineTo(18, 9); ctx.stroke();
-
-            // Gacha-slime shopkeeper standing behind the counter (random skin/hat rolled once
-            // in spawnRareTrader). Reuses drawCharacterModel exactly like the player slime -
-            // feeding it a fake vx during the yoo-hoo window pops its mouth open (gaspAmount)
-            // AND squishes its body (stretchX/Y) at the same time, since both already key off
-            // speed there, so no separate mouth/squish logic is needed here. The pulse runs
-            // twice (two "yoo" / "hoo" pops) in sync with the shop_yoohoo chime.
+            // Gacha-slime shopkeeper (random skin/hat rolled once in spawnRareTrader), drawn
+            // BEFORE the counter/crate below so the counter renders on top and occludes its
+            // lower half - reads as the slime standing behind the stall rather than floating in
+            // front of it. Smaller than the player's own slime (radius 11 vs 14) since it's a
+            // background prop, not something the player controls. Reuses drawCharacterModel
+            // exactly like the player slime - feeding it a fake vx during the yoo-hoo window
+            // pops its mouth open (gaspAmount) AND squishes its body (stretchX/Y) at the same
+            // time, since both already key off speed there, so no separate mouth/squish logic
+            // is needed here. The pulse runs twice (two "yoo" / "hoo" pops) in sync with the
+            // shop_yoohoo chime.
+            let yoohooElapsed = (trader && trader.mouthAnimStart) ? (Date.now() - trader.mouthAnimStart) : Infinity;
             if (trader) {
-                let yoohooElapsed = trader.mouthAnimStart ? (Date.now() - trader.mouthAnimStart) : Infinity;
                 let pulseDrive = 0;
                 if (yoohooElapsed >= 0 && yoohooElapsed < 900) {
                     let local = yoohooElapsed % 450;
                     pulseDrive = Math.sin((local / 450) * Math.PI);
                 }
                 let idleBob = Math.sin(Date.now() / 500 + seed) * 1;
-                drawCharacterModel(0, -14 + idleBob, pulseDrive * 13, 0, 14, trader.skinColorId || 'cyan', false, trader.hatId || null, ctx);
+                drawCharacterModel(0, -10 + idleBob, pulseDrive * 10, 0, 11, trader.skinColorId || 'cyan', false, trader.hatId || null, ctx);
+            }
+
+            // Counter/crate the goods sit on - drawn after the shopkeeper slime above so its
+            // front edge overlaps/hides the slime's lower body.
+            ctx.fillStyle = '#8a6135'; ctx.beginPath(); ctx.roundRect(-18, 2, 36, 14, 3); ctx.fill();
+            ctx.strokeStyle = '#5c3f1f'; ctx.lineWidth = 1.5; ctx.strokeRect(-18, 2, 36, 14);
+            ctx.beginPath(); ctx.moveTo(-18, 9); ctx.lineTo(18, 9); ctx.stroke();
+
+            // "Hey!" speech bubble, popping up beside the shopkeeper's head for a second or two
+            // right when the yoo-hoo chime/mouth-pop plays - fades in quickly, holds, then fades
+            // out, using the same mouthAnimStart timestamp so it's always in sync with the sound.
+            if (trader && trader.mouthAnimStart && yoohooElapsed >= 0 && yoohooElapsed < 1600) {
+                let bubbleAlpha = Math.min(1, yoohooElapsed / 120, (1600 - yoohooElapsed) / 350);
+                ctx.save();
+                ctx.globalAlpha = bubbleAlpha;
+                ctx.translate(17, -32);
+                ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#2b2d42'; ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.roundRect(-2, -12, 34, 18, 6); ctx.fill(); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(-2, 2); ctx.lineTo(-9, 8); ctx.lineTo(0, 4); ctx.closePath();
+                ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#2b2d42'; ctx.font = 'bold 11px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('Hey!', 15, -3);
+                ctx.restore();
             }
 
             // Floating badge icon overhead, gently bobbing, advertising what this trader deals
@@ -6787,14 +6833,8 @@
             for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             for (let i = 0; i < surviveChests.length; i++) { let sv = surviveChests[i]; if (isOnScreen(sv.x + tiltX, sv.y + tiltY, cullBuffer)) pushRQ('chest', sv, sv.y + (sv.radius || 0)); }
             if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
-            if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) {
-                if (!skinTrader.appeared) { skinTrader.appeared = true; skinTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo'); }
-                pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
-            }
-            if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) {
-                if (!goldTrader.appeared) { goldTrader.appeared = true; goldTrader.mouthAnimStart = Date.now(); playSFX('shop_yoohoo'); }
-                pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
-            }
+            if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
+            if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
             pushRQ('player', player, player.worldY + (player.radius || 0));
             renderQueue.length = rqCount;
             renderQueue.sort(rqSortCompare);

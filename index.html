@@ -138,6 +138,16 @@
         
         #unlock-popup { position: absolute; top: 30%; left: 50%; transform: translate(-50%, -50%) scale(0); background: #ffcf33; color: #000; padding: 15px 30px; border-radius: 30px; font-weight: bold; z-index: 55; pointer-events: none; opacity: 0; box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
         .pop-anim { animation: unlockAnim 3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+        /* Devil Deal: swaps the normal gold star popup for a dark/red look while it's showing
+           its "The Deal Is Sealed..." message, so a death-save reads as more ominous than a
+           routine unlock toast. Reuses the same #unlock-popup element/animation timing. */
+        #unlock-popup.devildeal-variant { background: #1a0a0a; color: #ff3b3b; border: 2px solid #ff3b3b; box-shadow: 0 0 25px rgba(255,0,0,0.6); }
+        /* Full-screen red flash triggered the instant a Devil Deal charge saves the player.
+           Snaps to visible opacity then eases back out - a quick, unmissable pulse rather than
+           an ongoing tint like #hazard-vignette. */
+        #devildeal-flash { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 60; opacity: 0; background: rgba(200,0,0,0.55); }
+        #devildeal-flash.flash { animation: devilDealFlash 0.6s ease-out forwards; }
+        @keyframes devilDealFlash { 0% { opacity: 0.9; } 100% { opacity: 0; } }
 
         /* Roguelite item HUD badges (top-left, under the Level box) and pickup toast */
         .items-hud { display: flex; gap: 4px; margin-top: 6px; flex-wrap: wrap; max-width: 170px; }
@@ -442,6 +452,7 @@
 
     <div id="ui-layer">
         <div id="hazard-vignette"></div>
+        <div id="devildeal-flash"></div>
         <div id="timer-container"><div id="timer-fill"></div></div>
         <div id="hazard-warning">HAZARD</div>
         <div id="survive-announcement">Survive!</div>
@@ -730,6 +741,7 @@
             hazardWarning: document.getElementById('hazard-warning'),
             itemsHud: document.getElementById('items-hud'),
             hazardVignette: document.getElementById('hazard-vignette'),
+            devilDealFlash: document.getElementById('devildeal-flash'),
             timeCountdown: document.getElementById('time-countdown'),
             surviveAnnouncement: document.getElementById('survive-announcement')
         };
@@ -1076,8 +1088,12 @@
             hat: storage.get('landSlidersHat') || null,
             jiggleForceX: 0, jiggleForceY: 0, activePowerup: null, powerupDuration: 0,
             powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0, spikesTimer: 0,
-            plasmaTimer: 0, invulnerableTimer: 0, wilkshirianTimer: 0
+            plasmaTimer: 0, invulnerableTimer: 0, wilkshirianTimer: 0, spectreBoostTimer: 0
         };
+        // Number of Devil Deal charges burned so far this run (see triggerGameOver) - tracked
+        // separately from runItems.devildeal (remaining active charges) so the HUD can keep
+        // showing a greyed-out badge for each one already spent instead of it just vanishing.
+        let devilDealUsed = 0;
 
         // Applies/removes the screen-color-inversion effect tied to the secret Corrupted Data
         // skin. Only #gameCanvas (the visible pixelated game view) gets inverted - HUD panels,
@@ -1266,7 +1282,13 @@
             slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.', lockedBy: 'level3' },
             plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
             shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.', lockedBy: 'centurion' },
-            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.', lockedBy: 'endless_level9' }
+            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.', lockedBy: 'endless_level9' },
+            // Dupe Shop exclusives - these three are never in rollRoguelikeItem's chest/mimic
+            // pools or roguelikeTierPools (the Gold Trader's pool), so the only way to get them
+            // is buying them from the Dupe Trader (see dupeShopStock()).
+            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned by 100%. Each stack adds another 100%.' },
+            devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once, then is consumed. Each stack is another life saved.' },
+            spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost each time. Each stack boosts it further.' }
         };
 
         // Achievement definitions. Each check() reads from persisted storage / in-memory state
@@ -2029,6 +2051,30 @@
                     tctx.fillStyle = '#ff6b6b'; tctx.beginPath(); tctx.arc(0,2*s,7*s,Math.PI,0); tctx.fill();
                     tctx.fillStyle = '#c0392b'; tctx.beginPath(); tctx.roundRect(0,-1*s,9*s,2.5*s,1*s); tctx.fill();
                     break;
+                // Dupe Shop exclusives: Greedy (common), Devil Deal (epic), Spectre (legendary).
+                case 'greedy':
+                    tctx.fillStyle = '#2ecc71'; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#27ae60'; tctx.beginPath(); tctx.arc(0,0,6*s,0,Math.PI*2); tctx.fill();
+                    tctx.strokeStyle = '#145a32'; tctx.lineWidth = 1.5*s; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.stroke();
+                    tctx.fillStyle = '#eafaf1'; tctx.font = (9*s) + 'px sans-serif'; tctx.textAlign = 'center'; tctx.textBaseline = 'middle'; tctx.fillText('$', 0, 0.5*s);
+                    break;
+                case 'devildeal':
+                    tctx.fillStyle = '#8e1b1b';
+                    tctx.beginPath(); tctx.moveTo(0,-10*s); tctx.lineTo(9*s,-3*s); tctx.lineTo(6*s,9*s); tctx.lineTo(-6*s,9*s); tctx.lineTo(-9*s,-3*s); tctx.closePath(); tctx.fill();
+                    tctx.strokeStyle = '#2a0a0a'; tctx.lineWidth = 1*s; tctx.stroke();
+                    tctx.fillStyle = '#e74c3c';
+                    tctx.beginPath(); tctx.moveTo(-3*s,5*s); tctx.quadraticCurveTo(-6*s,0,-5*s,-4*s); tctx.quadraticCurveTo(-2*s,-1*s,0,-4*s); tctx.quadraticCurveTo(2*s,-1*s,5*s,-4*s); tctx.quadraticCurveTo(6*s,0,3*s,5*s); tctx.quadraticCurveTo(0,2*s,-3*s,5*s); tctx.fill();
+                    break;
+                case 'spectre':
+                    tctx.globalAlpha = 0.55;
+                    tctx.fillStyle = '#c9e8ff';
+                    tctx.beginPath(); tctx.arc(0,-3*s,8*s,Math.PI,0); tctx.lineTo(8*s,8*s);
+                    for (let i = 0; i < 3; i++) { tctx.lineTo(8*s - (i*1+1)*5.33*s, 3*s); tctx.lineTo(8*s - (i*1+1)*5.33*s - 2.66*s, 8*s); }
+                    tctx.closePath(); tctx.fill();
+                    tctx.globalAlpha = 1;
+                    tctx.fillStyle = '#1b2a33'; tctx.beginPath(); tctx.arc(-3*s,-3*s,1.4*s,0,Math.PI*2); tctx.fill();
+                    tctx.beginPath(); tctx.arc(3*s,-3*s,1.4*s,0,Math.PI*2); tctx.fill();
+                    break;
                 case 'skindupe':
                     tctx.fillStyle = '#546e7a'; tctx.strokeStyle = '#2f3d42'; tctx.lineWidth = 1*s;
                     tctx.beginPath(); tctx.roundRect(-8*s,-7*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
@@ -2136,6 +2182,17 @@
         }
 
         function coinValue(type) { return type === 'ruby' ? 5 : type === 'sapphire' ? 10 : type === 'emerald' ? 15 : 1; }
+
+        // Dupe Shop item: Greedy. Adds 100% gold per stack (1 stack = double, 2 stacks = triple,
+        // etc). Applied at every point gold is actually added to totalCoins - goal progress
+        // (goal.collected) is left unscaled since that's tracking level-completion progress,
+        // not currency earned.
+        function grantGold(amount) {
+            let stacks = runItems.greedy || 0;
+            let gained = Math.round(amount * (1 + stacks));
+            totalCoins += gained;
+            return gained;
+        }
         function itemRadiusFor(type) { return type === 'coin' ? 12 : (type === 'emerald' ? 11 : 10); }
 
         function spawnLoot(x, y, type, vx, vy) { items.push({ x, y, vx: vx || 0, vy: vy || 0, radius: itemRadiusFor(type), type, collected: false, seed: Math.random()*1000, beingEaten: false }); levelCoinsPossible++; }
@@ -2226,6 +2283,20 @@
             ];
         }
 
+        // The Dupe Trader's stock is fixed rather than rolled: Greedy, Devil Deal, and Spectre
+        // are the only three items it ever offers, and they're the only way to get any of the
+        // three (they're deliberately left out of roguelikeTierPools/rollRoguelikeItem, so
+        // chests, mimics, and the Gold Trader never hand them out). All three slots are shown
+        // every visit - purchased still resets fresh each time the trader respawns, same as
+        // rollTraderStock's slots do.
+        function dupeShopStock() {
+            return [
+                { itemId: 'greedy', tier: 'common', purchased: false },
+                { itemId: 'devildeal', tier: 'epic', purchased: false },
+                { itemId: 'spectre', tier: 'legendary', purchased: false }
+            ];
+        }
+
         // Cost of one stock slot, scaled by the item's rarity tier. The skin-dupe trader prices
         // in regular ("basic") dupes for commons and rare-skin dupes for epic/legendary (rarer
         // skins buy the rarer items); the gold trader prices everything in coins, steeply scaled
@@ -2275,7 +2346,7 @@
             let container = domRefs.itemsHud;
             if (!container) return;
             container.innerHTML = '';
-            const order = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge', 'slimefriend', 'plasmabeam', 'shuriken', 'skeletonkey'];
+            const order = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge', 'greedy', 'slimefriend', 'plasmabeam', 'devildeal', 'shuriken', 'skeletonkey', 'spectre'];
             order.forEach(id => {
                 let count = runItems[id];
                 if (!count) return;
@@ -2290,6 +2361,18 @@
                 }
                 container.appendChild(div);
             });
+            // Devil Deal: each charge already burned this run gets its own greyed-out badge
+            // right after any charges still active, so the player can see at a glance both
+            // what they still have and what they've already spent.
+            for (let i = 0; i < devilDealUsed; i++) {
+                let def = roguelikeItemDefs.devildeal;
+                let div = document.createElement('div');
+                div.className = 'item-badge rarity-' + def.rarity;
+                div.style.filter = 'grayscale(1)'; div.style.opacity = '0.5';
+                let img = document.createElement('img'); img.src = iconDataURL('devildeal', 28); img.alt = def.name + ' (used)';
+                div.appendChild(img);
+                container.appendChild(div);
+            }
         }
 
         // Fills in the level-complete modal's coin/enemy/chest synopsis and, if any roguelike
@@ -2729,7 +2812,7 @@
             let t = pickLandHex(220);
             if (!t) return;
             if (Math.random() < 0.5) {
-                skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
+                skinTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: dupeShopStock() };
                 t.element = { type: 'skinTrader' };
             } else {
                 goldTrader = { x: t.x, y: t.y, seed: Math.random() * 1000, triggered: false, stock: rollTraderStock() };
@@ -4425,7 +4508,7 @@
             activeMerchant = { kind, trader };
             document.getElementById('merchant-title').innerText = kind === 'skin' ? 'Dupe Trader' : 'Gold Trader';
             document.getElementById('merchant-subtitle').innerText = kind === 'skin'
-                ? "Spare skin dupes for a pick from today's stock. Each pick's a one-time deal."
+                ? "Spare skin dupes for one of these three exclusives. Each pick's a one-time deal."
                 : "Gold for a pick from today's stock. Each pick's a one-time deal.";
             renderMerchantItems();
             document.getElementById('merchant-dialogue').style.display = 'block';
@@ -4894,7 +4977,7 @@
                     }
 
                     if (chest && !chest.collected && dist(player.worldX, player.worldY, chest.x, chest.y) < player.radius + chest.radius) {
-                        chest.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); totalCoins += 50; if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
+                        chest.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); grantGold(50); if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
                         for(let i=0; i<20; i++) spawnLoot(chest.x, chest.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                         grantRoguelikeItem(rollRoguelikeItem());
                         updateHUD(); markCoinsDirty();
@@ -4906,7 +4989,7 @@
                     for (let sci = skeletonChests.length - 1; sci >= 0; sci--) {
                         let sc = skeletonChests[sci];
                         if (!sc.collected && dist(player.worldX, player.worldY, sc.x, sc.y) < player.radius + sc.radius) {
-                            sc.collected = true; levelChestOpened++; screenShake = Math.max(screenShake, 24); playSFX('chest'); totalCoins += 50; if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
+                            sc.collected = true; levelChestOpened++; screenShake = Math.max(screenShake, 24); playSFX('chest'); grantGold(50); if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + 50);
                             for (let si = 0; si < 20; si++) spawnLoot(sc.x, sc.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                             grantRoguelikeItem(rollRoguelikeItem(true));
                             updateHUD(); markCoinsDirty();
@@ -4920,7 +5003,7 @@
                     for (let svi = surviveChests.length - 1; svi >= 0; svi--) {
                         let sv = surviveChests[svi];
                         if (!sv.collected && dist(player.worldX, player.worldY, sv.x, sv.y) < player.radius + sv.radius) {
-                            sv.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); totalCoins += 50;
+                            sv.collected = true; levelChestOpened++; screenShake = 30; playSFX('chest'); grantGold(50);
                             for (let svj = 0; svj < 20; svj++) spawnLoot(sv.x, sv.y, rollItemType(level), (Math.random()-0.5)*35, (Math.random()-0.5)*35);
                             grantRoguelikeItem(rollRoguelikeItem());
                             updateHUD(); markCoinsDirty();
@@ -4965,7 +5048,7 @@
                         if (!c.collected && !c.beingEaten && dist(player.worldX, player.worldY, c.x, c.y) < player.radius + c.radius) {
                             c.collected = true; levelCoinsCollected++;
                             let coinVal = coinValue(c.type); let pitch = c.type === 'coin' ? 1 : (c.type === 'ruby' ? 1.2 : (c.type === 'sapphire' ? 1.4 : 1.6));
-                            playSFX('coin', pitch); totalCoins += coinVal;
+                            playSFX('coin', pitch); grantGold(coinVal);
                             if (!isSurvivalLevel) goal.collected = Math.min(goal.required, goal.collected + coinVal);
                             updateHUD(); markCoinsDirty();
                         }
@@ -5079,6 +5162,13 @@
                         }
                     }
 
+                    // Dupe Shop item: Spectre. Each stack raises how much the pass-through
+                    // speed boost multiplies velocity by - "slight" at 1 stack, more at higher
+                    // stacks. Decays back to normal on its own via the existing friction applied
+                    // to player.vx/vy every frame, so no separate cooldown bookkeeping is needed.
+                    let spectreStacks = runItems.spectre || 0;
+                    let spectreBoost = spectreStacks > 0 ? 1.06 + (spectreStacks - 1) * 0.03 : 0;
+
                     let nearTreesPlayer = getNearbyTrees(player.worldX, player.worldY);
                     for (let ti = 0; ti < nearTreesPlayer.length; ti++) {
                         let t = nearTreesPlayer[ti];
@@ -5086,6 +5176,7 @@
                         let collisionDist = player.radius * 0.4 + t.radius * 0.5;
                         let distSq = dx*dx + dy*dy;
                         if (distSq < collisionDist*collisionDist) {
+                            if (spectreBoost > 0) { player.vx *= spectreBoost; player.vy *= spectreBoost; continue; }
                             let d = Math.sqrt(distSq);
                             let overlap = collisionDist - d; let angle = Math.atan2(dy, dx);
                             player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
@@ -5103,7 +5194,15 @@
                             else if (player.color === 'sparkle' && !t.blossomed) { t.blossomed = true; playSFX('coin', 0.5); }
                         }
                     }
-                    {
+                    if (spectreBoost > 0) {
+                        // Fences have no equivalent to getNearbyTrees' pre-filtered candidate
+                        // list, so detect "would this fence have blocked me" the same way
+                        // resolveFenceCollision itself would (its return only differs from the
+                        // input when a push happened) rather than duplicating its internal grid
+                        // lookup just to get a boolean.
+                        let wouldPush = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4, false);
+                        if (wouldPush.x !== player.worldX || wouldPush.y !== player.worldY) { player.vx *= spectreBoost; player.vy *= spectreBoost; }
+                    } else {
                         let pushed = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4, player.color === 'gold');
                         if (pushed.x !== player.worldX || pushed.y !== player.worldY) {
                             player.worldX = pushed.x; player.worldY = pushed.y; player.vx *= 0.6; player.vy *= 0.6;
@@ -7326,7 +7425,8 @@
             projectiles = []; icicles = []; flameParticles = [];
             splashes = []; leaves = []; screenShake = 0; hives = [];
             runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
-            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
+            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0; player.spectreBoostTimer = 0;
+            devilDealUsed = 0;
             iceFrostedTiles.clear();
             lavaScorchedTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear(); acidTrail = [];
             shootingStars = []; shootingStarTimer = 0;
@@ -7348,6 +7448,25 @@
 
         function triggerGameOver(reason) {
             if (gameState === 'game_over') return;
+            // Dupe Shop item: Devil Deal. Burns one charge to cancel this death outright - the
+            // single choke point here means it covers every death reason (hazard, time,
+            // enemy contact, shooter's projectile) without needing a check at each call site.
+            // The charge is consumed and replaced by a greyed-out badge in the HUD (see
+            // updateItemsHUD/devilDealUsed) rather than just quietly disappearing.
+            if ((runItems.devildeal || 0) > 0) {
+                runItems.devildeal--;
+                devilDealUsed++;
+                // Hazard and time-out deaths are both driven by a value that stays past its
+                // threshold every frame (hazardTimer, timeLeft) - without resetting it here,
+                // the very next frame would call triggerGameOver again and burn every
+                // remaining charge instantly. Enemy-contact deaths are one-off events and need
+                // no such reset. A brief reprieve either way, not full safety.
+                if (reason === 'hazard') { player.hazardTimer = 0; updateHazardVignette(0); }
+                else if (reason === 'time') { timeLeft = 3; }
+                updateItemsHUD();
+                showDevilDealPopup();
+                return;
+            }
             gameState = 'game_over';
             flushCoinsIfDirty();
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
@@ -7403,6 +7522,17 @@
             unlockPopupQueue.push({ text: 'Achievement Unlocked!', dismissible: false });
             advanceUnlockPopupQueue();
         }
+        // Dupe Shop item: Devil Deal, fired the instant a charge burns to save the player from
+        // what would've been a game over (see triggerGameOver). Non-dismissible like the
+        // achievement popup, so the player can't tap past it and miss that their life-saving
+        // item just got spent - and it swaps in the red/black devildeal-variant look instead of
+        // the usual gold star styling.
+        function showDevilDealPopup() {
+            unlockPopupQueue.push({ text: 'The Deal Is Sealed…', dismissible: false, variant: 'devildeal' });
+            advanceUnlockPopupQueue();
+            let flash = domRefs.devilDealFlash;
+            if (flash) { flash.classList.remove('flash'); requestAnimationFrame(() => requestAnimationFrame(() => flash.classList.add('flash'))); }
+        }
         function advanceUnlockPopupQueue() {
             if (unlockPopupBusy || !unlockPopupQueue.length) return;
             unlockPopupBusy = true;
@@ -7411,6 +7541,7 @@
             let entry = unlockPopupQueue.shift();
             unlockPopupDismissible = entry.dismissible;
             if (textEl) textEl.innerText = entry.text;
+            popup.classList.toggle('devildeal-variant', entry.variant === 'devildeal');
             popup.classList.remove('pop-anim');
             requestAnimationFrame(() => requestAnimationFrame(() => popup.classList.add('pop-anim')));
         }

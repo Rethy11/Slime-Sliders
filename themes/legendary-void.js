@@ -123,8 +123,21 @@ window.LegendaryStageEffects.void = (function () {
     // (passed in as playerWorldX/Y) - there's no idle sway or independent motion like the
     // other rare-skin foliage; a stationary player means a perfectly still tentacle. Only
     // the tip's eye-glow pulses (a timer-driven opacity flicker, not movement) to keep it
-    // feeling alive. normalizeAngle/cubicPoint/cubicTangentAngle are the main script's own
-    // generic curve-math helpers, passed in rather than duplicated here.
+    // feeling alive.
+    //
+    // The tentacle is built out of SEG_COUNT rigid segments, base to tip, rather than one
+    // smooth bezier bent uniformly from its base. Each segment gets its own "give"
+    // threshold on `strength` before it starts rotating away from straight-up: the base
+    // segment has a high threshold (it's thick/rooted and only leans once the player is
+    // right on top of it), while the tip segment has essentially none (it's thin and
+    // whip-like, so it's the first thing pulled over even at long range). This makes the
+    // tentacle read as whipping over from the tip first and the bend progressively
+    // travelling down toward the base as the player gets closer, instead of the whole
+    // thing pivoting from its root immediately. normalizeAngle is the main script's own
+    // generic angle-wrapping helper, passed in rather than duplicated here; cubicPoint/
+    // cubicTangentAngle are no longer needed since the tentacle is a polyline of segments
+    // rather than a single cubic bezier, but are still accepted as parameters to avoid
+    // touching every call site in the main script.
     function drawVoidTentacle(ctx, x, y, radius, seed, playerWorldX, playerWorldY, setGrayscaleActive, normalizeAngle, cubicPoint, cubicTangentAngle) {
         ctx.save();
         // Pool of ooze at the base.
@@ -137,41 +150,69 @@ window.LegendaryStageEffects.void = (function () {
         let upAngle = -Math.PI / 2;
         let angleDiff = normalizeAngle(targetAngle - upAngle);
 
-        // strength: 0 far away (tentacle stands straight up, no bend) -> 1 right at the
-        // player (full bend/reach). The steep exponent keeps strength near zero across
-        // most of maxReach and only ramps up sharply in the last stretch, so distant
-        // trees read as basically inert and the effect is strongest only when the player
-        // is practically touching the tree.
+        // strength: 0 far away (tentacle stands straight up, no bend anywhere) -> 1 right
+        // at the player (full bend, tip-to-base). The steep exponent keeps strength near
+        // zero across most of maxReach and only ramps up sharply in the last stretch, so
+        // distant trees read as basically inert and the effect is strongest only when the
+        // player is practically touching the tree.
         let maxReach = 560;
         let strength = Math.max(0, 1 - distToPlayer / maxReach);
         strength = Math.pow(strength, 2.4);
 
-        let bendAngle = upAngle + angleDiff * strength;
-        // The tip tracks the same proximity-scaled bend as the rest of the curve (rather
-        // than always pointing exactly at the player), so it stays attached to the drawn
-        // curve and only swings to fully face the player once strength ramps up close up.
-        let hookAngle = bendAngle;
-
         let len = radius * (2.1 + 0.7 * strength);
         let baseX = x, baseY = y + radius * 0.1;
-        let c1x = baseX + Math.cos(upAngle) * len * 0.32, c1y = baseY + Math.sin(upAngle) * len * 0.32;
-        let c2x = baseX + Math.cos(bendAngle) * len * 0.72, c2y = baseY + Math.sin(bendAngle) * len * 0.72;
-        let tipX = baseX + Math.cos(hookAngle) * len, tipY = baseY + Math.sin(hookAngle) * len;
 
-        ctx.lineCap = 'round';
+        // Build the tentacle as a chain of rigid segments. Segment 0 is rooted at the
+        // base and points straight up until strength is high; segment SEG_COUNT-1 is the
+        // tip and starts swinging toward the player as soon as strength is above zero.
+        const SEG_COUNT = 6;
+        // How much "give" the base segment holds in reserve - it only reaches full bend
+        // once strength is within (1 - BASE_STIFFNESS) of max, i.e. the player is nearly
+        // touching the tree.
+        const BASE_STIFFNESS = 0.88;
+        let segLen = len / SEG_COUNT;
+        let points = [{ x: baseX, y: baseY }];
+        let segAngles = [];
+        for (let i = 0; i < SEG_COUNT; i++) {
+            let tipness = SEG_COUNT === 1 ? 1 : i / (SEG_COUNT - 1); // 0 at base segment, 1 at tip segment
+            let threshold = (1 - tipness) * BASE_STIFFNESS;
+            let local = strength <= threshold ? 0 : (strength - threshold) / (1 - threshold);
+            local = Math.min(1, Math.max(0, local));
+            local = local * local * (3 - 2 * local); // smoothstep, for a softer transition along the length
+            let segAngle = upAngle + angleDiff * local;
+            segAngles.push(segAngle);
+            let prev = points[points.length - 1];
+            points.push({ x: prev.x + Math.cos(segAngle) * segLen, y: prev.y + Math.sin(segAngle) * segLen });
+        }
+        let tipX = points[SEG_COUNT].x, tipY = points[SEG_COUNT].y;
+
+        // Interpolates a point and tangent angle at fraction t (0=base, 1=tip) along the
+        // segment chain, for placing the suction-ridge decals below.
+        function chainPointAt(t) {
+            let target = t * (points.length - 1);
+            let idx = Math.min(points.length - 2, Math.floor(target));
+            let frac = target - idx;
+            let p0 = points[idx], p1 = points[idx + 1];
+            return { x: p0.x + (p1.x - p0.x) * frac, y: p0.y + (p1.y - p0.y) * frac, angle: Math.atan2(p1.y - p0.y, p1.x - p0.x) };
+        }
+
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         ctx.strokeStyle = '#180e28'; ctx.lineWidth = radius * 0.44;
-        ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
         // Faint violet underbelly stripe for dimension.
         ctx.strokeStyle = '#3d2461'; ctx.lineWidth = radius * 0.18;
-        ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) ctx.lineTo(points[i].x, points[i].y);
+        ctx.stroke();
 
         // Suction ridges along the curve.
         const ridgeTs = [0.32, 0.52, 0.72];
         for (let rt of ridgeTs) {
-            let pt = cubicPoint(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
-            let tan = cubicTangentAngle(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
+            let pt = chainPointAt(rt);
             ctx.save();
-            ctx.translate(pt.x, pt.y); ctx.rotate(tan + Math.PI / 2);
+            ctx.translate(pt.x, pt.y); ctx.rotate(pt.angle + Math.PI / 2);
             ctx.fillStyle = 'rgba(0,0,0,0.55)';
             ctx.beginPath(); ctx.ellipse(0, 0, radius * 0.17 * (1 - rt * 0.25), radius * 0.09, 0, 0, Math.PI * 2); ctx.fill();
             ctx.restore();

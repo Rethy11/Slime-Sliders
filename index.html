@@ -288,8 +288,17 @@
 
         /* Gacha & Inventory UI Styles */
         .shop-tabs { display: flex; justify-content: center; margin-bottom: 15px; gap: 8px; flex-wrap: wrap; }
-        .shop-tab { background: #6c7a89; border: none; padding: 8px 14px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; white-space: nowrap; }
+        .shop-tab { position: relative; background: #6c7a89; border: none; padding: 8px 14px; border-radius: 4px; color: white; cursor: pointer; font-size: 0.6rem; font-weight: bold; transition: 0.2s; white-space: nowrap; }
         .shop-tab.active { background: var(--accent); transform: scale(1.05); }
+
+        /* Red dot notifier: shown on the Almanac's corner icon and on whichever of its tabs
+           has at least one unseen unlock (see updateAlmanacNotifDots). Both host elements
+           (.corner-icon, .shop-tab) are already positioned, so this just anchors to the
+           button's own top-right corner. Hidden by default; .show is toggled in JS rather
+           than driven by a CSS-only rule since "any new entry in this tab" depends on
+           localStorage state, not anything expressible in CSS. */
+        .notif-dot { position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: #ff2222; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.6); display: none; z-index: 3; pointer-events: none; }
+        .notif-dot.show { display: block; }
         .gacha-container { position: relative; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; }
         
         .gacha-machine { 
@@ -471,7 +480,7 @@
     <div id="fishing-dialogue"><span id="fishing-dialogue-text"></span><span id="fishing-dialogue-hint">tap to continue</span></div>
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
-    <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
+    <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""><span class="notif-dot" id="almanac-corner-dot"></span></button>
     <div id="unlock-popup"><img class="icon-img" id="unlock-star-l" style="width:1em;height:1em;" alt=""> <span id="unlock-popup-text">New Enemy Entry Unlocked!</span> <img class="icon-img" id="unlock-star-r" style="width:1em;height:1em;" alt=""></div>
 
     <div id="shop-modal" class="modal">
@@ -546,9 +555,9 @@
             <button class="close-modal-btn">Close</button>
         </div>
         <div class="shop-tabs">
-            <button class="shop-tab active" id="tab-almanac-achievements">Achievements</button>
-            <button class="shop-tab" id="tab-almanac-enemies">Enemies</button>
-            <button class="shop-tab" id="tab-almanac-items">Items</button>
+            <button class="shop-tab active" id="tab-almanac-achievements">Achievements<span class="notif-dot" id="tab-almanac-achievements-dot"></span></button>
+            <button class="shop-tab" id="tab-almanac-enemies">Enemies<span class="notif-dot" id="tab-almanac-enemies-dot"></span></button>
+            <button class="shop-tab" id="tab-almanac-items">Items<span class="notif-dot" id="tab-almanac-items-dot"></span></button>
         </div>
         <p id="almanac-tab-hint" style="font-size: 0.9rem; margin-bottom: 15px; color: #ccc;">Complete challenges to unlock achievements.</p>
         <div id="almanac-items"></div>
@@ -2250,7 +2259,7 @@
             }
             updateItemsHUD();
             showItemToast(id);
-            if (storage.get('runitem_' + id) !== 'true') storage.set('runitem_' + id, 'true');
+            if (storage.get('runitem_' + id) !== 'true') { storage.set('runitem_' + id, 'true'); updateAlmanacNotifDots(); }
             checkAchievements();
         }
 
@@ -4344,6 +4353,7 @@
             if (seenKey && storage.get(seenKey) !== 'true') {
                 storage.set(seenKey, 'true');
                 if (refreshFn) refreshFn();
+                updateAlmanacNotifDots();
             }
         }
 
@@ -4729,6 +4739,7 @@
         // activeMerchant so a stale reference doesn't linger into the next trader encounter.
         document.getElementById('merchant-leave-btn').addEventListener('click', () => { activeMerchant = null; });
         syncSettingsUI();
+        updateAlmanacNotifDots();
         function handleStart(e) {
             initAudio();
             let unlockPopup = document.getElementById('unlock-popup');
@@ -7581,14 +7592,17 @@
         // stats: enemy encounters, run-item pickups, gacha pulls/reveals, level-ups, and the
         // secret skin unlock.
         function checkAchievements() {
+            let anyUnlocked = false;
             achievementDB.forEach(a => {
                 let key = 'ach_' + a.id;
                 if (storage.get(key) !== 'true' && a.check()) {
                     storage.set(key, 'true');
                     showAchievementPopup();
                     grantAchievementReward(a.id);
+                    anyUnlocked = true;
                 }
             });
+            if (anyUnlocked) updateAlmanacNotifDots();
         }
 
         function unlockAlmanacEntry(enemyId) {
@@ -7596,8 +7610,40 @@
             if (storage.get(key) !== 'true') {
                 storage.set(key, 'true');
                 showUnlockPopup('New Enemy Entry Unlocked!');
+                updateAlmanacNotifDots();
             }
             checkAchievements();
+        }
+
+        // Red-dot notifiers for the Almanac: one per tab (Achievements/Enemies/Items), plus the
+        // main-menu corner icon which lights up if ANY tab has something new. "New" means
+        // unlocked (almanac_/ach_/runitem_ flag set) but not yet actually viewed in the detail
+        // modal (almanac_seen_/ach_seen_/runitem_seen_ - see openAlmanacDetail, which is the
+        // only place a seen flag gets set). Called from every place that can unlock a new
+        // entry (unlockAlmanacEntry, checkAchievements, grantRoguelikeItem) and from
+        // openAlmanacDetail once something gets marked seen, so the dots stay accurate whether
+        // or not the Almanac is currently open.
+        function hasNewEnemyEntries() {
+            return Object.keys(enemyDB).some(key => storage.get('almanac_' + key) === 'true' && storage.get('almanac_seen_' + key) !== 'true');
+        }
+        function hasNewItemEntries() {
+            return Object.keys(roguelikeItemDefs).some(key => storage.get('runitem_' + key) === 'true' && storage.get('runitem_seen_' + key) !== 'true');
+        }
+        function hasNewAchievementEntries() {
+            return achievementDB.some(a => storage.get('ach_' + a.id) === 'true' && storage.get('ach_seen_' + a.id) !== 'true');
+        }
+        function updateAlmanacNotifDots() {
+            let enemiesNew = hasNewEnemyEntries();
+            let itemsNew = hasNewItemEntries();
+            let achievementsNew = hasNewAchievementEntries();
+            let enemiesDot = document.getElementById('tab-almanac-enemies-dot');
+            let itemsDot = document.getElementById('tab-almanac-items-dot');
+            let achievementsDot = document.getElementById('tab-almanac-achievements-dot');
+            let cornerDot = document.getElementById('almanac-corner-dot');
+            if (enemiesDot) enemiesDot.classList.toggle('show', enemiesNew);
+            if (itemsDot) itemsDot.classList.toggle('show', itemsNew);
+            if (achievementsDot) achievementsDot.classList.toggle('show', achievementsNew);
+            if (cornerDot) cornerDot.classList.toggle('show', enemiesNew || itemsNew || achievementsNew);
         }
 
 

@@ -12,6 +12,8 @@
     <title>Slime Sliders</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="themes/legendary-onebit.css">
+    <link rel="stylesheet" href="themes/legendary-corrupted.css">
 
     <style>
         :root {
@@ -52,77 +54,9 @@
         #survive-announcement { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.6); display: none; opacity: 0; background: rgba(0, 0, 0, 0.75); color: #ff2e4d; padding: 18px 38px; border-radius: 16px; border: 3px solid #ff2e4d; font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px #000; z-index: 15; pointer-events: none; text-align: center; transition: opacity 0.4s ease, transform 0.4s ease; }
         #survive-announcement.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 
-        /* Secret "Corrupted Data" glitch slime — unlocked via 20 consecutive Remove Hat clicks.
-           #gameCanvas is the only inverted element (UI/HUD divs sit outside the canvas), so
-           equipping the skin flips the world's colors without breaking HUD readability. */
-        #gameCanvas.color-inverted { filter: invert(1) hue-rotate(180deg); }
-
-        /* 1-Bit skin: a page-wide monochrome threshold filter - grayscale first, then extreme
-           contrast collapses every remaining shade toward pure black or white instead of just
-           removing hue (which is all Void's per-pixel canvas desaturation does). Applied to
-           <body> rather than #gameCanvas alone, so it reaches every sibling on the page too -
-           the HUD panels, menus, shop/gacha overlays, title screen - not just the game world.
-           NOTE: putting `filter` on <body> also makes <body> the containing block for every
-           position:absolute/fixed descendant that doesn't have a nearer positioned ancestor
-           (corner icons, #timer-container, .modal, etc.) - normally those anchor to the
-           viewport instead. That's harmless as long as <body>'s box is exactly the viewport
-           size, which is why `html, body { height: 100% }` above is required: without it,
-           body's height is "auto" (sized by content) and any tiny mismatch between that and
-           the viewport - e.g. right after load, before resize() has sized the canvas - shows
-           up as the bottom-anchored UI being shifted down by the difference the moment this
-           skin is equipped (or preselected from storage on load).
-           The trailing blur() runs LAST, after the image is already pure black/white, so it
-           doesn't reintroduce mid-grays for contrast() to fight over - it just softens every
-           black/white edge by a fraction of a pixel, which is what gives old monochrome LCD/CRT
-           displays (Game Boy, B&W terminals, etc.) their characteristic hazy glow/bloom instead
-           of looking like flat, razor-sharp clip art. */
-        body.onebit-page-filter { filter: grayscale(1) contrast(6) brightness(1.08) blur(1px); }
-
-        /* 1-Bit skin (cont.): the threshold filter above collapses lots of close-luminance
-           pairs (colored button + white text, gold bg + gray border, etc.) into the same flat
-           tone, which is what was making shop/goal/HUD/button chrome go invisible. Pure black
-           and pure white sit at the opposite extremes of that filter, so forcing a black+white
-           double edge around chrome, and white text with a black outline, guarantees at least
-           one half of every pair still reads no matter what the element's own color collapses
-           to - and the two guaranteed colors always read against each other. */
-        body.onebit-page-filter button,
-        body.onebit-page-filter .modal,
-        body.onebit-page-filter .modal-header,
-        body.onebit-page-filter .hud-panel,
-        body.onebit-page-filter #timer-container,
-        body.onebit-page-filter #powerup-indicator,
-        body.onebit-page-filter #hazard-warning,
-        body.onebit-page-filter #survive-announcement,
-        body.onebit-page-filter #unlock-popup,
-        body.onebit-page-filter #item-toast,
-        body.onebit-page-filter #secret-unlock-toast,
-        body.onebit-page-filter .corner-icon,
-        body.onebit-page-filter .inv-item,
-        body.onebit-page-filter .shop-tab,
-        body.onebit-page-filter #fishing-dialogue {
-            box-shadow: 0 0 0 2px #fff, 0 0 0 5px #000 !important;
-        }
-        body.onebit-page-filter #title-screen *,
-        body.onebit-page-filter #game-over-screen *,
-        body.onebit-page-filter .modal *,
-        body.onebit-page-filter .hud-panel,
-        body.onebit-page-filter .hud-panel *,
-        body.onebit-page-filter #item-toast,
-        body.onebit-page-filter #item-toast *,
-        body.onebit-page-filter #unlock-popup,
-        body.onebit-page-filter #survive-announcement,
-        body.onebit-page-filter #secret-unlock-toast,
-        body.onebit-page-filter #secret-unlock-toast *,
-        body.onebit-page-filter #time-countdown,
-        body.onebit-page-filter #fishing-dialogue,
-        body.onebit-page-filter #fishing-dialogue *,
-        body.onebit-page-filter button {
-            color: #ffffff !important;
-            text-shadow: 1.5px 1.5px 0 #000, -1.5px 1.5px 0 #000, 1.5px -1.5px 0 #000, -1.5px -1.5px 0 #000, 0 0 4px #000 !important;
-        }
-        body.onebit-page-filter .icon-img {
-            filter: drop-shadow(1px 0 0 #000) drop-shadow(-1px 0 0 #000) drop-shadow(0 1px 0 #000) drop-shadow(0 -1px 0 #000);
-        }
+        /* Corrupted Data's color-invert filter now lives in themes/legendary-corrupted.css,
+           and the 1-Bit page filter now lives in themes/legendary-onebit.css - see the
+           <link> tags in <head>. */
 
         #secret-unlock-toast {
             position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0.7);
@@ -682,6 +616,22 @@
     <script src="sprites/loot-sapphire.js"></script>
     <script src="sprites/loot-emerald.js"></script>
 
+    <script src="themes/forest.js"></script>
+    <script src="themes/desert.js"></script>
+    <script src="themes/snow.js"></script>
+    <script src="themes/volcano.js"></script>
+    <script src="themes/swamp.js"></script>
+    <script src="themes/autumn.js"></script>
+    <script src="themes/legendary-void.js"></script>
+    <script src="themes/legendary-galaxy.js"></script>
+    <script src="themes/legendary-rainbow.js"></script>
+    <script src="themes/legendary-fairy.js"></script>
+    <script src="themes/legendary-glitch.js"></script>
+    <script src="themes/legendary-onebit.js"></script>
+    <script src="themes/legendary-corrupted.js"></script>
+    <script src="themes/legendary-magma.js"></script>
+    <script src="themes/legendary-glacier.js"></script>
+    <script src="themes/legendary-toxic.js"></script>
 
     <script>
 
@@ -712,38 +662,11 @@
         // and patterns are passed through unchanged (see drawSkyBackground's sun-glow skip for
         // the one gradient that needed separate handling).
         let voidGrayscaleActive = false;
-        function toGrayscaleColor(input) {
-            if (typeof input !== 'string') return input;
-            let hexMatch = input.match(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
-            if (hexMatch) {
-                let hex = hexMatch[1], r, g, b;
-                if (hex.length === 3) { r = parseInt(hex[0] + hex[0], 16); g = parseInt(hex[1] + hex[1], 16); b = parseInt(hex[2] + hex[2], 16); }
-                else { r = parseInt(hex.slice(0, 2), 16); g = parseInt(hex.slice(2, 4), 16); b = parseInt(hex.slice(4, 6), 16); }
-                let l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-                return `rgb(${l},${l},${l})`;
-            }
-            let rgbMatch = input.match(/^rgba?\(([^)]+)\)$/);
-            if (rgbMatch) {
-                let parts = rgbMatch[1].split(',').map(s => s.trim());
-                let r = parseFloat(parts[0]), g = parseFloat(parts[1]), b = parseFloat(parts[2]);
-                let l = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-                return parts.length > 3 ? `rgba(${l},${l},${l},${parts[3]})` : `rgb(${l},${l},${l})`;
-            }
-            return input;
-        }
-        (function interceptVoidColors() {
-            let proto = Object.getPrototypeOf(ctx);
-            let fillDesc = Object.getOwnPropertyDescriptor(proto, 'fillStyle');
-            let strokeDesc = Object.getOwnPropertyDescriptor(proto, 'strokeStyle');
-            Object.defineProperty(ctx, 'fillStyle', {
-                set(v) { fillDesc.set.call(this, voidGrayscaleActive ? toGrayscaleColor(v) : v); },
-                get() { return fillDesc.get.call(this); }
-            });
-            Object.defineProperty(ctx, 'strokeStyle', {
-                set(v) { strokeDesc.set.call(this, voidGrayscaleActive ? toGrayscaleColor(v) : v); },
-                get() { return strokeDesc.get.call(this); }
-            });
-        })();
+        // toGrayscaleColor and the fillStyle/strokeStyle interceptor itself now live in
+        // themes/legendary-void.js; voidGrayscaleActive stays here since it's flipped on/off
+        // all over the specific-interaction rendering code (rocks, trees, etc.) elsewhere in
+        // this file.
+        window.LegendaryStageEffects.void.installGrayscaleIntercept(ctx, () => voidGrayscaleActive);
         
         const memoryStorage = {};
         const storage = {
@@ -1017,42 +940,19 @@
         // canvas.height so a resize correctly invalidates and rebuilds them.
         let skyGradientCache = null;
         let skyGradientCacheH = -1;
-        // The Void skin darkens the outer sky (and, via getActiveHazardTheme, hazard water/lava
-        // pockets) to black/purple instead of the normal blue - cached separately from the
-        // regular sky gradient so switching skins doesn't need to rebuild either one.
-        let voidSkyGradientCache = null;
-        let voidSkyGradientCacheH = -1;
-        // Galaxy skin: deep-space gradient (near-black through nebula purple/magenta) behind
-        // the starfield/nebula clouds/shooting stars, replacing the normal daytime blue -
-        // cached the same way as the void/regular sky gradients above.
-        let galaxySkyGradientCache = null;
-        let galaxySkyGradientCacheH = -1;
-        // Rainbow skin: soft pastel coloring-book sky (pink -> yellow -> mint -> sky blue)
-        // behind the rainbow arcs, replacing the normal daytime blue - cached the same way
-        // as the other sky gradients above.
-        let rainbowSkyGradientCache = null;
-        let rainbowSkyGradientCacheH = -1;
         let sunGradientCache = null;
-        // Fairy Dust skin: deep midnight-blue night sky behind the full moon, replacing the
-        // normal daytime blue - cached the same way as the other sky gradients above.
-        let fairySkyGradientCache = null;
-        let fairySkyGradientCacheH = -1;
-        // Fairy Dust skin: cool pale-blue glow around the full moon, playing the same role
-        // sunGradientCache does for the normal sky (see drawSkyBackground) - built once and
-        // reused since the moon's world position/radius never change.
-        let fairyMoonGlowCache = null;
+        // The Void/Galaxy/Rainbow/Fairy Dust sky gradients and the Fairy Dust moon glow used
+        // to be cached in module-level variables here; each is now built and cached inside
+        // its own themes/legendary-*.js file instead (window.LegendaryStageEffects.<skin>.
+        // buildSkyGradient / drawFullMoon), keyed off canvas height the same way.
         // Fairy Dust skin: every flower currently on screen (permanent ground blooms and
         // blossomed-tree rings alike) registers its world position here each frame as it's
         // drawn, so the moonlight overlay pass at the end of draw() (SECTION 8) knows exactly
         // where to punch a dim light back through the darkness - rebuilt fresh every frame
         // rather than persisted, since only currently-visible flowers need to glow.
         let fairyLightSources = [];
-        // Rainbow skin: flat coloring-book palette used for trees/rocks/decorations, plus a
-        // softer pastel set used for the floor patchwork. Shared by every drawRainbow* helper
-        // below so the whole theme reads as one consistent crayon-box set of colors.
-        const RAINBOW_PALETTE = ['#ff4d6d', '#ff922b', '#ffd43b', '#69db7c', '#4dabf7', '#9775fa', '#f783ac'];
-        const RAINBOW_PASTELS = ['#ffe3ec', '#fff3c4', '#d9f7be', '#cdeffd', '#e0d4fa', '#ffe0c2'];
-        function rainbowHash(n) { let s = Math.sin(n * 12.9898) * 43758.5453; return s - Math.floor(s); }
+        // RAINBOW_PALETTE/RAINBOW_PASTELS/rainbowHash now live in themes/legendary-rainbow.js
+        // as window.LegendaryStageEffects.rainbow.PALETTE/PASTELS/hash.
         // Pure Gold (Midas): the recolor applied only to hazard tiles the player has actually
         // stood on (see goldenHazardTiles) - forced to the 'water' type so a touched tile
         // always gets the rippling-pool texture/animation rather than lava bubbles or ice
@@ -1224,25 +1124,17 @@
                 if (Math.random() < 0.015) screenShake = Math.max(screenShake, 2 + Math.random()*2);
             }
             // Galaxy: shooting stars streak across the sky periodically while equipped.
+            // Spawning/advancing them is an ambient/background effect, so it's delegated to
+            // themes/legendary-galaxy.js; the array/timer themselves stay here since other
+            // code (level reset, etc.) also touches them directly.
             else if (skin === 'galaxy') {
-                shootingStarTimer -= 1;
-                if (shootingStarTimer <= 0) {
-                    shootingStarTimer = 90 + Math.random() * 150;
-                    let sx = camera.x - 100, sy = camera.y + Math.random() * canvas.height * 0.5;
-                    shootingStars.push({ x: sx, y: sy, vx: 9 + Math.random()*4, vy: 3 + Math.random()*2, life: 1 });
-                }
+                shootingStarTimer = window.LegendaryStageEffects.galaxy.spawnIfDue(shootingStars, shootingStarTimer, camera, canvas);
             }
-            if (shootingStars.length) {
-                for (let i = shootingStars.length - 1; i >= 0; i--) {
-                    let s = shootingStars[i];
-                    s.x += s.vx; s.y += s.vy; s.life -= 0.012;
-                    if (s.life <= 0) shootingStars.splice(i, 1);
-                }
-            }
+            if (shootingStars.length) window.LegendaryStageEffects.galaxy.advanceAndCull(shootingStars);
         }
 
         function syncColorInvertEffect() {
-            displayCanvas.classList.toggle('color-inverted', player.color === 'corrupted');
+            window.LegendaryStageEffects.corrupted.syncCanvasInvert(displayCanvas, player.color === 'corrupted');
         }
         syncColorInvertEffect();
 
@@ -1251,7 +1143,7 @@
         // moment the skin is equipped or unequipped, same trigger pattern as
         // syncColorInvertEffect above.
         function syncOneBitFilterEffect() {
-            document.body.classList.toggle('onebit-page-filter', player.color === 'onebit');
+            window.LegendaryStageEffects.onebit.syncBodyClass(player.color === 'onebit');
         }
         syncOneBitFilterEffect();
 
@@ -1520,14 +1412,10 @@
         let fishingDialogueStep = 0;
 
         // Configurations
-        const themes = [
-            { name: "Forest", bg: "#6cce75", grid: "#5eb867", treeBase: "#795548", treeTop: "#2d7a31", rock: "#95a5a6", decorColors: ['#5eb867', '#4da956', '#a2d149'], hazard: { type: 'water', color: '#1ca3ec', edge: '#7fd8ff' } },
-            { name: "Desert", bg: "#e9c46a", grid: "#d4a84b", treeBase: "#2a9d8f", treeTop: "#264653", rock: "#e76f51", decorColors: ['#d4a84b', '#c2963a', '#e0c073'], hazard: { type: 'lava', color: '#ff4500', edge: '#ffae42' } }, 
-            { name: "Snow", bg: "#caf0f8", grid: "#ade8f4", treeBase: "#5c4033", treeTop: "#ffffff", rock: "#8d99ae", decorColors: ['#ffffff', '#ade8f4', '#e0f7fa'], hazard: { type: 'ice', color: '#0a2e44', edge: '#bfe9f7' } },
-            { name: "Volcano", bg: "#3d3d3d", grid: "#2e2e2e", treeBase: "#4a3728", treeTop: "#8b2500", rock: "#1a1a1a", decorColors: ['#ff4500', '#8b0000', '#4a4a4a'], hazard: { type: 'lava', color: '#ff2200', edge: '#ffcc00' } },
-            { name: "Swamp", bg: "#4a5d3a", grid: "#3d4d30", treeBase: "#3e2f1c", treeTop: "#5c6e3f", rock: "#5a5a4a", decorColors: ['#3d4d30', '#6b7a4f', '#2f3d24'], hazard: { type: 'water', color: '#3a4a2a', edge: '#6b7a4f' } },
-            { name: "Autumn", bg: "#e08a3e", grid: "#c9762f", treeBase: "#6b4226", treeTop: "#c1440e", rock: "#a67c52", decorColors: ['#c9762f', '#e0a83e', '#b5651d'], hazard: { type: 'water', color: '#2e6f8e', edge: '#6fa8c9' } }
-        ];
+        // Regular stage themes now live one-per-file in themes/ (forest.js, desert.js,
+        // snow.js, volcano.js, swamp.js, autumn.js), each pushing its theme object onto
+        // window.StageThemes in load order - same 6 entries, same order, as before.
+        const themes = window.StageThemes;
         let currentTheme = themes[0];
         // Referenced by the Glacier ("ice") skin's ground-frosting overlay (drawn in draw()),
         // regardless of which theme the current level actually uses.
@@ -3146,13 +3034,12 @@
             goal.required = Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
             
             currentTheme = themes[(level - 1) % themes.length];
-            // Magma always plays its levels with the Volcano (stage 4) design, Glacier always
-            // plays its levels with the Snow (stage 3) design, and Toxic Sludge always plays
-            // its levels with the Swamp (stage 5) design, regardless of the level number's
-            // usual place in the theme rotation above.
-            if (player.color === 'lava') currentTheme = themes[3];
-            else if (player.color === 'ice') currentTheme = themes[2];
-            else if (player.color === 'toxic') currentTheme = themes[4];
+            // Magma, Glacier, and Toxic Sludge each force the whole level to render with one
+            // specific stage theme (see forcedThemeIndex in their own themes/legendary-*.js
+            // files), regardless of the level number's usual place in the theme rotation above.
+            if (window.LegendaryStageEffects[player.color] && window.LegendaryStageEffects[player.color].forcedThemeIndex !== undefined) {
+                currentTheme = themes[window.LegendaryStageEffects[player.color].forcedThemeIndex];
+            }
             // Restart the background music for the new level (matches the old sequencer's
             // per-level resync), cycling through the same theme order.
             playMusicTrack((level - 1) % musicFiles.length);
@@ -3398,9 +3285,11 @@
             // than rolling them independently and risking a mismatched pair.
             let randomThemeIdx = Math.floor(Math.random() * themes.length);
             currentTheme = themes[randomThemeIdx];
-            if (player.color === 'lava') currentTheme = themes[3];
-            else if (player.color === 'ice') currentTheme = themes[2];
-            else if (player.color === 'toxic') currentTheme = themes[4];
+            // Magma/Glacier/Toxic Sludge force their own stage theme here too - see the
+            // forced-theme override above for the equivalent normal-level logic.
+            if (window.LegendaryStageEffects[player.color] && window.LegendaryStageEffects[player.color].forcedThemeIndex !== undefined) {
+                currentTheme = themes[window.LegendaryStageEffects[player.color].forcedThemeIndex];
+            }
             playMusicTrack(randomThemeIdx % musicFiles.length);
             document.body.style.setProperty('--bg-color', currentTheme.bg);
 
@@ -5798,15 +5687,11 @@
         function drawSkyBackground() {
             // Glitch: the sky is replaced entirely by old-TV static - skips the gradient/sun/
             // cloud/bird layers below altogether while equipped.
-            if (player.color === 'glitch') { drawTVStatic(); return; }
+            if (player.color === 'glitch') { window.LegendaryStageEffects.glitch.drawTVStatic(ctx, canvas); return; }
             // Corrupted Data: the sky is a flat hot-pink fill - same early-return pattern as
             // Glitch above, skipping the gradient/sun/cloud/bird layers entirely.
             if (player.color === 'corrupted') {
-                ctx.save();
-                ctx.translate(camera.x, camera.y);
-                ctx.fillStyle = '#ff1493';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.restore();
+                window.LegendaryStageEffects.corrupted.drawSkyFill(ctx, canvas, camera);
                 return;
             }
             // PERF: both gradients below used to be rebuilt from scratch every single frame,
@@ -5823,11 +5708,7 @@
             // puffy clouds below are left untouched, giving a stark two-tone silhouette instead
             // of the usual daytime blue.
             if (player.color === 'onebit') {
-                ctx.save();
-                ctx.translate(camera.x, camera.y);
-                ctx.fillStyle = '#000000';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.restore();
+                window.LegendaryStageEffects.onebit.drawSkyFill(ctx, canvas, camera);
             } else {
             ctx.save();
             ctx.translate(camera.x, camera.y);
@@ -5836,35 +5717,15 @@
                 skyGradientCache.addColorStop(0, '#6ec2ff'); skyGradientCache.addColorStop(0.55, '#8fd3ff'); skyGradientCache.addColorStop(1, '#d3f0ff');
                 skyGradientCacheH = canvas.height;
             }
-            if (!voidSkyGradientCache || voidSkyGradientCacheH !== canvas.height) {
-                voidSkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                voidSkyGradientCache.addColorStop(0, '#010001'); voidSkyGradientCache.addColorStop(0.55, '#0c0507'); voidSkyGradientCache.addColorStop(1, '#1c0e10');
-                voidSkyGradientCacheH = canvas.height;
-            }
-            if (!galaxySkyGradientCache || galaxySkyGradientCacheH !== canvas.height) {
-                galaxySkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                galaxySkyGradientCache.addColorStop(0, '#05020f'); galaxySkyGradientCache.addColorStop(0.4, '#1b0c3d');
-                galaxySkyGradientCache.addColorStop(0.7, '#3a1361'); galaxySkyGradientCache.addColorStop(1, '#6a2f8f');
-                galaxySkyGradientCacheH = canvas.height;
-            }
-            // Rainbow skin: soft candy-colored bands top to bottom, like a page straight out
-            // of a coloring book instead of a realistic sky.
-            if (!rainbowSkyGradientCache || rainbowSkyGradientCacheH !== canvas.height) {
-                rainbowSkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                rainbowSkyGradientCache.addColorStop(0, '#ffd6e8'); rainbowSkyGradientCache.addColorStop(0.35, '#fff3b0');
-                rainbowSkyGradientCache.addColorStop(0.65, '#c8f7c5'); rainbowSkyGradientCache.addColorStop(1, '#bde0fe');
-                rainbowSkyGradientCacheH = canvas.height;
-            }
-            // Fairy Dust skin: deep midnight-blue night sky, several shades darker/cooler than
-            // even the Void sky above rather than sharing it, since Void is meant to read as
-            // "colorless void" while this needs to stay recognizably blue-toned moonlight.
-            if (!fairySkyGradientCache || fairySkyGradientCacheH !== canvas.height) {
-                fairySkyGradientCache = ctx.createLinearGradient(0, 0, 0, canvas.height);
-                fairySkyGradientCache.addColorStop(0, '#03050f'); fairySkyGradientCache.addColorStop(0.55, '#0a1230');
-                fairySkyGradientCache.addColorStop(1, '#152049');
-                fairySkyGradientCacheH = canvas.height;
-            }
-            ctx.fillStyle = player.color === 'void' ? voidSkyGradientCache : (player.color === 'galaxy' ? galaxySkyGradientCache : (player.color === 'rainbow' ? rainbowSkyGradientCache : (player.color === 'sparkle' ? fairySkyGradientCache : skyGradientCache)));
+            // Void/Galaxy/Rainbow/Fairy Dust each replace the default daytime-blue sky above
+            // with their own gradient - built and cached inside their own themes/legendary-*.js
+            // file (see window.LegendaryStageEffects.<skin>.buildSkyGradient).
+            const LSE = window.LegendaryStageEffects;
+            ctx.fillStyle = player.color === 'void' ? LSE.void.buildSkyGradient(ctx, canvas.height)
+                : (player.color === 'galaxy' ? LSE.galaxy.buildSkyGradient(ctx, canvas.height)
+                : (player.color === 'rainbow' ? LSE.rainbow.buildSkyGradient(ctx, canvas.height)
+                : (player.color === 'sparkle' ? LSE.sparkle.buildSkyGradient(ctx, canvas.height)
+                : skyGradientCache)));
             ctx.fillRect(0, 0, canvas.width, canvas.height);
 
             // Soft sun glow, fixed in world space so it drifts past naturally as the camera moves
@@ -5875,7 +5736,7 @@
             // its own cool glow) stands in for the sun instead of being skipped like Void's is,
             // since this theme is meant to read as moonlit rather than colorless.
             if (player.color === 'sparkle') {
-                drawFullMoon();
+                window.LegendaryStageEffects.sparkle.drawFullMoon(ctx, canvas);
             } else if (player.color !== 'void') {
                 ctx.save();
                 let sunX = 500, sunY = -600;
@@ -5894,9 +5755,13 @@
             // distant ringed planets. Rainbow: a soft multi-band arch does the same. Fairy Dust:
             // a sparse, pale-blue starfield behind the moon, dimmer/slower than Galaxy's since
             // it's meant to sit quietly in the background rather than be the main attraction.
-            if (player.color === 'galaxy') { drawNebulaClouds(); drawDistantPlanets(); drawGalaxyStars(); drawShootingStars(); }
-            else if (player.color === 'rainbow') drawRainbowArcs();
-            else if (player.color === 'sparkle') drawFairyStars();
+            if (player.color === 'galaxy') {
+                let g = window.LegendaryStageEffects.galaxy;
+                g.drawNebulaClouds(ctx, camera, canvas); g.drawDistantPlanets(ctx, camera, canvas);
+                g.drawGalaxyStars(ctx, camera, canvas); g.drawShootingStars(ctx, shootingStars);
+            }
+            else if (player.color === 'rainbow') window.LegendaryStageEffects.rainbow.drawRainbowArcs(ctx, canvas);
+            else if (player.color === 'sparkle') window.LegendaryStageEffects.sparkle.drawFairyStars(ctx, camera, canvas);
             ctx.restore();
             }
 
@@ -5907,7 +5772,7 @@
             // asteroids drift here instead of clouds.
             ctx.save();
             if (player.color === 'galaxy') {
-                drawAsteroidLayer(900, 560, drift * 0.4, 32, 22, 9.13, '150,142,132', 0.5);
+                window.LegendaryStageEffects.galaxy.drawAsteroidLayer(ctx, camera, canvas, 900, 560, drift * 0.4, 32, 22, 9.13, '150,142,132', 0.5);
             } else {
                 ctx.fillStyle = player.color === 'sparkle' ? 'rgba(110,130,180,0.4)' : 'rgba(255,255,255,0.45)';
                 drawCloudLayer(600, 340, drift * 0.4, 18, 16, 9.13);
@@ -5927,7 +5792,7 @@
             // drift here instead, bigger and brighter than the back layer for parallax depth.
             ctx.save();
             if (player.color === 'galaxy') {
-                drawAsteroidLayer(760, 520, drift, 46, 34, 0, '190,180,166', 0.85);
+                window.LegendaryStageEffects.galaxy.drawAsteroidLayer(ctx, camera, canvas, 760, 520, drift, 46, 34, 0, '190,180,166', 0.85);
             } else {
                 ctx.fillStyle = player.color === 'sparkle' ? 'rgba(150,168,210,0.75)' : 'rgba(255,255,255,0.85)';
                 drawCloudLayer(420, 260, drift, 30, 26, 0);
@@ -5987,1004 +5852,26 @@
             ctx.fill();
         }
 
-        // Galaxy skin: large tumbling asteroids drift across the sky in place of the normal
-        // puffy clouds. Tiled the same stable-seed way as drawCloudLayer (identity comes from
-        // the integer tile index, only the final draw position depends on drift) so they glide
-        // smoothly rather than morphing, but each one also spins continuously at its own
-        // independent rate/phase derived from its seed, so a whole field of them never spins
-        // in lockstep.
-        function drawAsteroidLayer(spacingX, spacingY, drift, sizeBase, sizeVar, seedOffset, colorRGB, alpha) {
-            let iStart = Math.floor((camera.x - drift) / spacingX) - 1;
-            let iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
-            let jStart = Math.floor(camera.y / spacingY) - 1;
-            let jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
-            for (let i = iStart; i <= iEnd; i++) {
-                for (let j = jStart; j <= jEnd; j++) {
-                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + seedOffset) * 43758.5453);
-                    seed -= Math.floor(seed);
-                    let cx = i * spacingX + seed * 140 + drift;
-                    let cy = j * spacingY + ((seed * 71) % 1) * 120;
-                    drawAsteroidPuff(cx, cy, sizeBase + seed * sizeVar, seed, colorRGB, alpha);
-                }
-            }
-        }
-        // Draws one tumbling asteroid: a lumpy, irregular rock silhouette (fixed shape per
-        // seed) with a few shaded craters, continuously rotated at a seed-derived rate/phase.
-        function drawAsteroidPuff(cx, cy, size, seed, colorRGB, alpha) {
-            ctx.save();
-            ctx.translate(cx, cy);
-            let spinSpeed = 0.15 + seed * 0.35;
-            ctx.rotate((Date.now() / 1000) * spinSpeed + seed * 20);
-            ctx.fillStyle = `rgba(${colorRGB},${alpha})`;
-            const pts = 9;
-            ctx.beginPath();
-            for (let k = 0; k <= pts; k++) {
-                let a = (k / pts) * Math.PI * 2;
-                let wob = 0.7 + 0.3 * Math.sin(a * 3 + seed * 40) + 0.15 * Math.sin(a * 7 + seed * 13);
-                let rad = size * wob;
-                let px = Math.cos(a) * rad, py = Math.sin(a) * rad * 0.85;
-                if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-            }
-            ctx.closePath(); ctx.fill();
-            ctx.fillStyle = `rgba(40,36,32,${alpha * 0.55})`;
-            for (let c = 0; c < 3; c++) {
-                let ca = seed * 30 + c * 2.4;
-                let cr = size * (0.18 + ((seed * (c + 3)) % 1) * 0.12);
-                let ccx = Math.cos(ca) * size * 0.35, ccy = Math.sin(ca) * size * 0.3;
-                ctx.beginPath(); ctx.ellipse(ccx, ccy, cr, cr * 0.8, 0, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.restore();
-        }
+        // drawAsteroidLayer/drawAsteroidPuff (Galaxy skin) now live in
+        // themes/legendary-galaxy.js as window.LegendaryStageEffects.galaxy.drawAsteroidLayer.
 
-        // Galaxy skin: soft, slow-drifting nebula clouds behind the starfield - tiled the same
-        // stable-seed way as the cloud layers so identity doesn't shift frame to frame, only
-        // the drift position and a gentle pulse do. Each puff is a large, very translucent
-        // radial gradient blob so overlapping puffs blend into wispy nebula color.
-        function drawNebulaClouds() {
-            const spacingX = 520, spacingY = 480;
-            let drift = (Date.now() / 1000) * 3;
-            let iStart = Math.floor((camera.x - drift) / spacingX) - 1, iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
-            let jStart = Math.floor(camera.y / spacingY) - 1, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
-            const palette = ['rgba(255,64,158,0.16)', 'rgba(100,120,255,0.16)', 'rgba(64,220,220,0.13)', 'rgba(180,80,255,0.16)'];
-            ctx.save();
-            for (let i = iStart; i <= iEnd; i++) {
-                for (let j = jStart; j <= jEnd; j++) {
-                    let seed = Math.abs(Math.sin(i * 17.13 + j * 55.71 + 8.6) * 33851.2); seed -= Math.floor(seed);
-                    if (seed > 0.55) continue; // keep nebula patches sparse
-                    let nx = i * spacingX + seed * 220 + drift, ny = j * spacingY + ((seed * 61) % 1) * 220;
-                    let size = 160 + seed * 180;
-                    let pulse = 0.85 + 0.15 * Math.sin(Date.now() / 2400 + seed * 30);
-                    let grad = ctx.createRadialGradient(nx, ny, 0, nx, ny, size * pulse);
-                    let col = palette[Math.floor(seed * palette.length) % palette.length];
-                    grad.addColorStop(0, col); grad.addColorStop(1, 'rgba(0,0,0,0)');
-                    ctx.fillStyle = grad;
-                    ctx.beginPath(); ctx.arc(nx, ny, size * pulse, 0, Math.PI * 2); ctx.fill();
-                }
-            }
-            ctx.restore();
-        }
+        // drawNebulaClouds/drawDistantPlanets/drawGalaxyStars/drawShootingStars (Galaxy),
+        // drawFullMoon/drawFairyStars (Fairy Dust), and drawTVStatic (Glitch) now live in
+        // their respective themes/legendary-*.js files as window.LegendaryStageEffects.<skin>.*.
 
-        // Galaxy skin: a couple of distant ringed/cratered planets, fixed in world space like
-        // the sun glow, drifting past very slowly for a sense of scale behind the starfield.
-        function drawDistantPlanets() {
-            const spacingX = 2200, spacingY = 1900;
-            let drift = (Date.now() / 1000) * 1.2;
-            let iStart = Math.floor((camera.x - drift) / spacingX) - 1, iEnd = Math.ceil((camera.x + canvas.width - drift) / spacingX) + 1;
-            let jStart = Math.floor(camera.y / spacingY) - 1, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 1;
-            ctx.save();
-            for (let i = iStart; i <= iEnd; i++) {
-                for (let j = jStart; j <= jEnd; j++) {
-                    let seed = Math.abs(Math.sin(i * 63.7 + j * 11.3 + 3.2) * 19483.7); seed -= Math.floor(seed);
-                    if (seed > 0.35) continue; // one planet per several tiles, at most
-                    let px = i * spacingX + seed * 500 + drift, py = j * spacingY + ((seed * 37) % 1) * 500;
-                    let pr = 26 + seed * 34;
-                    let ringed = seed > 0.18;
-                    let bodyColor = seed > 0.27 ? '#e08a4b' : (seed > 0.09 ? '#7a5cff' : '#4fb8b0');
-                    if (ringed) {
-                        ctx.save(); ctx.translate(px, py); ctx.rotate(-0.35);
-                        ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = pr * 0.16;
-                        ctx.beginPath(); ctx.ellipse(0, 0, pr * 1.7, pr * 0.42, 0, 0, Math.PI * 2); ctx.stroke();
-                        ctx.restore();
-                    }
-                    let bodyGrad = ctx.createRadialGradient(px - pr * 0.3, py - pr * 0.3, pr * 0.1, px, py, pr);
-                    bodyGrad.addColorStop(0, '#fff'); bodyGrad.addColorStop(0.15, bodyColor); bodyGrad.addColorStop(1, 'rgba(10,5,20,0.9)');
-                    ctx.fillStyle = bodyGrad;
-                    ctx.beginPath(); ctx.arc(px, py, pr, 0, Math.PI * 2); ctx.fill();
-                }
-            }
-            ctx.restore();
-        }
 
-        // Galaxy skin: sparse twinkling stars tiled the same way as the cloud/bird layers above
-        // (stable per-cell seed so identity doesn't shift frame-to-frame, only twinkle brightness
-        // does), drawn over the sky while the Galaxy rare skin is equipped.
-        function drawGalaxyStars() {
-            const spacingX = 130, spacingY = 130;
-            let iStart = Math.floor(camera.x / spacingX) - 2, iEnd = Math.ceil((camera.x + canvas.width) / spacingX) + 2;
-            let jStart = Math.floor(camera.y / spacingY) - 2, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 2;
-            ctx.save(); ctx.fillStyle = '#fff';
-            for (let i = iStart; i <= iEnd; i++) {
-                for (let j = jStart; j <= jEnd; j++) {
-                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + 42.13) * 43758.5453); seed -= Math.floor(seed);
-                    if (seed > 0.3) continue;
-                    let sx = i * spacingX + seed * 90, sy = j * spacingY + ((seed * 53) % 1) * 90;
-                    ctx.globalAlpha = 0.35 + 0.35 * Math.sin(Date.now()/500 + seed*25);
-                    ctx.beginPath(); ctx.arc(sx, sy, 1 + seed * 1.4, 0, Math.PI * 2); ctx.fill();
-                }
-            }
-            ctx.restore();
-        }
+        // drawMatrixRain/drawBlackHoleSwirl (Galaxy hazard tiles), drawMissingImageBox/
+        // drawPopupAdBox/drawRainbowWheelOfDeath/drawFirewallSegment/drawGlitchPopupDecor
+        // (Glitch reskins) now live in themes/legendary-galaxy.js and
+        // themes/legendary-glitch.js as window.LegendaryStageEffects.<skin>.*.
 
-        // Galaxy skin: shooting stars streak across the sky on a timer (spawned/advanced in
-        // updateSkinWorldEffects), drawn with a fading tail in the same world-space convention
-        // as drawGalaxyStars.
-        function drawShootingStars() {
-            if (!shootingStars.length) return;
-            ctx.save();
-            for (let i = 0; i < shootingStars.length; i++) {
-                let s = shootingStars[i];
-                let tailX = s.x - s.vx * 6, tailY = s.y - s.vy * 6;
-                let grad = ctx.createLinearGradient(s.x, s.y, tailX, tailY);
-                grad.addColorStop(0, `rgba(255,255,255,${s.life})`); grad.addColorStop(1, 'rgba(255,255,255,0)');
-                ctx.strokeStyle = grad; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-                ctx.beginPath(); ctx.moveTo(s.x, s.y); ctx.lineTo(tailX, tailY); ctx.stroke();
-                ctx.fillStyle = `rgba(255,255,255,${s.life})`;
-                ctx.beginPath(); ctx.arc(s.x, s.y, 1.8, 0, Math.PI*2); ctx.fill();
-            }
-            ctx.restore();
-        }
 
-        // Fairy Dust skin: a single full moon, fixed in world space at the same spot the normal
-        // sun sits (see drawSkyBackground) so it drifts past the same way as the camera moves.
-        // A soft two-stop halo first (same role as sunGradientCache), then a shaded disc with a
-        // few faint craters so it doesn't read as a flat circle - same crater trick drawMoonRock
-        // (Galaxy's rock reskin) uses, just bigger and softer since this one sits in the sky.
-        function drawFullMoon() {
-            ctx.save();
-            const moonX = 500, moonY = -600, moonR = 85;
-            if (!fairyMoonGlowCache) {
-                fairyMoonGlowCache = ctx.createRadialGradient(moonX, moonY, 0, moonX, moonY, 640);
-                fairyMoonGlowCache.addColorStop(0, 'rgba(190,215,255,0.55)');
-                fairyMoonGlowCache.addColorStop(0.45, 'rgba(150,185,255,0.2)');
-                fairyMoonGlowCache.addColorStop(1, 'rgba(150,185,255,0)');
-            }
-            ctx.fillStyle = fairyMoonGlowCache;
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // drawVoidDecor/drawFleshRock/drawVoidTentacle (Void), drawOnebitDecor/
+        // drawOnebitTree/drawOnebitHouse (1-Bit), drawHitboxCircle/Line/Cone (Corrupted
+        // Data), drawMoonRock/drawAlienPlant (Galaxy), and drawCrayonBlob/Face/
+        // drawRainbowTree/Rock/Decor/HazardStripes (Rainbow) now live in their respective
+        // themes/legendary-*.js files as window.LegendaryStageEffects.<skin>.*.
 
-            let bodyGrad = ctx.createRadialGradient(moonX - moonR * 0.3, moonY - moonR * 0.3, moonR * 0.1, moonX, moonY, moonR);
-            bodyGrad.addColorStop(0, '#fbfeff'); bodyGrad.addColorStop(0.7, '#dbe9f8'); bodyGrad.addColorStop(1, '#a3b9d9');
-            ctx.fillStyle = bodyGrad;
-            ctx.beginPath(); ctx.arc(moonX, moonY, moonR, 0, Math.PI * 2); ctx.fill();
-
-            ctx.fillStyle = 'rgba(150,175,205,0.4)';
-            const craters = [[-0.32, -0.22, 0.22], [0.24, 0.12, 0.16], [0.04, -0.42, 0.12], [-0.12, 0.36, 0.14]];
-            for (let i = 0; i < craters.length; i++) {
-                let c = craters[i];
-                ctx.beginPath(); ctx.arc(moonX + c[0] * moonR, moonY + c[1] * moonR, moonR * c[2], 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.restore();
-        }
-
-        // Fairy Dust skin: a sparse, slow, pale-blue starfield behind the moon - same tiled/
-        // stable-seed approach as drawGalaxyStars, just dimmer and sparser so it sits quietly
-        // in the background rather than competing with the moon for attention.
-        function drawFairyStars() {
-            const spacingX = 170, spacingY = 170;
-            let iStart = Math.floor(camera.x / spacingX) - 2, iEnd = Math.ceil((camera.x + canvas.width) / spacingX) + 2;
-            let jStart = Math.floor(camera.y / spacingY) - 2, jEnd = Math.ceil((camera.y + canvas.height) / spacingY) + 2;
-            ctx.save(); ctx.fillStyle = '#cfe0ff';
-            for (let i = iStart; i <= iEnd; i++) {
-                for (let j = jStart; j <= jEnd; j++) {
-                    let seed = Math.abs(Math.sin(i * 12.9898 + j * 78.233 + 91.7) * 43758.5453); seed -= Math.floor(seed);
-                    if (seed > 0.18) continue;
-                    let sx = i * spacingX + seed * 120, sy = j * spacingY + ((seed * 53) % 1) * 120;
-                    ctx.globalAlpha = 0.25 + 0.25 * Math.sin(Date.now()/700 + seed*25);
-                    ctx.beginPath(); ctx.arc(sx, sy, 1 + seed * 1.1, 0, Math.PI * 2); ctx.fill();
-                }
-            }
-            ctx.restore();
-        }
-
-        // Glitch: full-screen old-TV static, screen-fixed (not world space) since it's meant
-        // to read as a broken signal rather than part of the level. Cheap chunky cells since
-        // the whole frame gets downsampled through the pixelation pass anyway.
-        function drawTVStatic() {
-            ctx.save();
-            let cell = 14;
-            for (let x = 0; x < canvas.width; x += cell) {
-                for (let y = 0; y < canvas.height; y += cell) {
-                    let v = Math.random();
-                    ctx.fillStyle = v > 0.7 ? '#f2f2f2' : (v > 0.4 ? '#888' : (v > 0.15 ? '#333' : '#000'));
-                    ctx.fillRect(x, y, cell, cell);
-                }
-            }
-            // Occasional bright horizontal sync-roll bar tearing across the static.
-            if (Math.random() < 0.06) {
-                ctx.fillStyle = 'rgba(255,255,255,0.55)';
-                ctx.fillRect(0, Math.random() * canvas.height, canvas.width, 6 + Math.random()*14);
-            }
-            ctx.restore();
-        }
-
-        // Glitch: black hazard pockets get a constant scrolling green matrix-style digit
-        // rain instead of the usual water/lava/ice noise - drawn within whatever clip is
-        // already active (see drawHazardHoles).
-        function drawMatrixRain(cx, cy, span) {
-            ctx.save();
-            ctx.fillStyle = '#00ff41'; ctx.font = '10px monospace'; ctx.textAlign = 'center';
-            for (let x = cx - span; x < cx + span; x += 11) {
-                let colSeed = Math.abs(Math.sin(x * 0.17)) % 1;
-                let speed = 40 + colSeed * 70;
-                let offset = (Date.now()/1000 * speed + colSeed*400) % (span * 2.6);
-                for (let k = -1; k <= 4; k++) {
-                    let y = cy - span + offset + k * 13;
-                    if (y < cy - span || y > cy + span) continue;
-                    ctx.globalAlpha = k === 0 ? 1 : Math.max(0, 0.85 - k*0.22);
-                    ctx.fillText(Math.random() > 0.5 ? '1' : '0', x, y);
-                }
-            }
-            ctx.restore();
-        }
-
-        // Galaxy: hazard pockets are miniature black holes - a near-black core, a rotating
-        // multi-band accretion disk (orange/violet), a scatter of particles spiraling inward
-        // on a repeating cycle, and a bright thin event-horizon ring. Purely a function of
-        // time/position like drawMatrixRain, so it never needs any persistent state and reads
-        // consistently within whatever clip is already active (see drawHazardHoles).
-        // PERF: the 3 band gradients + 1 core gradient below depend only on `span` (which is
-        // always HEX_SIZE - every hazard hole is the same size) and the fixed per-band hue, not
-        // on tile position - they're identical for every hazard tile, every frame. This used to
-        // call createLinearGradient/createRadialGradient (4 allocations, each with 2-3
-        // addColorStop calls) once per tile per frame; on a level with several hazard holes in
-        // view under the Galaxy skin, the perf report's single ~6.7s frame lines up with exactly
-        // this kind of per-frame allocation churn. Built once here in *local* (post-translate)
-        // coordinates and cached - same pattern as flameGradientCache elsewhere in this file.
-        // (Building them in local space also fixes a pre-existing bug: the old code created the
-        // band gradients using world cx/cy *before* translating into the tile's local frame, so
-        // the gradient's positioning never actually matched the ellipse it was painted on.)
-        let blackHoleGradCache = null;
-        function getBlackHoleGradients(span) {
-            if (blackHoleGradCache && blackHoleGradCache.span === span) return blackHoleGradCache;
-            let bands = [];
-            for (let i = 0; i < 3; i++) {
-                let bandR = span * (0.5 + i * 0.16);
-                let bandGrad = ctx.createLinearGradient(-bandR, 0, bandR, 0);
-                let hue = i % 2 === 0 ? 'rgba(255,138,61,' : 'rgba(157,78,221,';
-                bandGrad.addColorStop(0, hue + '0)'); bandGrad.addColorStop(0.5, hue + '0.6)'); bandGrad.addColorStop(1, hue + '0)');
-                bands.push(bandGrad);
-            }
-            let coreR = span * 0.34;
-            let coreGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, coreR);
-            coreGrad.addColorStop(0, '#000000'); coreGrad.addColorStop(0.75, '#050208'); coreGrad.addColorStop(1, 'rgba(5,2,8,0)');
-            blackHoleGradCache = { span, bands, coreGrad };
-            return blackHoleGradCache;
-        }
-
-        function drawBlackHoleSwirl(cx, cy, span) {
-            ctx.save();
-            let t = Date.now() / 1000;
-            let coreR = span * 0.34;
-            let grads = getBlackHoleGradients(span);
-
-            // Rotating accretion disk bands, drawn as thick partial-ellipse strokes so they
-            // read as matter smeared around the core rather than solid rings.
-            for (let i = 0; i < 3; i++) {
-                let ang = t * (1.1 + i * 0.35) + i * 2.4;
-                let bandR = span * (0.5 + i * 0.16);
-                ctx.strokeStyle = grads.bands[i]; ctx.lineWidth = 3 - i * 0.5;
-                ctx.save(); ctx.translate(cx, cy); ctx.rotate(ang);
-                ctx.beginPath(); ctx.ellipse(0, 0, bandR, bandR * 0.32, 0, 0, Math.PI * 1.4); ctx.stroke();
-                ctx.restore();
-            }
-
-            // Particles spiraling inward on a repeating cycle (golden-ratio spacing keeps
-            // them from clumping), fading in from the rim and vanishing at the core.
-            ctx.fillStyle = '#fff';
-            for (let p = 0; p < 9; p++) {
-                let seed = (p * 0.618034) % 1;
-                let cycle = (t * 0.5 + seed) % 1;
-                let rad = span * (1 - cycle) * 0.95;
-                let ang2 = seed * Math.PI * 2 + cycle * Math.PI * 7;
-                let px = cx + Math.cos(ang2) * rad, py = cy + Math.sin(ang2) * rad * 0.55;
-                ctx.globalAlpha = Math.min(1, cycle * 2) * (1 - cycle * 0.3);
-                ctx.beginPath(); ctx.arc(px, py, 1.3, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.globalAlpha = 1;
-
-            // Near-black core with a soft inner falloff, then a crisp bright event-horizon
-            // ring right at its edge.
-            ctx.save(); ctx.translate(cx, cy);
-            ctx.fillStyle = grads.coreGrad;
-            ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.arc(0, 0, coreR, 0, Math.PI * 2); ctx.stroke();
-            ctx.restore();
-
-            ctx.restore();
-        }
-
-        // Glitch: every tree renders as this "broken image" placeholder instead of its usual
-        // art - a bright pink box with a torn corner and the classic broken-picture glyph.
-        function drawMissingImageBox(x, y, radius) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + radius*0.5, radius*0.85, radius*0.38, 0, 0, Math.PI*2); ctx.fill();
-            let w = radius * 1.7, h = radius * 1.7;
-            ctx.translate(x, y - h*0.15);
-            ctx.fillStyle = '#ff2fb2'; ctx.fillRect(-w/2, -h/2, w, h);
-            ctx.strokeStyle = '#7a0d51'; ctx.lineWidth = 3; ctx.strokeRect(-w/2, -h/2, w, h);
-            // Torn top-right corner
-            ctx.fillStyle = '#ffe0f5';
-            ctx.beginPath(); ctx.moveTo(w/2 - w*0.28, -h/2); ctx.lineTo(w/2, -h/2); ctx.lineTo(w/2, -h/2 + h*0.28); ctx.closePath(); ctx.fill();
-            // Classic broken-picture glyph: little "sun" + jagged "mountains"
-            ctx.fillStyle = '#fff';
-            ctx.beginPath(); ctx.arc(-w*0.18, -h*0.18, w*0.09, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(-w*0.32, h*0.22); ctx.lineTo(-w*0.08, -h*0.05); ctx.lineTo(w*0.08, h*0.1); ctx.lineTo(w*0.3, -h*0.18); ctx.lineTo(w*0.32, h*0.22);
-            ctx.closePath(); ctx.fill();
-            // Crack through the glyph
-            ctx.strokeStyle = '#7a0d51'; ctx.lineWidth = 2.5;
-            ctx.beginPath(); ctx.moveTo(-w*0.1, -h*0.35); ctx.lineTo(w*0.05, -h*0.05); ctx.lineTo(-w*0.05, h*0.1); ctx.lineTo(w*0.12, h*0.4); ctx.stroke();
-            ctx.restore();
-        }
-
-        // Glitch: every rock renders as a garish pop-up ad box instead of its usual art, with
-        // a cycling flashy border, an "AD" badge, a red close button, and fake headline bars.
-        function drawPopupAdBox(x, y, radius) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + radius*0.55, radius*0.95, radius*0.4, 0, 0, Math.PI*2); ctx.fill();
-            let w = radius * 2.2, h = radius * 1.5;
-            ctx.translate(x, y - radius*0.25);
-            const flashColors = ['#ff003c', '#ffee00', '#00e5ff', '#39ff14'];
-            ctx.fillStyle = '#f4f6ff'; ctx.fillRect(-w/2, -h/2, w, h);
-            ctx.strokeStyle = flashColors[Math.floor(Date.now()/150) % flashColors.length]; ctx.lineWidth = 4; ctx.strokeRect(-w/2, -h/2, w, h);
-            // "AD" badge, top-left
-            ctx.fillStyle = '#ffcc00'; ctx.fillRect(-w/2 + 2, -h/2 + 2, w*0.22, h*0.24);
-            ctx.fillStyle = '#3d2b00'; ctx.font = `bold ${Math.max(8, h*0.16)}px sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.fillText('AD', -w/2 + 2 + w*0.11, -h/2 + 2 + h*0.13);
-            // Red circular close button, top-right
-            ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w/2 - h*0.14, -h/2 + h*0.14, h*0.13, 0, Math.PI*2); ctx.fill();
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(w/2 - h*0.2, -h/2 + h*0.08); ctx.lineTo(w/2 - h*0.08, -h/2 + h*0.2);
-            ctx.moveTo(w/2 - h*0.08, -h/2 + h*0.08); ctx.lineTo(w/2 - h*0.2, -h/2 + h*0.2); ctx.stroke();
-            // Garish fake headline/body bars
-            ctx.fillStyle = '#e63946'; ctx.fillRect(-w*0.4, -h*0.05, w*0.8, h*0.12);
-            ctx.fillStyle = '#457b9d'; ctx.fillRect(-w*0.4, h*0.14, w*0.55, h*0.1);
-            ctx.restore();
-        }
-
-        // Glitch: every coin/gem renders as a spinning rainbow "wheel of death" (the classic
-        // OS beachball/busy-spinner) instead of its usual loot-sprite art, all the time.
-        function drawRainbowWheelOfDeath(x, y, radius) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + radius*0.6, radius*0.8, radius*0.32, 0, 0, Math.PI*2); ctx.fill();
-            let segs = 8;
-            let spin = (Date.now() / 220) % (Math.PI * 2);
-            ctx.translate(x, y); ctx.rotate(spin);
-            for (let i = 0; i < segs; i++) {
-                let a0 = (i / segs) * Math.PI * 2, a1 = ((i + 1) / segs) * Math.PI * 2;
-                ctx.fillStyle = `hsl(${Math.round((i / segs) * 360)}, 90%, 55%)`;
-                ctx.beginPath(); ctx.moveTo(0, 0); ctx.arc(0, 0, radius, a0, a1); ctx.closePath(); ctx.fill();
-            }
-            ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI*2); ctx.stroke();
-            ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(0, 0, radius * 0.2, 0, Math.PI*2); ctx.fill();
-            ctx.restore();
-        }
-
-        // Glitch: every fence renders as a blazing brick "firewall" instead of the usual
-        // post-and-rail art - hazard stripes along the top, flame licks, and a warning label
-        // on segments long enough to fit one (playing on both senses of "firewall").
-        function drawFirewallSegment(f) {
-            let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
-            let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
-            ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
-            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-len/2, 8, len, 5);
-            // Brick wall body
-            let brickGrad = ctx.createLinearGradient(0, -16, 0, 10);
-            brickGrad.addColorStop(0, '#7a2a12'); brickGrad.addColorStop(1, '#3d1408');
-            ctx.fillStyle = brickGrad; ctx.fillRect(-len/2, -16, len, 26);
-            // Hazard stripes along the top edge
-            ctx.save(); ctx.beginPath(); ctx.rect(-len/2, -16, len, 6); ctx.clip();
-            for (let sx = -len/2 - 10; sx < len/2 + 10; sx += 12) {
-                ctx.fillStyle = (Math.floor((sx + len/2) / 12) % 2 === 0) ? '#ffcc00' : '#1a1a1a';
-                ctx.beginPath(); ctx.moveTo(sx, -16); ctx.lineTo(sx + 6, -16); ctx.lineTo(sx - 4, 10); ctx.lineTo(sx - 10, 10); ctx.closePath(); ctx.fill();
-            }
-            ctx.restore();
-            // Flame licks along the top edge
-            let t = Date.now() / 150;
-            for (let fx = -len/2 + 6; fx < len/2 - 4; fx += 10) {
-                let flick = Math.sin(t + fx) * 3;
-                let fh = 10 + Math.abs(Math.sin(t * 1.3 + fx * 0.7)) * 8;
-                let flameGrad = ctx.createLinearGradient(fx, -16, fx, -16 - fh);
-                flameGrad.addColorStop(0, '#ff7a00'); flameGrad.addColorStop(0.6, '#ffcf33'); flameGrad.addColorStop(1, 'rgba(255,240,150,0)');
-                ctx.fillStyle = flameGrad;
-                ctx.beginPath(); ctx.moveTo(fx - 3, -16); ctx.quadraticCurveTo(fx + flick, -16 - fh*0.6, fx, -16 - fh); ctx.quadraticCurveTo(fx - flick, -16 - fh*0.6, fx + 3, -16); ctx.closePath(); ctx.fill();
-            }
-            // Mortar lines and outline
-            ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1;
-            for (let by = -12; by < 10; by += 7) { ctx.beginPath(); ctx.moveTo(-len/2, by); ctx.lineTo(len/2, by); ctx.stroke(); }
-            ctx.strokeStyle = '#ff4500'; ctx.lineWidth = 2; ctx.strokeRect(-len/2, -16, len, 26);
-            if (len > 46) { ctx.fillStyle = '#ffcf33'; ctx.font = 'bold 9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('FIREWALL', 0, -2); }
-            ctx.restore();
-        }
-
-        // Glitch: every grass/flower/leaf speck (normally a 3-8px dot/blade/curl) renders at
-        // roughly 4x that size as a small annoying pop-up glyph instead - a mini ad window
-        // with titlebar dots and fake body text, a mini gradient-filled warning-triangle
-        // alert, or a mini chat/notification bubble with an unread badge, cycled by speck
-        // type (d.type 0/1/2, same as the normal-skin foliage variants).
-        function drawGlitchPopupDecor(d, breezeX) {
-            if (d.type === 0) {
-                let w = 32, h = 26;
-                ctx.save(); ctx.translate(d.x, d.y - 6);
-                ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(-w/2 + 2, -h/2 + 3, w, h);
-                ctx.fillStyle = '#f4f6fb'; ctx.fillRect(-w/2, -h/2, w, h);
-                ctx.fillStyle = d.color; ctx.fillRect(-w/2, -h/2, w, h * 0.3);
-                ctx.fillStyle = 'rgba(0,0,0,0.35)';
-                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-w/2 + 5 + i * 6, -h/2 + h*0.15, 1.5, 0, Math.PI*2); ctx.fill(); }
-                ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                ctx.fillRect(-w/2 + 3, -h*0.05, w * 0.6, 3);
-                ctx.fillRect(-w/2 + 3, h*0.12, w * 0.4, 3);
-                ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w/2 - 5, -h/2 + 5, 4, 0, Math.PI*2); ctx.fill();
-                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1;
-                ctx.beginPath(); ctx.moveTo(w/2 - 7, -h/2 + 3); ctx.lineTo(w/2 - 3, -h/2 + 7);
-                ctx.moveTo(w/2 - 3, -h/2 + 3); ctx.lineTo(w/2 - 7, -h/2 + 7); ctx.stroke();
-                ctx.strokeStyle = 'rgba(0,0,0,0.5)'; ctx.lineWidth = 1; ctx.strokeRect(-w/2, -h/2, w, h);
-                ctx.restore();
-            } else if (d.type === 1) {
-                let size = 30, bx = breezeX * 6;
-                ctx.save(); ctx.translate(d.x + bx, d.y);
-                ctx.fillStyle = 'rgba(0,0,0,0.25)';
-                ctx.beginPath(); ctx.moveTo(2, -size + 3); ctx.lineTo(-size*0.42 + 2, 3); ctx.lineTo(size*0.42 + 2, 3); ctx.closePath(); ctx.fill();
-                let grad = ctx.createLinearGradient(0, -size, 0, 0);
-                grad.addColorStop(0, '#ffe066'); grad.addColorStop(1, d.color);
-                ctx.fillStyle = grad;
-                ctx.beginPath(); ctx.moveTo(0, -size); ctx.lineTo(-size*0.42, 0); ctx.lineTo(size*0.42, 0); ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = '#3d2b00'; ctx.lineWidth = 2; ctx.stroke();
-                ctx.fillStyle = '#1a1200'; ctx.font = 'bold 16px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText('!', 0, -size*0.36);
-                ctx.restore();
-            } else {
-                let w = 26, h = 16, bx = breezeX * 10;
-                ctx.save(); ctx.translate(d.x + bx, d.y - 10);
-                ctx.fillStyle = 'rgba(0,0,0,0.22)';
-                ctx.beginPath(); ctx.roundRect(-w/2 + 1, -h/2 + 2, w, h, 5); ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 5); ctx.fill();
-                ctx.strokeStyle = d.color; ctx.lineWidth = 1.6; ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 5); ctx.stroke();
-                ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-4, h/2 - 1); ctx.lineTo(-8, h/2 + 5); ctx.lineTo(0, h/2 - 1); ctx.closePath(); ctx.fill();
-                ctx.strokeStyle = d.color; ctx.beginPath(); ctx.moveTo(-4, h/2 - 1); ctx.lineTo(-8, h/2 + 5); ctx.stroke();
-                ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = 1.6;
-                ctx.beginPath(); ctx.moveTo(-w/2 + 4, -1); ctx.lineTo(w/2 - 4, -1); ctx.stroke();
-                ctx.fillStyle = '#ff3b3b'; ctx.beginPath(); ctx.arc(w/2 - 2, -h/2 - 1, 4, 0, Math.PI*2); ctx.fill();
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 6px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('1', w/2 - 2, -h/2 - 1);
-                ctx.restore();
-            }
-        }
-
-        // Void: every grass/flower/leaf speck renders as either a tiny drifting mote of dust
-        // (mostly white or grey, ignoring the speck's usual theme color) or, rarely, a larger
-        // blinking eye watching from the ground. Which one a given speck is comes from a
-        // stable hash of its fixed world position, so the same specks are always eyes every
-        // frame rather than flickering between the two. The dust motes are left under the
-        // map's grayscale filter (their colors are already grayscale, so it doesn't matter);
-        // the eyes save/restore their own filter so they stay in full color, same trick as
-        // drawFleshRock.
-        function drawVoidDecor(d, breezeX) {
-            let seed = Math.abs(Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453); seed -= Math.floor(seed);
-            if (seed > 0.92) {
-                ctx.save();
-                voidGrayscaleActive = false;
-                let er = 6 + seed * 3; // noticeably larger than the standard 3px decor dot
-                let blinkPhase = (Date.now() / 1000 + seed * 12) % (3 + seed * 2);
-                let isBlinking = blinkPhase > (2.7 + seed * 1.6);
-                ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.beginPath(); ctx.ellipse(d.x, d.y + er * 0.25, er * 0.95, er * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-                if (isBlinking) {
-                    ctx.strokeStyle = '#b89494'; ctx.lineWidth = 1.6;
-                    ctx.beginPath(); ctx.moveTo(d.x - er * 0.75, d.y); ctx.lineTo(d.x + er * 0.75, d.y); ctx.stroke();
-                } else {
-                    ctx.fillStyle = '#eee2dd'; ctx.beginPath(); ctx.ellipse(d.x, d.y, er * 0.75, er * 0.5, 0, 0, Math.PI * 2); ctx.fill();
-                    let pupilDrift = Math.sin(d.x * 0.7 + d.y * 0.3) * er * 0.12;
-                    ctx.fillStyle = '#7a0f14'; ctx.beginPath(); ctx.arc(d.x + pupilDrift, d.y, er * 0.28, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = '#1a0505'; ctx.beginPath(); ctx.arc(d.x + pupilDrift, d.y, er * 0.13, 0, Math.PI * 2); ctx.fill();
-                    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.beginPath(); ctx.arc(d.x + pupilDrift - er * 0.1, d.y - er * 0.12, er * 0.08, 0, Math.PI * 2); ctx.fill();
-                }
-                ctx.restore();
-                voidGrayscaleActive = true;
-            } else {
-                ctx.fillStyle = seed > 0.5 ? 'rgba(225,225,225,0.7)' : 'rgba(130,130,130,0.65)';
-                ctx.beginPath(); ctx.arc(d.x, d.y, 1.4 + seed * 1.3, 0, Math.PI * 2); ctx.fill();
-            }
-        }
-
-        // 1-Bit: every grass/flower/leaf speck renders as a small flat glyph instead of its
-        // usual colored foliage art - a tuft of blade dashes, a plus-shaped cluster of dots for
-        // flowers, or a crisp dash-pair for leaves/vines. Color (pure black or white) comes from
-        // a stable hash of the speck's fixed world position so it stays legible against either
-        // checker tile it happens to land on, rather than flickering or vanishing on one color.
-        function drawOnebitDecor(d, breezeX) {
-            let seed = Math.abs(Math.sin(d.x * 12.9898 + d.y * 78.233) * 43758.5453); seed -= Math.floor(seed);
-            let col = seed > 0.5 ? '#ffffff' : '#000000';
-            ctx.fillStyle = col; ctx.strokeStyle = col; ctx.lineWidth = 1.5;
-            if (d.type === 0) {
-                ctx.beginPath();
-                ctx.moveTo(d.x - 3, d.y + 2); ctx.lineTo(d.x - 2 + breezeX*2, d.y - 4);
-                ctx.moveTo(d.x, d.y + 2); ctx.lineTo(d.x + breezeX*2, d.y - 5);
-                ctx.moveTo(d.x + 3, d.y + 2); ctx.lineTo(d.x + 4 + breezeX*2, d.y - 4);
-                ctx.stroke();
-            } else if (d.type === 1) {
-                ctx.beginPath();
-                ctx.arc(d.x, d.y - 6, 1.6, 0, Math.PI*2); ctx.arc(d.x - 4, d.y - 3, 1.6, 0, Math.PI*2);
-                ctx.arc(d.x + 4, d.y - 3, 1.6, 0, Math.PI*2); ctx.arc(d.x, d.y, 1.6, 0, Math.PI*2);
-                ctx.fill();
-            } else {
-                ctx.beginPath();
-                ctx.moveTo(d.x, d.y); ctx.lineTo(d.x + breezeX*5, d.y - 6);
-                ctx.moveTo(d.x + 2, d.y - 2); ctx.lineTo(d.x + 2 + breezeX*5, d.y - 8);
-                ctx.stroke();
-            }
-        }
-
-        // Corrupted Data (secret skin): strips enemies, trees, rocks, and both enemy and
-        // player projectiles down to their raw collision circles instead of their usual art -
-        // a faint translucent fill, a stroked outline, a small center crosshair, and a short
-        // type label, the way a debug hitbox overlay would render them. Color is the only
-        // thing that distinguishes what kind of hitbox it is: red for anything that can hurt
-        // the player (enemies, enemy projectiles), green for static obstacle collision
-        // (trees/rocks/fences), cyan for the player's own attacks (projectiles, fire breath,
-        // lightning, shuriken), gold for collectible pickups (coins/gems).
-        function drawHitboxCircle(x, y, radius, color, label) {
-            ctx.save();
-            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
-            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.arc(x, y, radius, 0, Math.PI * 2); ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(x - radius * 0.35, y); ctx.lineTo(x + radius * 0.35, y);
-            ctx.moveTo(x, y - radius * 0.35); ctx.lineTo(x, y + radius * 0.35);
-            ctx.stroke();
-            if (label) {
-                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
-                ctx.fillText(label, x, y - radius - 8);
-            }
-            ctx.restore();
-        }
-
-        // Corrupted Data: same debug-hitbox treatment as drawHitboxCircle above, but for
-        // segment-shaped collision - fences (static, solid line obstacles) and the lightning
-        // power-up's beam (a thin capsule of hurt-radius `thickness` running player->target).
-        function drawHitboxLine(x1, y1, x2, y2, thickness, color, label) {
-            ctx.save();
-            let midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
-            let angle = Math.atan2(y2 - y1, x2 - x1);
-            let len = Math.hypot(x2 - x1, y2 - y1);
-            ctx.translate(midX, midY); ctx.rotate(angle);
-            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
-            ctx.fillRect(-len / 2, -thickness / 2, len, thickness);
-            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
-            ctx.strokeRect(-len / 2, -thickness / 2, len, thickness);
-            ctx.beginPath(); ctx.moveTo(-len / 2, 0); ctx.lineTo(len / 2, 0); ctx.stroke();
-            if (label) {
-                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
-                ctx.fillText(label, 0, -thickness / 2 - 8);
-            }
-            ctx.restore();
-        }
-
-        // Corrupted Data: same debug-hitbox treatment, but for the fire breath power-up's cone
-        // hit-check (a pie slice of `radius` centered on `facing`, spanning +/- `halfAngle`).
-        function drawHitboxCone(x, y, radius, facing, halfAngle, color, label) {
-            ctx.save();
-            ctx.globalAlpha = 0.18; ctx.fillStyle = color;
-            ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, radius, facing - halfAngle, facing + halfAngle); ctx.closePath(); ctx.fill();
-            ctx.globalAlpha = 1; ctx.strokeStyle = color; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(x, y); ctx.arc(x, y, radius, facing - halfAngle, facing + halfAngle); ctx.closePath(); ctx.stroke();
-            if (label) {
-                ctx.font = '9px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = color;
-                ctx.fillText(label, x + Math.cos(facing) * radius * 0.5, y + Math.sin(facing) * radius * 0.5 - 8);
-            }
-            ctx.restore();
-        }
-
-        // Galaxy: every rock renders as a cratered chunk of moon rock instead of its usual
-        // theme art - pale lunar grey with a handful of shaded craters, a soft rim highlight
-        // on each, and an occasional glinting mineral fleck.
-        function drawMoonRock(x, y, radius) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-            let baseGrad = ctx.createLinearGradient(x - radius, y - radius, x + radius, y + radius);
-            baseGrad.addColorStop(0, '#e2ded6'); baseGrad.addColorStop(0.5, '#aca69c'); baseGrad.addColorStop(1, '#6d675e');
-            ctx.fillStyle = baseGrad;
-            ctx.beginPath(); ctx.arc(x, y, radius, Math.PI, 0, false);
-            ctx.lineTo(x + radius * 0.9, y + radius * 0.18);
-            ctx.quadraticCurveTo(x, y + radius * 0.35, x - radius * 0.9, y + radius * 0.18);
-            ctx.closePath(); ctx.fill();
-            // A few fixed-relative craters (stable per-rock since they're expressed purely as
-            // fractions of x/y/radius, not random each frame).
-            const craters = [[-0.32, -0.28, 0.22], [0.26, -0.12, 0.15], [0.02, 0.12, 0.13], [-0.08, -0.5, 0.09]];
-            ctx.fillStyle = 'rgba(68,64,58,0.55)';
-            for (let i = 0; i < craters.length; i++) {
-                let cr = craters[i];
-                ctx.beginPath(); ctx.ellipse(x + cr[0] * radius, y + cr[1] * radius, radius * cr[2], radius * cr[2] * 0.72, 0, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1;
-            for (let i = 0; i < craters.length; i++) {
-                let cr = craters[i];
-                ctx.beginPath(); ctx.ellipse(x + cr[0] * radius, y + cr[1] * radius - radius * cr[2] * 0.15, radius * cr[2], radius * cr[2] * 0.72, 0, Math.PI, Math.PI * 2); ctx.stroke();
-            }
-            // Rare glinting mineral fleck, timed off position so it isn't perfectly synced
-            // across every rock on screen.
-            if (Math.sin(Date.now() / 500 + x * 0.05) > 0.9) {
-                ctx.fillStyle = 'rgba(190,225,255,0.9)';
-                ctx.beginPath(); ctx.arc(x + radius * 0.3, y - radius * 0.35, 1.6, 0, Math.PI * 2); ctx.fill();
-            }
-            ctx.strokeStyle = 'rgba(0,0,0,0.15)'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(x - radius * 0.3, y - radius * 0.75); ctx.lineTo(x + radius * 0.15, y - radius * 0.55); ctx.stroke();
-            ctx.restore();
-        }
-
-        // Void: every rock renders as a pulsing, oozing mass of red flesh instead of its
-        // usual theme art - the one thing besides the blinking decor eyes that stays in full
-        // color while the rest of the map desaturates, so it saves/restores its own filter
-        // rather than relying on the grayscale toggle set once at the top of draw().
-        function drawFleshRock(x, y, radius) {
-            ctx.save();
-            voidGrayscaleActive = false;
-            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-            let t = Date.now();
-            let pulse = 0.5 + 0.5 * Math.sin(t / 900 + x * 0.01);
-            let grad = ctx.createRadialGradient(x - radius * 0.3, y - radius * 0.35, radius * 0.1, x, y, radius * 1.1);
-            grad.addColorStop(0, `rgba(255,100,95,${0.9 + 0.1 * pulse})`); grad.addColorStop(0.45, '#a5121f'); grad.addColorStop(1, '#43060c');
-            ctx.fillStyle = grad;
-            ctx.beginPath(); ctx.arc(x, y, radius, Math.PI, 0, false);
-            ctx.lineTo(x + radius * 0.9, y + radius * 0.18);
-            ctx.quadraticCurveTo(x, y + radius * 0.35, x - radius * 0.9, y + radius * 0.18);
-            ctx.closePath(); ctx.fill();
-            // Dark, thread-like veins across the surface.
-            ctx.strokeStyle = 'rgba(25,0,4,0.55)'; ctx.lineWidth = 1.5;
-            const veins = [[-0.3, -0.2, 0.2, -0.5], [0.1, 0.05, 0.35, -0.4], [-0.1, 0.15, -0.4, 0.3]];
-            for (let i = 0; i < veins.length; i++) {
-                let v = veins[i];
-                ctx.beginPath(); ctx.moveTo(x + v[0] * radius, y + v[1] * radius);
-                ctx.quadraticCurveTo(x + (v[0] + v[2]) * 0.5 * radius, y + (v[1] + v[3]) * 0.5 * radius - radius * 0.1, x + v[2] * radius, y + v[3] * radius);
-                ctx.stroke();
-            }
-            // Wet, glistening highlight.
-            ctx.fillStyle = `rgba(255,205,200,${0.3 + 0.2 * pulse})`;
-            ctx.beginPath(); ctx.ellipse(x - radius * 0.35, y - radius * 0.4, radius * 0.22, radius * 0.12, -0.4, 0, Math.PI * 2); ctx.fill();
-            // A slow drip of ooze forming and stretching down one side.
-            let dripLen = radius * (0.25 + 0.3 * pulse);
-            ctx.fillStyle = '#7a0d16';
-            ctx.beginPath();
-            ctx.moveTo(x + radius * 0.5 - radius * 0.05, y + radius * 0.1);
-            ctx.lineTo(x + radius * 0.5 + radius * 0.05, y + radius * 0.1);
-            ctx.quadraticCurveTo(x + radius * 0.58, y + radius * 0.1 + dripLen * 0.6, x + radius * 0.5, y + radius * 0.1 + dripLen);
-            ctx.closePath(); ctx.fill();
-            ctx.beginPath(); ctx.arc(x + radius * 0.5, y + radius * 0.1 + dripLen, radius * 0.07, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-            voidGrayscaleActive = true;
-        }
-
-        // 1-Bit: every tree renders as a flat black silhouette (one of three canopy shapes,
-        // picked the same way the normal tree art picks its variant) outlined in white so it
-        // reads against both light and dark checker tiles, with a stable stipple of white dots
-        // scattered inside via the golden angle (seed-keyed, so it never reshuffles frame to
-        // frame) standing in for foliage texture the way dithered pixel-art trees do it in two
-        // colors instead of a gradient.
-        function drawOnebitTree(x, y, radius, variant, seed) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.35)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.32, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(x - radius * 0.12, y - radius * 0.1, radius * 0.24, radius * 0.85);
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5;
-            ctx.strokeRect(x - radius * 0.12, y - radius * 0.1, radius * 0.24, radius * 0.85);
-            ctx.beginPath();
-            if (variant === 1) {
-                ctx.arc(x, y - radius * 0.55, radius * 0.85, 0, Math.PI * 2);
-            } else if (variant === 2) {
-                ctx.moveTo(x, y - radius * 1.5); ctx.lineTo(x + radius * 0.55, y - radius * 0.55); ctx.lineTo(x + radius * 0.3, y - radius * 0.55);
-                ctx.lineTo(x + radius * 0.75, y + radius * 0.1); ctx.lineTo(x - radius * 0.75, y + radius * 0.1);
-                ctx.lineTo(x - radius * 0.3, y - radius * 0.55); ctx.lineTo(x - radius * 0.55, y - radius * 0.55); ctx.closePath();
-            } else {
-                ctx.moveTo(x, y - radius * 1.4); ctx.lineTo(x + radius * 0.9, y + radius * 0.15); ctx.lineTo(x - radius * 0.9, y + radius * 0.15); ctx.closePath();
-            }
-            ctx.fillStyle = '#000000'; ctx.fill();
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.stroke();
-            ctx.save(); ctx.clip();
-            for (let i = 0; i < 16; i++) {
-                let a = (seed * 7 + i * 2.399963) % (Math.PI * 2); // golden-angle scatter - stable per tree, no per-frame flicker
-                let rr = radius * 0.8 * Math.sqrt((i * 0.6180339887) % 1);
-                let px = x + Math.cos(a) * rr, py = (y - radius * 0.5) + Math.sin(a) * rr * 0.85;
-                ctx.fillStyle = '#ffffff'; ctx.fillRect(px - 1, py - 1, 2, 2);
-            }
-            ctx.restore();
-            ctx.restore();
-        }
-
-        // 1-Bit: every rock renders as a small monochrome house instead of theme rock art -
-        // three flat black/white cottage silhouettes (picked the same way rocks already pick a
-        // shape variant), each with a hash-picked window count/door so a cluster of houses
-        // doesn't look identically stamped.
-        function drawOnebitHouse(x, y, radius, variant, seed) {
-            ctx.save();
-            ctx.fillStyle = 'rgba(0,0,0,0.3)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.85, radius * 1.05, radius * 0.35, 0, 0, Math.PI * 2); ctx.fill();
-            let hash = Math.abs(Math.sin(seed * 12.9898) * 43758.5453); hash -= Math.floor(hash);
-            let w = radius * 1.7, h = radius * 1.35;
-            let baseY = y + radius * 0.72, topY = baseY - h;
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(x - w / 2, topY + h * 0.35, w, h * 0.65);
-            ctx.strokeStyle = '#000000'; ctx.lineWidth = 2.5;
-            ctx.strokeRect(x - w / 2, topY + h * 0.35, w, h * 0.65);
-            ctx.beginPath();
-            if (variant === 1) {
-                ctx.moveTo(x - w * 0.6, topY + h * 0.4); ctx.lineTo(x - w * 0.25, topY); ctx.lineTo(x, topY + h * 0.12);
-                ctx.lineTo(x + w * 0.25, topY); ctx.lineTo(x + w * 0.6, topY + h * 0.4); ctx.closePath();
-            } else if (variant === 2) {
-                ctx.moveTo(x - w * 0.62, topY + h * 0.4); ctx.lineTo(x, topY - h * 0.15); ctx.lineTo(x + w * 0.62, topY + h * 0.4); ctx.closePath();
-            } else {
-                ctx.moveTo(x - w * 0.65, topY + h * 0.4); ctx.lineTo(x, topY - h * 0.05); ctx.lineTo(x + w * 0.65, topY + h * 0.4); ctx.closePath();
-            }
-            ctx.fillStyle = '#000000'; ctx.fill();
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.stroke();
-            let doorW = w * 0.22, doorH = h * 0.4;
-            ctx.fillStyle = '#000000'; ctx.fillRect(x - doorW / 2, baseY - doorH, doorW, doorH);
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x - doorW / 2, baseY - doorH, doorW, doorH);
-            let winCount = 2 + Math.floor(hash * 2);
-            for (let wi = 0; wi < winCount; wi++) {
-                let wx = x - w * 0.32 + wi * (w * 0.64 / Math.max(1, winCount - 1));
-                if (Math.abs(wx - x) < doorW * 0.7) continue; // skip windows that would overlap the door
-                let wy = topY + h * 0.5;
-                ctx.fillStyle = '#000000'; ctx.fillRect(wx - 4, wy, 8, 8);
-                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(wx - 4, wy, 8, 8);
-                ctx.beginPath(); ctx.moveTo(wx - 4, wy + 4); ctx.lineTo(wx + 4, wy + 4); ctx.moveTo(wx, wy); ctx.lineTo(wx, wy + 8); ctx.stroke();
-            }
-            if (variant === 2) {
-                ctx.fillStyle = '#000000'; ctx.fillRect(x + w * 0.28, topY - h * 0.08, w * 0.09, h * 0.26);
-                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1; ctx.strokeRect(x + w * 0.28, topY - h * 0.08, w * 0.09, h * 0.26);
-            }
-            ctx.restore();
-        }
-
-        // Galaxy: every tree renders as a bioluminescent alien plant instead of its usual
-        // foliage - a dark stalk rising from a mound of alien soil, a cluster of curling
-        // tendrils tipped with pulsing glow-pods, and a larger glowing bud at the top. Sways
-        // gently the same way trees do, keyed off the tree's own seed so neighboring plants
-        // don't pulse in lockstep.
-        function drawAlienPlant(x, y, radius, seed) {
-            ctx.save();
-            let t = Date.now();
-            let sway = Math.sin(t / 1400 + seed) * 0.08;
-            ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#241537'; ctx.beginPath(); ctx.ellipse(x, y + radius * 0.25, radius * 0.55, radius * 0.3, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#3d2461'; ctx.lineWidth = radius * 0.22; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.moveTo(x, y + radius * 0.15); ctx.quadraticCurveTo(x + sway * radius * 2, y - radius * 0.6, x + sway * radius * 3, y - radius * 1.3); ctx.stroke();
-            const tendrilCount = 3;
-            for (let i = 0; i < tendrilCount; i++) {
-                let a = (i / tendrilCount) * Math.PI * 2 + seed * 3;
-                let tx = x + Math.cos(a) * radius * 0.5, ty = y + radius * 0.05 + Math.sin(a) * radius * 0.15;
-                let tipX = tx + Math.cos(a + sway * 2) * radius * 0.9, tipY = ty - radius * 0.9 + Math.sin(a) * radius * 0.2;
-                ctx.strokeStyle = '#4a2f73'; ctx.lineWidth = radius * 0.1;
-                ctx.beginPath(); ctx.moveTo(tx, ty); ctx.quadraticCurveTo(tx + Math.cos(a) * radius * 0.4, ty - radius * 0.5, tipX, tipY); ctx.stroke();
-                let glow = 0.6 + 0.4 * Math.sin(t / 300 + i * 2 + seed * 5);
-                let pulseR = radius * 0.16 * (0.85 + 0.15 * glow);
-                let glowColor = i % 2 === 0 ? '100,255,220' : '255,110,220';
-                let grad = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, pulseR * 2.2);
-                grad.addColorStop(0, `rgba(${glowColor},${0.9 * glow})`); grad.addColorStop(1, `rgba(${glowColor},0)`);
-                ctx.fillStyle = grad; ctx.beginPath(); ctx.arc(tipX, tipY, pulseR * 2.2, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = i % 2 === 0 ? '#7dffe0' : '#ff8ce0';
-                ctx.beginPath(); ctx.arc(tipX, tipY, pulseR * 0.55, 0, Math.PI * 2); ctx.fill();
-            }
-            let mx = x + Math.sin(sway * 3) * radius * 0.3, my = y - radius * 1.15;
-            let mainGlow = 0.7 + 0.3 * Math.sin(t / 260 + seed * 4);
-            let mgrad = ctx.createRadialGradient(mx, my, 0, mx, my, radius * 0.6 * mainGlow);
-            mgrad.addColorStop(0, `rgba(190,140,255,${0.85 * mainGlow})`); mgrad.addColorStop(1, 'rgba(190,140,255,0)');
-            ctx.fillStyle = mgrad; ctx.beginPath(); ctx.arc(mx, my, radius * 0.6 * mainGlow, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#c9a3ff'; ctx.beginPath(); ctx.arc(mx, my, radius * 0.28, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-        }
-
-        // Void: every tree renders as a single dark tentacle rising from a pool of black ooze,
-        // bent toward the player as if being drawn in by the player's own gravity. The bend is
-        // driven purely by the tree's current position relative to player.worldX/worldY -
-        // there's no idle sway or independent motion like the other rare-skin foliage; a
-        // stationary player means a perfectly still tentacle. Only the tip's eye-glow pulses
-        // (a timer-driven opacity flicker, not movement) to keep it feeling alive.
-        function drawVoidTentacle(x, y, radius, seed) {
-            ctx.save();
-            // Pool of ooze at the base.
-            ctx.fillStyle = 'rgba(0,0,0,0.4)';
-            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.35, 0, 0, Math.PI * 2); ctx.fill();
-
-            let ddx = player.worldX - x, ddy = player.worldY - y;
-            let distToPlayer = Math.hypot(ddx, ddy);
-            let targetAngle = Math.atan2(ddy, ddx);
-            let upAngle = -Math.PI / 2;
-            let angleDiff = normalizeAngle(targetAngle - upAngle);
-
-            // strength: 0 far away (tentacle stands straight up, no bend) -> 1 right at the
-            // player (full bend/reach). The steep exponent keeps strength near zero across
-            // most of maxReach and only ramps up sharply in the last stretch, so distant
-            // trees read as basically inert and the effect is strongest only when the player
-            // is practically touching the tree.
-            let maxReach = 560;
-            let strength = Math.max(0, 1 - distToPlayer / maxReach);
-            strength = Math.pow(strength, 2.4);
-
-            let bendAngle = upAngle + angleDiff * strength;
-            // The tip tracks the same proximity-scaled bend as the rest of the curve (rather
-            // than always pointing exactly at the player), so it stays attached to the drawn
-            // curve and only swings to fully face the player once strength ramps up close up.
-            let hookAngle = bendAngle;
-
-            let len = radius * (2.1 + 0.7 * strength);
-            let baseX = x, baseY = y + radius * 0.1;
-            let c1x = baseX + Math.cos(upAngle) * len * 0.32, c1y = baseY + Math.sin(upAngle) * len * 0.32;
-            let c2x = baseX + Math.cos(bendAngle) * len * 0.72, c2y = baseY + Math.sin(bendAngle) * len * 0.72;
-            let tipX = baseX + Math.cos(hookAngle) * len, tipY = baseY + Math.sin(hookAngle) * len;
-
-            ctx.lineCap = 'round';
-            ctx.strokeStyle = '#180e28'; ctx.lineWidth = radius * 0.44;
-            ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
-            // Faint violet underbelly stripe for dimension.
-            ctx.strokeStyle = '#3d2461'; ctx.lineWidth = radius * 0.18;
-            ctx.beginPath(); ctx.moveTo(baseX, baseY); ctx.bezierCurveTo(c1x, c1y, c2x, c2y, tipX, tipY); ctx.stroke();
-
-            // Suction ridges along the curve.
-            const ridgeTs = [0.32, 0.52, 0.72];
-            for (let rt of ridgeTs) {
-                let pt = cubicPoint(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
-                let tan = cubicTangentAngle(baseX, baseY, c1x, c1y, c2x, c2y, tipX, tipY, rt);
-                ctx.save();
-                ctx.translate(pt.x, pt.y); ctx.rotate(tan + Math.PI / 2);
-                ctx.fillStyle = 'rgba(0,0,0,0.55)';
-                ctx.beginPath(); ctx.ellipse(0, 0, radius * 0.17 * (1 - rt * 0.25), radius * 0.09, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.restore();
-            }
-
-            // Glowing eye at the tip, pupil oriented toward the player. Exempted from the
-            // map's grayscale filter (see draw()) the same way the ground-level blinking
-            // eyes and the fleshy rocks are - eyes stay in full color everywhere in Void.
-            ctx.save();
-            voidGrayscaleActive = false;
-            let glow = 0.7 + 0.3 * Math.sin(Date.now() / 450 + seed * 6);
-            let egrad = ctx.createRadialGradient(tipX, tipY, 0, tipX, tipY, radius * 0.55 * glow);
-            egrad.addColorStop(0, `rgba(210,170,255,${0.8 * glow})`); egrad.addColorStop(1, 'rgba(210,170,255,0)');
-            ctx.fillStyle = egrad; ctx.beginPath(); ctx.arc(tipX, tipY, radius * 0.55 * glow, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#e8d5ff'; ctx.beginPath(); ctx.arc(tipX, tipY, radius * 0.22, 0, Math.PI * 2); ctx.fill();
-            ctx.save();
-            ctx.translate(tipX, tipY); ctx.rotate(targetAngle + Math.PI / 2);
-            ctx.fillStyle = '#0a0512';
-            ctx.beginPath(); ctx.ellipse(0, 0, radius * 0.05, radius * 0.19, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.restore();
-            ctx.restore();
-            voidGrayscaleActive = true;
-
-            ctx.restore();
-        }
-
-        // Rainbow skin: a soft, translucent multi-band arch fixed in world space (same "drifts
-        // past as the camera moves" convention as the sun glow), lighting up the sky while
-        // equipped.
-        function drawRainbowArcs() {
-            ctx.save();
-            // Anchored to the bottom of the canvas (not a fixed y that happened to land near
-            // the player, who always renders at screen-center) so the arch reads as a real
-            // horizon backdrop rising up from the bottom of the screen, same on every device
-            // regardless of canvas height.
-            let cx = canvas.width / 2, cy = canvas.height, baseR = Math.max(canvas.width, canvas.height) * 0.75;
-            const bands = ['#ff3b3b', '#ff9f1c', '#ffe135', '#4caf50', '#3399ff', '#8e44ad'];
-            ctx.lineWidth = 15; ctx.lineCap = 'round';
-            for (let i = 0; i < bands.length; i++) {
-                ctx.globalAlpha = 0.5;
-                ctx.strokeStyle = bands[i];
-                ctx.beginPath(); ctx.arc(cx, cy, baseR - i * 15, Math.PI, Math.PI * 2); ctx.stroke();
-            }
-            ctx.restore();
-        }
-
-        // Rainbow skin: a hand-drawn "crayon blob" - a wobbly, hand-wavering closed path
-        // instead of a perfect circle, filled with a flat coloring-book color and traced in
-        // a thick black outline. The fill path is jittered by more than the outline path
-        // (`overflow`), so at a few points the color visibly pokes out past the black line -
-        // the "colored outside the lines" look the whole theme leans on.
-        function drawCrayonBlob(cx, cy, r, seed, fillColor, overflow) {
-            let steps = 14;
-            function tracePath(jitterAmp, seedOffset) {
-                ctx.beginPath();
-                for (let i = 0; i <= steps; i++) {
-                    let a = (i / steps) * Math.PI * 2;
-                    let n = rainbowHash(seed + seedOffset + i * 3.7);
-                    let rr = r * (1 + (n - 0.5) * jitterAmp);
-                    let px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
-                    if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-                }
-                ctx.closePath();
-            }
-            ctx.fillStyle = fillColor;
-            tracePath(overflow, 0); ctx.fill();
-            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3.5; ctx.lineJoin = 'round';
-            tracePath(0.12, 100); ctx.stroke();
-        }
-
-        // Rainbow skin: a simple doodled smiley - two dot eyes, a curved mouth, and rosy
-        // cheeks, scaled to whatever the shape's radius is. Sprinkled onto a fraction of
-        // trees/rocks so the level occasionally looks back at you.
-        function drawCrayonFace(cx, cy, size) {
-            ctx.fillStyle = '#1a1a1a';
-            ctx.beginPath(); ctx.arc(cx - size * 0.35, cy - size * 0.1, size * 0.11, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(cx + size * 0.35, cy - size * 0.1, size * 0.11, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = size * 0.09; ctx.lineCap = 'round';
-            ctx.beginPath(); ctx.arc(cx, cy + size * 0.05, size * 0.28, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
-            ctx.fillStyle = 'rgba(255,120,140,0.55)';
-            ctx.beginPath(); ctx.arc(cx - size * 0.5, cy + size * 0.15, size * 0.09, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.arc(cx + size * 0.5, cy + size * 0.15, size * 0.09, 0, Math.PI * 2); ctx.fill();
-        }
-
-        // Rainbow skin: every tree renders as a doodled crayon tree - a plain brown trunk
-        // with a black outline, topped with a wobbly, flat-colored crayon blob crown picked
-        // from the coloring-book palette. About a third get a hand-drawn smiling face.
-        function drawRainbowTree(x, y, radius, seed) {
-            ctx.fillStyle = 'rgba(0,0,0,0.22)';
-            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.5, radius * 0.85, radius * 0.38, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#c68642';
-            ctx.fillRect(x - radius * 0.2, y - radius * 0.1, radius * 0.4, radius * 0.9);
-            ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 3;
-            ctx.strokeRect(x - radius * 0.2, y - radius * 0.1, radius * 0.4, radius * 0.9);
-            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(seed) * RAINBOW_PALETTE.length)];
-            let crownY = y - radius * 0.75;
-            drawCrayonBlob(x, crownY, radius * 0.85, seed, color, 0.22);
-            if (rainbowHash(seed + 500) < 0.35) drawCrayonFace(x, crownY, radius * 0.85);
-        }
-
-        // Rainbow skin: every rock renders as a squashed crayon blob instead of the theme's
-        // usual rock art - same wobbly outline-and-overflow treatment as the trees, just
-        // flattened, and occasionally smiling too.
-        function drawRainbowRock(x, y, radius, seed) {
-            ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.beginPath(); ctx.ellipse(x, y + radius * 0.18, radius * 1.05, radius * 0.4, 0, 0, Math.PI * 2); ctx.fill();
-            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(seed + 200) * RAINBOW_PALETTE.length)];
-            ctx.save();
-            ctx.translate(x, y); ctx.scale(1, 0.75);
-            drawCrayonBlob(0, 0, radius * 0.95, seed + 50, color, 0.2);
-            if (rainbowHash(seed + 700) < 0.3) drawCrayonFace(0, 0, radius * 0.95);
-            ctx.restore();
-        }
-
-        // Rainbow skin: every grass/flower/leaf speck renders as a tiny black-outlined doodle
-        // in a bright coloring-book color instead of its usual flat foliage dot/blade/curl.
-        function drawRainbowDecor(d, breezeX) {
-            let color = RAINBOW_PALETTE[Math.floor(rainbowHash(d.x * 0.31 + d.y * 0.17) * RAINBOW_PALETTE.length)];
-            ctx.fillStyle = color; ctx.strokeStyle = '#1a1a1a';
-            if (d.type === 0) {
-                ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.arc(d.x, d.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            } else if (d.type === 1) {
-                ctx.lineWidth = 1.5;
-                ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.lineTo(d.x - 4 + breezeX * 5, d.y - 9); ctx.lineTo(d.x + 4 + breezeX * 5, d.y - 9); ctx.closePath();
-                ctx.fill(); ctx.stroke();
-            } else {
-                ctx.lineWidth = 2.5;
-                ctx.beginPath(); ctx.moveTo(d.x, d.y); ctx.quadraticCurveTo(d.x + breezeX * 5, d.y - 6, d.x + breezeX * 10, d.y - 12); ctx.stroke();
-            }
-        }
-
-        // Rainbow skin: hazard pockets (water/lava/ice, whatever the theme normally puts
-        // there) fill with a stack of wavy, hand-drawn rainbow crayon stripes instead of the
-        // usual themed texture - reads like a scribbled-in pool on a coloring page.
-        function drawRainbowHazardStripes(cx, cy, span) {
-            let t = Date.now() / 1000;
-            ctx.lineCap = 'round';
-            for (let i = 0; i < RAINBOW_PALETTE.length; i++) {
-                let phase = t * 0.6 + i * 0.5;
-                let rowY = cy - span * 0.75 + (i / (RAINBOW_PALETTE.length - 1)) * span * 1.5;
-                ctx.strokeStyle = RAINBOW_PALETTE[i];
-                ctx.lineWidth = 5;
-                ctx.beginPath();
-                for (let x = cx - span; x <= cx + span; x += 6) {
-                    let y = rowY + Math.sin(x * 0.04 + phase) * 6;
-                    if (x === cx - span) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-                }
-                ctx.stroke();
-            }
-        }
 
         // Draws the animated water/lava/ice noise texture within a square region roughly `span`
         // wide, respecting whatever clip is already active on ctx. Shared by the small hazard
@@ -7051,29 +5938,17 @@
         // the theme's usual palette. Everything else about the hazard (its type/behavior) is
         // untouched - purely a visual override consumed by drawHazardHoles/drawHazardTexture.
         function getActiveHazardTheme() {
-            if (player.color === 'void') return { type: currentTheme.hazard.type, color: '#0d0621', edge: '#4b0082' };
-            // Galaxy: hazard pockets become miniature black holes instead of the theme's usual
-            // water/lava/ice - drawHazardHoles paints a swirling accretion disk on top of this
-            // near-black base, with the edge doubling as the glowing accretion-disk color.
-            if (player.color === 'galaxy') return { type: currentTheme.hazard.type, color: '#020103', edge: '#ff8a3d' };
-            // Glitch: hazard pockets turn solid black with a green matrix-digit edge -
-            // drawHazardHoles fills them with scrolling digit rain instead of the usual texture.
-            if (player.color === 'glitch') return { type: currentTheme.hazard.type, color: '#000000', edge: '#00ff41' };
-            // Corrupted Data: hazard pockets turn hot pink instead of the theme's usual water/
-            // lava/ice - keeps the usual drawHazardTexture pattern on top, just recolored.
-            if (player.color === 'corrupted') return { type: currentTheme.hazard.type, color: '#ff1493', edge: '#ff8fd1' };
-            // 1-Bit: hazard pockets turn solid black with a white edge - every hazard type
-            // (water/lava/ice) shares the same dedicated ripple/sparkle pattern below
-            // (drawHazardTexture) instead of its usual themed bubble/arc/line texture, so the
-            // whole skin reads as one consistent monochrome look rather than only water changing.
-            if (player.color === 'onebit') return { type: currentTheme.hazard.type, color: '#000000', edge: '#ffffff' };
+            let baseType = currentTheme.hazard.type;
+            const LSE = window.LegendaryStageEffects;
+            if (player.color === 'void') return LSE.void.getHazardTheme(baseType);
+            if (player.color === 'galaxy') return LSE.galaxy.getHazardTheme(baseType);
+            if (player.color === 'glitch') return LSE.glitch.getHazardTheme(baseType);
+            if (player.color === 'corrupted') return LSE.corrupted.getHazardTheme(baseType);
+            if (player.color === 'onebit') return LSE.onebit.getHazardTheme(baseType);
             // Pure Gold (Midas): hazard pockets stay themed-normal here - only the specific
             // tile(s) the player has actually stood on turn to liquid gold, permanently, via
             // goldenHazardTiles/GOLD_HAZARD_THEME checked per-tile in drawHazardHoles below.
-            // Rainbow: hazard pockets become a scribbled-in rainbow-striped pool (see
-            // drawRainbowHazardStripes) - color/edge here only matter for the base fill and
-            // hex-edge stroke, the striped texture itself is drawn separately.
-            if (player.color === 'rainbow') return { type: currentTheme.hazard.type, color: '#eaf6ff', edge: '#1a1a1a' };
+            if (player.color === 'rainbow') return LSE.rainbow.getHazardTheme(baseType);
             return currentTheme.hazard;
         }
 
@@ -7105,11 +5980,11 @@
                 ctx.fillStyle = tileHz.color; ctx.fill();
                 ctx.clip();
                 if (player.color === 'galaxy') {
-                    drawBlackHoleSwirl(tile.x, tile.y, HEX_SIZE);
+                    window.LegendaryStageEffects.galaxy.drawBlackHoleSwirl(ctx, tile.x, tile.y, HEX_SIZE);
                 } else if (player.color === 'glitch') {
-                    drawMatrixRain(tile.x, tile.y, HEX_SIZE);
+                    window.LegendaryStageEffects.glitch.drawMatrixRain(ctx, tile.x, tile.y, HEX_SIZE);
                 } else if (player.color === 'rainbow') {
-                    drawRainbowHazardStripes(tile.x, tile.y, HEX_SIZE);
+                    window.LegendaryStageEffects.rainbow.drawRainbowHazardStripes(ctx, tile.x, tile.y, HEX_SIZE);
                 } else {
                     drawHazardTexture(tile.x, tile.y, HEX_SIZE, tileHz);
                 }
@@ -7828,23 +6703,10 @@
                 }
                 ctx.restore();
             }
-            // Rainbow: while equipped, the floor becomes a patchwork coloring-book page - each
-            // hex gets its own flat pastel color (stable per-tile, picked from RAINBOW_PASTELS)
-            // and a bold black crayon outline, like every cell of the honeycomb was colored in
-            // by hand with a different marker.
+            // Rainbow: while equipped, the floor becomes a patchwork coloring-book page - see
+            // themes/legendary-rainbow.js's drawGroundPatchwork.
             if (player.color === 'rainbow') {
-                ctx.save();
-                for (let li = 0; li < visLand.length; li++) {
-                    let lt = visLand[li];
-                    let h = rainbowHash(lt.q * 12.9898 + lt.r * 78.233);
-                    ctx.fillStyle = RAINBOW_PASTELS[Math.floor(h * RAINBOW_PASTELS.length)];
-                    let c = cachedHexCorners(lt);
-                    ctx.beginPath(); ctx.moveTo(c[0].x, c[0].y);
-                    for (let i = 1; i < 6; i++) ctx.lineTo(c[i].x, c[i].y);
-                    ctx.closePath(); ctx.fill();
-                    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2.5; ctx.stroke();
-                }
-                ctx.restore();
+                window.LegendaryStageEffects.rainbow.drawGroundPatchwork(ctx, visLand, cachedHexCorners);
             }
             // Void: while equipped, the floor becomes a dark, uneven expanse - a near-black
             // base with slow-pulsing patches of deeper mottling scattered per-tile (same
@@ -8009,13 +6871,13 @@
                     // badge, or a mini notification bubble, cycled by speck type (see
                     // drawGlitchPopupDecor).
                     if (player.color === 'glitch') {
-                        drawGlitchPopupDecor(d, breezeX);
+                        window.LegendaryStageEffects.glitch.drawGlitchPopupDecor(ctx, d, breezeX);
                     } else if (player.color === 'void') {
-                        drawVoidDecor(d, breezeX);
+                        window.LegendaryStageEffects.void.drawVoidDecor(ctx, d, breezeX, v => voidGrayscaleActive = v);
                     } else if (player.color === 'onebit') {
-                        drawOnebitDecor(d, breezeX);
+                        window.LegendaryStageEffects.onebit.drawOnebitDecor(ctx, d, breezeX);
                     } else if (player.color === 'rainbow') {
-                        drawRainbowDecor(d, breezeX);
+                        window.LegendaryStageEffects.rainbow.drawRainbowDecor(ctx, d, breezeX);
                     } else {
                         // Pure Gold (Midas): decorations the player has brushed against stay
                         // gilded forever - same shapes, just swapped to a gold fill/stroke.
@@ -8143,23 +7005,23 @@
                     // Glitch: every tree renders as a classic "broken image" placeholder
                     // instead of its normal art, all the time (not just ones the player's
                     // bumped) - the sky/hazard/floor takeover happens elsewhere in draw().
-                    if (player.color === 'glitch') { drawMissingImageBox(t.x, t.y, t.radius); return; }
+                    if (player.color === 'glitch') { window.LegendaryStageEffects.glitch.drawMissingImageBox(ctx, t.x, t.y, t.radius); return; }
                     // Corrupted Data: every tree renders as its raw collision circle instead
                     // of any art at all.
-                    if (player.color === 'corrupted') { drawHitboxCircle(t.x, t.y, t.radius, '#39ff14', 'TREE'); return; }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, t.x, t.y, t.radius, '#39ff14', 'TREE'); return; }
                     // Galaxy: every tree renders as a glowing alien plant instead of its usual
                     // foliage, all the time (not just ones the player's bumped).
-                    if (player.color === 'galaxy') { drawAlienPlant(t.x, t.y, t.radius, t.seed || 0); return; }
+                    if (player.color === 'galaxy') { window.LegendaryStageEffects.galaxy.drawAlienPlant(ctx, t.x, t.y, t.radius, t.seed || 0); return; }
                     // Void: every tree renders as a dark tentacle bent toward the player by
                     // the player's own gravity, all the time (not just ones the player's
                     // bumped).
-                    if (player.color === 'void') { drawVoidTentacle(t.x, t.y, t.radius, t.seed || 0); return; }
+                    if (player.color === 'void') { window.LegendaryStageEffects.void.drawVoidTentacle(ctx, t.x, t.y, t.radius, t.seed || 0, player.worldX, player.worldY, v => voidGrayscaleActive = v, normalizeAngle, cubicPoint, cubicTangentAngle); return; }
                     // 1-Bit: every tree renders as a flat black/white silhouette instead of its
                     // usual foliage, all the time.
-                    if (player.color === 'onebit') { drawOnebitTree(t.x, t.y, t.radius, t.variant || 0, t.seed || 0); return; }
+                    if (player.color === 'onebit') { window.LegendaryStageEffects.onebit.drawOnebitTree(ctx, t.x, t.y, t.radius, t.variant || 0, t.seed || 0); return; }
                     // Rainbow: every tree renders as a doodled crayon tree instead of its
                     // usual foliage, all the time (see drawRainbowTree).
-                    if (player.color === 'rainbow') { drawRainbowTree(t.x, t.y, t.radius, t.seed || 0); return; }
+                    if (player.color === 'rainbow') { window.LegendaryStageEffects.rainbow.drawRainbowTree(ctx, t.x, t.y, t.radius, t.seed || 0); return; }
                     let variant = t.variant || 0; let sway = (currentTheme.name === 'Desert' ? 0 : Math.sin(Date.now()/1400 + (t.seed||0)) * 0.05) + breezeX;
                     if (t.type === 'tree' && currentTheme.name !== 'Desert' && currentTheme.name !== 'Snow') {
                         if (Math.abs(player.vx) + Math.abs(player.vy) > 12 && Math.random() < 0.06 && dist(player.worldX, player.worldY, t.x, t.y) < 600) {
@@ -8253,23 +7115,23 @@
                     let r = item.obj;
                     // Glitch: every rock renders as a garish pop-up ad box instead of its
                     // normal art, all the time.
-                    if (player.color === 'glitch') { drawPopupAdBox(r.x, r.y, r.radius); return; }
+                    if (player.color === 'glitch') { window.LegendaryStageEffects.glitch.drawPopupAdBox(ctx, r.x, r.y, r.radius); return; }
                     // Corrupted Data: every rock renders as its raw collision circle instead
                     // of any art at all.
-                    if (player.color === 'corrupted') { drawHitboxCircle(r.x, r.y, r.radius, '#39ff14', 'ROCK'); return; }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, r.x, r.y, r.radius, '#39ff14', 'ROCK'); return; }
                     // Galaxy: every rock renders as a cratered moon rock instead of its usual
                     // theme art, all the time.
-                    if (player.color === 'galaxy') { drawMoonRock(r.x, r.y, r.radius); return; }
+                    if (player.color === 'galaxy') { window.LegendaryStageEffects.galaxy.drawMoonRock(ctx, r.x, r.y, r.radius); return; }
                     // Void: every rock renders as an oozing mass of red flesh instead of its
                     // usual theme art, all the time - kept in full color while the rest of
                     // the map desaturates (see drawFleshRock).
-                    if (player.color === 'void') { drawFleshRock(r.x, r.y, r.radius); return; }
+                    if (player.color === 'void') { window.LegendaryStageEffects.void.drawFleshRock(ctx, r.x, r.y, r.radius, v => voidGrayscaleActive = v); return; }
                     // 1-Bit: every rock renders as a small monochrome house instead of theme
                     // rock art, all the time.
-                    if (player.color === 'onebit') { drawOnebitHouse(r.x, r.y, r.radius, r.variant || 0, r.seed || 0); return; }
+                    if (player.color === 'onebit') { window.LegendaryStageEffects.onebit.drawOnebitHouse(ctx, r.x, r.y, r.radius, r.variant || 0, r.seed || 0); return; }
                     // Rainbow: every rock renders as a squashed crayon blob instead of its
                     // usual theme art, all the time (see drawRainbowRock).
-                    if (player.color === 'rainbow') { drawRainbowRock(r.x, r.y, r.radius, r.seed || 0); return; }
+                    if (player.color === 'rainbow') { window.LegendaryStageEffects.rainbow.drawRainbowRock(ctx, r.x, r.y, r.radius, r.seed || 0); return; }
                     let variant = r.variant || 0;
                     ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.beginPath(); ctx.ellipse(r.x, r.y + r.radius*0.18, r.radius*1.05, r.radius*0.4, 0, 0, Math.PI*2); ctx.fill();
                     if (r.golden) {
@@ -8312,37 +7174,28 @@
                     let f = item.obj;
                     // Corrupted Data: fences are solid collision same as trees/rocks, so they
                     // render as their raw hitbox line instead of the usual post-and-rail art.
-                    if (player.color === 'corrupted') { drawHitboxLine(f.x1, f.y1, f.x2, f.y2, fenceThickness, '#39ff14', 'FENCE'); return; }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxLine(ctx, f.x1, f.y1, f.x2, f.y2, fenceThickness, '#39ff14', 'FENCE'); return; }
                     // Glitch: every fence renders as a blazing "firewall" barrier instead of
                     // the usual post-and-rail art, all the time.
-                    if (player.color === 'glitch') { drawFirewallSegment(f); return; }
+                    if (player.color === 'glitch') { window.LegendaryStageEffects.glitch.drawFirewallSegment(ctx, f); return; }
+                    // Rainbow: every fence renders as a doodled crayon fence instead of the
+                    // usual post-and-rail art, all the time.
+                    if (player.color === 'rainbow') { window.LegendaryStageEffects.rainbow.drawRainbowFence(ctx, f); return; }
                     let angle = Math.atan2(f.y2 - f.y1, f.x2 - f.x1);
                     let len = Math.hypot(f.x2 - f.x1, f.y2 - f.y1);
                     // Pure Gold (Midas): only fences the player has actually bumped into stay
                     // gilded - same post-and-rail shape, just swapped to gold posts/rails with
                     // a bright highlighted edge instead of the usual weathered wood.
                     let isGold = f.golden;
-                    // Rainbow: every fence renders as a doodled crayon fence - a thick black
-                    // outline with a different bright coloring-book color on each rail, like a
-                    // kid picked a new marker partway through.
-                    let isRainbow = player.color === 'rainbow';
                     ctx.save(); ctx.translate(f.midX, f.midY); ctx.rotate(angle);
                     ctx.fillStyle = 'rgba(0,0,0,0.22)'; ctx.fillRect(-len/2, 5, len, 4);
-                    ctx.fillStyle = isGold ? '#a9720c' : (isRainbow ? '#1a1a1a' : '#8a5a2b');
+                    ctx.fillStyle = isGold ? '#a9720c' : '#8a5a2b';
                     ctx.fillRect(-len/2 - 2, -14, 5, 20);
                     ctx.fillRect(len/2 - 3, -14, 5, 20);
-                    if (isRainbow) {
-                        ctx.fillStyle = RAINBOW_PALETTE[Math.floor(rainbowHash(f.midX * 0.13 + f.midY * 0.07) * RAINBOW_PALETTE.length)];
-                        ctx.fillRect(-len/2, -10, len, 4);
-                        ctx.fillStyle = RAINBOW_PALETTE[Math.floor(rainbowHash(f.midX * 0.13 + f.midY * 0.07 + 3) * RAINBOW_PALETTE.length)];
-                        ctx.fillRect(-len/2, -2, len, 4);
-                        ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 2;
-                    } else {
-                        ctx.fillStyle = isGold ? '#ffd700' : '#a97a3c';
-                        ctx.fillRect(-len/2, -10, len, 4);
-                        ctx.fillRect(-len/2, -2, len, 4);
-                        ctx.strokeStyle = isGold ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
-                    }
+                    ctx.fillStyle = isGold ? '#ffd700' : '#a97a3c';
+                    ctx.fillRect(-len/2, -10, len, 4);
+                    ctx.fillRect(-len/2, -2, len, 4);
+                    ctx.strokeStyle = isGold ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.2)'; ctx.lineWidth = 1;
                     ctx.strokeRect(-len/2, -10, len, 4); ctx.strokeRect(-len/2, -2, len, 4);
                     ctx.restore();
                 }
@@ -8362,8 +7215,8 @@
                     let c = item.obj;
                     // Corrupted Data: coins/gems render as their raw pickup-radius hitbox
                     // (gold - the one category here that's neither hazard nor obstacle).
-                    if (player.color === 'corrupted') { drawHitboxCircle(c.x, c.y, c.radius, '#ffd700', item.type.toUpperCase().slice(0, 6)); }
-                    else if (player.color === 'glitch') { drawRainbowWheelOfDeath(c.x, c.y, c.radius); }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, c.x, c.y, c.radius, '#ffd700', item.type.toUpperCase().slice(0, 6)); }
+                    else if (player.color === 'glitch') { window.LegendaryStageEffects.glitch.drawRainbowWheelOfDeath(ctx, c.x, c.y, c.radius); }
                     else if (window.LootSprites && window.LootSprites[item.type]) window.LootSprites[item.type](ctx, c);
                 }
                 else if (item.type === 'powerup') {
@@ -8531,7 +7384,7 @@
                 else if (item.type === 'projectile') {
                     let p = item.obj;
                     // Corrupted Data: enemy projectiles render as their raw collision circle.
-                    if (player.color === 'corrupted') { drawHitboxCircle(p.x, p.y, p.radius, '#ff003c', 'PRJ'); }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, p.x, p.y, p.radius, '#ff003c', 'PRJ'); }
                     else {
                         ctx.fillStyle = p.deflected ? '#ff477e' : '#ff0055'; ctx.beginPath(); ctx.arc(p.x, p.y, p.radius, 0, Math.PI*2); ctx.fill();
                         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x-2, p.y-2, p.radius*0.4, 0, Math.PI*2); ctx.fill();
@@ -8541,7 +7394,7 @@
                     let ic = item.obj;
                     // Corrupted Data: the player's own projectiles (icicles) render as their
                     // raw collision circle too, distinguished by color from hostile hitboxes.
-                    if (player.color === 'corrupted') { drawHitboxCircle(ic.x, ic.y, ic.radius, '#00e5ff', 'PPRJ'); }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, ic.x, ic.y, ic.radius, '#00e5ff', 'PPRJ'); }
                     else {
                     ctx.save(); ctx.translate(ic.x, ic.y); ctx.rotate(ic.angle);
                     // PERF: this gradient is drawn entirely in local (post-translate/rotate)
@@ -8598,7 +7451,7 @@
                     if (e.irradiated) drawRadioactiveGlow(e.x, e.y, e.radius);
                     // Corrupted Data: skip the enemy's usual sprite art entirely and draw its
                     // raw collision circle instead, labeled with its type.
-                    if (player.color === 'corrupted') { drawHitboxCircle(e.x, e.y, e.radius, '#ff003c', (e.type || 'ENEMY').toUpperCase().slice(0, 6)); }
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, e.x, e.y, e.radius, '#ff003c', (e.type || 'ENEMY').toUpperCase().slice(0, 6)); }
                     else if (sprite) sprite(ctx, e, player);
                     // Toxic Sludge: tint the sprite itself sickly green on top of its normal
                     // art, in addition to the aura glow drawn behind it above.
@@ -8658,7 +7511,7 @@
                         // instead of the usual jagged bolt art.
                         if (player.color === 'corrupted') {
                             let pu = powerupTypesById.get('lightning');
-                            drawHitboxLine(pdrawX, pdrawY, target.x, target.y, (pu ? pu.radius : 34) * 2, '#00e5ff', 'BOLT');
+                            window.LegendaryStageEffects.corrupted.drawHitboxLine(ctx, pdrawX, pdrawY, target.x, target.y, (pu ? pu.radius : 34) * 2, '#00e5ff', 'BOLT');
                         } else {
                             drawLightningBolt(pdrawX, pdrawY, target.x, target.y);
                         }
@@ -8669,7 +7522,7 @@
                     if (p.activePowerup === 'fire' && player.color === 'corrupted') {
                         let pu = powerupTypesById.get('fire');
                         let facing = (Math.abs(p.vx) + Math.abs(p.vy) > 0.3) ? Math.atan2(p.vy, p.vx) : p.facing;
-                        drawHitboxCone(pdrawX, pdrawY, pu ? pu.radius : 150, facing, Math.PI / 2.1, '#00e5ff', 'FIRE');
+                        window.LegendaryStageEffects.corrupted.drawHitboxCone(ctx, pdrawX, pdrawY, pu ? pu.radius : 150, facing, Math.PI / 2.1, '#00e5ff', 'FIRE');
                     }
                     drawCharacterModel(pdrawX, pdrawY, p.vx, p.vy, p.radius, p.color, Math.abs(p.jiggleForceX) + Math.abs(p.jiggleForceY) > 0, p.hat);
                     // Roguelite: Shuriken item - orbiting blades drawn around the player
@@ -8684,7 +7537,7 @@
                             // 11px radius of their orbit position (see the roguelite update
                             // loop), so render that hitbox instead of the spinning blade icon.
                             if (player.color === 'corrupted') {
-                                drawHitboxCircle(sx, sy, 11, '#00e5ff', 'SHRK');
+                                window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, sx, sy, 11, '#00e5ff', 'SHRK');
                             } else {
                                 ctx.save(); ctx.translate(sx, sy); ctx.rotate(shurikenSpin * 4);
                                 drawPixelIcon('shuriken', ctx, 0, 0, 33);
@@ -8726,64 +7579,14 @@
             ctx.restore();
 
             // Fairy Dust: aggressive, cool dark-blue "moonlight" cast over the whole scene -
-            // applied here in plain screen space, after every world layer above (sky, ground,
-            // trees, entities, player) has already been drawn, so it darkens everything
-            // uniformly no matter where the camera is. 'multiply' darkens/tints without fully
-            // flattening whatever shape or color was underneath. A darker vignette toward the
-            // screen edges layers on top of that base tint (also via 'multiply', so it stacks
-            // rather than replaces), then the player and every currently visible flower - which
-            // registered their world position into fairyLightSources as they were drawn above
-            // (see the player block and both flower-drawing spots) - get their light punched
-            // back through BOTH darkening layers via an additive ('lighter') pass, so a light
-            // sitting near the screen edge visibly pushes back the vignette there too, not just
-            // the base tint.
+            // the darkening/vignette/light-punch pass itself now lives in
+            // themes/legendary-fairy.js as window.LegendaryStageEffects.sparkle.
+            // drawMoonlightOverlay (an ambient/background stage effect); redrawing the player
+            // on top afterward stays here since it's specific character-rendering code.
             if (player.color === 'sparkle') {
-                ctx.save();
-                ctx.globalCompositeOperation = 'multiply';
-                ctx.fillStyle = 'rgba(18,22,64,0.78)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-                let vignetteR = Math.max(canvas.width, canvas.height) * 0.68;
-                let vignette = ctx.createRadialGradient(canvas.width/2, canvas.height/2, vignetteR*0.35, canvas.width/2, canvas.height/2, vignetteR);
-                vignette.addColorStop(0, 'rgba(255,255,255,1)');
-                vignette.addColorStop(0.6, 'rgba(120,120,140,1)');
-                vignette.addColorStop(1, 'rgba(15,15,35,1)');
-                ctx.fillStyle = vignette;
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                ctx.restore();
-
-                ctx.save();
-                ctx.globalCompositeOperation = 'lighter';
-                for (let li = 0; li < fairyLightSources.length; li++) {
-                    let ls = fairyLightSources[li];
-                    let sx = ls.x - camX + shakeX + tiltX, sy = ls.y - camY + shakeY + tiltY;
-                    if (sx < -ls.radius || sx > canvas.width + ls.radius || sy < -ls.radius || sy > canvas.height + ls.radius) continue;
-                    // Gentle per-light flicker (seeded off position so lights don't pulse in
-                    // lockstep) - a natural breathing candle/firefly waver rather than a static
-                    // disc.
-                    let seed = (ls.x * 0.013 + ls.y * 0.021) % 1;
-                    let flicker = ls.bright ? (0.92 + 0.08 * Math.sin(Date.now()/500)) : (0.75 + 0.25 * Math.sin(Date.now()/900 + seed*40));
-                    let grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, ls.radius);
-                    if (ls.bright) {
-                        // The player's own light - biggest, softest, and brightest at its core,
-                        // but still a hazy gradual falloff rather than a flat bright disc.
-                        grad.addColorStop(0, `rgba(255,246,222,${0.22*flicker})`);
-                        grad.addColorStop(0.2, `rgba(255,238,208,${0.15*flicker})`);
-                        grad.addColorStop(0.45, `rgba(225,232,255,${0.09*flicker})`);
-                        grad.addColorStop(0.75, `rgba(200,215,255,${0.04*flicker})`);
-                        grad.addColorStop(1, 'rgba(200,215,255,0)');
-                    } else {
-                        // Flower light - same hazy shape, noticeably dimmer/softer overall per
-                        // the "a bit dimmer" ask.
-                        grad.addColorStop(0, `rgba(255,240,210,${0.11*flicker})`);
-                        grad.addColorStop(0.3, `rgba(255,230,215,${0.07*flicker})`);
-                        grad.addColorStop(0.65, `rgba(255,220,225,${0.03*flicker})`);
-                        grad.addColorStop(1, 'rgba(255,220,225,0)');
-                    }
-                    ctx.fillStyle = grad;
-                    ctx.beginPath(); ctx.arc(sx, sy, ls.radius, 0, Math.PI * 2); ctx.fill();
-                }
-                ctx.restore();
+                window.LegendaryStageEffects.sparkle.drawMoonlightOverlay(ctx, canvas, {
+                    camX, camY, shakeX, shakeY, tiltX, tiltY, fairyLightSources
+                });
 
                 // The player's own light was drawn as a flat additive circle above, which would
                 // otherwise wash out on top of the character it's meant to be glowing behind -
@@ -9009,7 +7812,7 @@
         document.body.appendChild(perfOverlay);
         // Sets (not toggles) the overlay's visibility to match whether Corrupted Data is
         // currently equipped - safe to call as often as needed, e.g. on every skin equip.
-        function syncPerfOverlay() { perfOverlay.style.display = (player.color === 'corrupted') ? 'block' : 'none'; }
+        function syncPerfOverlay() { window.LegendaryStageEffects.corrupted.syncPerfOverlay(perfOverlay, player.color === 'corrupted'); }
         syncPerfOverlay();
 
         let perfStats = {

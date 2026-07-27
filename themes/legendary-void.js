@@ -117,13 +117,46 @@ window.LegendaryStageEffects.void = (function () {
         setGrayscaleActive(true);
     }
 
+    // Raw bearing-to-player is recomputed from scratch every frame, so if we pointed the
+    // tentacle straight at it we'd get an instant snap whenever that bearing sweeps through
+    // a wide arc quickly - most noticeably when the player passes close beneath a tree,
+    // where (like walking under a lamppost) the angle to the player changes very fast even
+    // though it's mathematically continuous. To make that read as a whip-around instead of
+    // a teleport, each tentacle keeps a small bit of persisted state (its current heading)
+    // keyed by world position, and turns toward the raw bearing at a capped angular speed
+    // rather than jumping straight to it.
+    let tentacleHeadings = new Map();
+    function getSmoothedHeading(key, rawAngle, now, normalizeAngle) {
+        let state = tentacleHeadings.get(key);
+        if (!state) {
+            state = { angle: rawAngle, lastTime: now };
+            tentacleHeadings.set(key, state);
+            return rawAngle;
+        }
+        // Clamp dt so a dropped frame / backgrounded tab doesn't let the heading "catch up"
+        // in one giant instantaneous step the next time we draw.
+        let dt = Math.min(0.1, Math.max(0, (now - state.lastTime) / 1000));
+        state.lastTime = now;
+        let diff = normalizeAngle(rawAngle - state.angle);
+        let maxStep = TENTACLE_MAX_TURN_RATE * dt;
+        if (diff > maxStep) diff = maxStep;
+        else if (diff < -maxStep) diff = -maxStep;
+        state.angle = normalizeAngle(state.angle + diff);
+        return state.angle;
+    }
+    // Radians/second the tentacle is allowed to turn - fast enough to still feel reactive
+    // and whip-like, slow enough that sweeping past a tree reads as a turn, not a jump.
+    const TENTACLE_MAX_TURN_RATE = Math.PI * 3;
+
     // Every tree renders as a single dark tentacle rising from a pool of black ooze, bent
     // toward the player as if being drawn in by the player's own gravity. The bend is
     // driven purely by the tree's current position relative to the player's world position
     // (passed in as playerWorldX/Y) - there's no idle sway or independent motion like the
     // other rare-skin foliage; a stationary player means a perfectly still tentacle. Only
     // the tip's eye-glow pulses (a timer-driven opacity flicker, not movement) to keep it
-    // feeling alive.
+    // feeling alive. The tentacle's heading is rate-limited (see getSmoothedHeading above)
+    // so crossing underneath a tree reads as a whip-around rather than an instant snap to
+    // the other side.
     //
     // The tentacle is built out of SEG_COUNT rigid segments, base to tip, rather than one
     // smooth bezier bent uniformly from its base. Each segment gets its own "give"
@@ -146,7 +179,8 @@ window.LegendaryStageEffects.void = (function () {
 
         let ddx = playerWorldX - x, ddy = playerWorldY - y;
         let distToPlayer = Math.hypot(ddx, ddy);
-        let targetAngle = Math.atan2(ddy, ddx);
+        let rawTargetAngle = Math.atan2(ddy, ddx);
+        let targetAngle = getSmoothedHeading(x + ',' + y, rawTargetAngle, Date.now(), normalizeAngle);
         let upAngle = -Math.PI / 2;
         let angleDiff = normalizeAngle(targetAngle - upAngle);
 

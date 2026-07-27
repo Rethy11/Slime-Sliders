@@ -2285,20 +2285,33 @@
             ];
         }
 
-        // The Dupe Trader's stock is fixed to its three Dupe Shop exclusives rather than rolled
-        // from roguelikeTierPools, but still follows the same one-standard/one-specialty shape
-        // as rollTraderStock: Greedy (the only common exclusive) is always the standard slot,
-        // and the specialty slot is Devil Deal 70% of the time / Spectre 30% (matching the
-        // epic/legendary split rollTraderStock uses for its own hi-tier slot). All three are
-        // still kept out of roguelikeTierPools/rollRoguelikeItem, so none of them can be found
-        // anywhere except here.
+        // Same tier weights rollRoguelikeItem's chest/mimic roll uses (70% common / 20% epic /
+        // 10% legendary) - reused here so the Dupe Trader's regular slot feels like a normal
+        // roll from the shared pools rather than a separate distribution players have to learn.
+        function rollRegularTier() {
+            let r = Math.random();
+            if (r < 0.10) return 'legendary';
+            if (r < 0.30) return 'epic';
+            return 'common';
+        }
+
+        // The Dupe Trader's stock is always two slots: one regular item pulled from the same
+        // shared pools every other source draws from (roguelikeTierPools - so it can be
+        // anything a chest, mimic, or the Gold Trader could also hand out), and one specialty
+        // item that's exclusive to this trader and can't be found anywhere else. Greedy/Devil
+        // Deal/Spectre are deliberately left out of roguelikeTierPools/rollRoguelikeItem so the
+        // specialty slot is the only way to ever get one.
+        const dupeShopExclusives = {
+            common: 'greedy',
+            epic: 'devildeal',
+            legendary: 'spectre'
+        };
         function dupeShopStock() {
-            let specialty = Math.random() < 0.7
-                ? { itemId: 'devildeal', tier: 'epic', purchased: false }
-                : { itemId: 'spectre', tier: 'legendary', purchased: false };
+            let regularTier = rollRegularTier();
+            let specialtyTier = rollRegularTier();
             return [
-                { itemId: 'greedy', tier: 'common', purchased: false },
-                specialty
+                { itemId: pickTierItem(regularTier), tier: regularTier, purchased: false },
+                { itemId: dupeShopExclusives[specialtyTier], tier: specialtyTier, purchased: false }
             ];
         }
 
@@ -4513,7 +4526,7 @@
             activeMerchant = { kind, trader };
             document.getElementById('merchant-title').innerText = kind === 'skin' ? 'Dupe Trader' : 'Gold Trader';
             document.getElementById('merchant-subtitle').innerText = kind === 'skin'
-                ? "Spare skin dupes for one of these exclusives. Each pick's a one-time deal."
+                ? "Spare skin dupes for a pick from today's stock - one is a Dupe Trader exclusive. Each pick's a one-time deal."
                 : "Gold for a pick from today's stock. Each pick's a one-time deal.";
             renderMerchantItems();
             document.getElementById('merchant-dialogue').style.display = 'block';

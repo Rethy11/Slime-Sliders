@@ -2816,8 +2816,8 @@
             buildSurvivalFences();
             buildFenceGrid();
 
-            let chestTile = pickLandHex(300) || (landHexList.length ? landHexList[0] : null);
-            if (chestTile) { chest = { x: chestTile.x, y: chestTile.y, radius: 25, collected: false }; chestTile.element = { type: 'chest' }; levelChestPossible = 1; }
+            // No starting chest for Survive stages - the two chests flanking the goal, spawned
+            // once the timer runs out (see updateSurvivalMode), are the level's only chests.
             spawnSkeletonChests();
 
             // Bees need a hive to home to - mirrors generateLevel()'s stage-4-and-up hive

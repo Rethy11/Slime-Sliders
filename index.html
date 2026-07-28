@@ -245,7 +245,20 @@
            modals, so player dragging is disabled without needing any extra input guarding. */
         #fishing-dialogue { display: none; position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: calc(100% - 48px); max-width: 460px; background: rgba(10, 15, 20, 0.88); border: 3px solid #fff; border-radius: 10px; padding: 16px 20px; z-index: 60; box-shadow: 0 8px 0 rgba(0,0,0,0.35); cursor: pointer; }
         #fishing-dialogue-text { color: #fff; font-size: 0.62rem; line-height: 1.9; white-space: pre-wrap; }
-        #fishing-dialogue-hint { display: block; text-align: right; margin-top: 10px; font-size: 0.5rem; color: rgba(255,255,255,0.65); animation: pulse 1s infinite; }
+        #fishing-dialogue-hint, #story-ending-dialogue-hint { display: block; text-align: right; margin-top: 10px; font-size: 0.5rem; color: rgba(255,255,255,0.65); animation: pulse 1s infinite; }
+
+        /* Story-ending textbox: the final zoomed-out epilogue that plays once the fishing-scene
+           story runs out. Same two-tap read/advance convention as #fishing-dialogue above, but
+           centered on screen rather than docked to the bottom, to set it apart as the story's
+           closing beat rather than another ordinary encounter. */
+        #story-ending-dialogue { display: none; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 460px; background: rgba(10, 15, 20, 0.88); border: 3px solid #fff; border-radius: 10px; padding: 16px 20px; z-index: 65; box-shadow: 0 8px 0 rgba(0,0,0,0.35); cursor: pointer; text-align: center; }
+        #story-ending-dialogue-text { color: #fff; font-size: 0.62rem; line-height: 1.9; white-space: pre-wrap; }
+
+        /* Full-screen overlay used to flicker/blackout the stage: a brief flicker (then back to
+           transparent) when re-visiting the man and boy after the story's ended, or a flicker
+           that resolves to full black right before the story-ending game over. Starts fully
+           transparent and non-interactive so it never blocks input outside of these moments. */
+        #story-blackout { display: block; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; opacity: 0; pointer-events: none; z-index: 62; }
 
         @keyframes unlockAnim {
             0% { transform: translate(-50%, -50%) scale(0); opacity: 0; }
@@ -546,6 +559,8 @@
     <div id="secret-unlock-toast"><span class="glitch-title">// GLITCH DETECTED //</span>CORRUPTED DATA slime unlocked!<br>Equip it in the Skins shop.</div>
 
     <div id="fishing-dialogue"><span id="fishing-dialogue-text"></span><span id="fishing-dialogue-hint">tap to continue</span></div>
+    <div id="story-ending-dialogue"><span id="story-ending-dialogue-text"></span><span id="story-ending-dialogue-hint">tap to continue</span></div>
+    <div id="story-blackout"></div>
 
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""><span class="notif-dot" id="almanac-corner-dot"></span></button>
@@ -1421,7 +1436,7 @@
             { id: 'rare_collector',  name: 'Rare Collector',     desc: 'Unlock all 10 rare skins.',                   icon: 'ach_gem',          check: () => rareSkins.every(s => parseInt(storage.get('inv_' + s.id) || 0) > 0) },
             { id: 'hatalogue',       name: 'Hatalogue',          desc: 'Unlock all 10 hats.',                         icon: 'ach_hatalogue',    check: () => hats.every(h => parseInt(storage.get('inv_' + h.id) || 0) > 0) },
             { id: 'glitch_hunter',   name: 'Glitch Hunter',      desc: 'Discover the secret Corrupted Data skin.',    icon: 'ach_glitchbadge',  check: () => parseInt(storage.get('inv_corrupted') || 0) > 0 },
-            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', icon: 'ach_scroll',      check: () => (parseInt(storage.get('landSlidersStorySeen')) || 0) >= fishingStorySentences.length },
+            { id: 'story_complete',  name: 'The Whole Story',    desc: 'Read through the entire fishing-scene story.', icon: 'ach_scroll',      check: () => storage.get('landSlidersStoryComplete') === 'true' },
             // Unlike every other entry here, this can't be phrased as a check() against
             // persisted stats - it depends on the specific level the player died on (goal
             // fenced off entirely) plus having actually seen that goal before dying. Both are
@@ -1588,11 +1603,35 @@
             "But nothing seemed amiss."
         ];
         let fishingStoryIndex = parseInt(storage.get('landSlidersFishingIndex')) || 0;
-        if (!Number.isFinite(fishingStoryIndex) || fishingStoryIndex < 0 || fishingStoryIndex >= fishingStorySentences.length) fishingStoryIndex = 0;
+        // fishingStoryIndex === fishingStorySentences.length is a valid, deliberate state (the
+        // story has been fully read and shouldn't wrap back to the start on reload) - only
+        // out-of-range or corrupt values get reset to 0.
+        if (!Number.isFinite(fishingStoryIndex) || fishingStoryIndex < 0 || fishingStoryIndex > fishingStorySentences.length) fishingStoryIndex = 0;
         // The pair of sentences currently on screen, and which of the two (0 or 1) is showing -
         // null when the dialogue box is closed.
         let fishingDialogueSentences = null;
         let fishingDialogueStep = 0;
+        // True while fishingDialogueSentences holds the story's last pair (see
+        // triggerFishingDialogue) - on close, that pair hands off to the story-ending epilogue
+        // below instead of just resuming the game like every earlier pair does.
+        let fishingDialogueIsFinal = false;
+        // True while fishingDialogueSentences is being reused to replay the closing pair as
+        // flavor text (see triggerStoryCompleteFlavor) after the story's already been finished -
+        // on close this triggers a brief flicker instead of the epilogue or an instant resume.
+        let fishingFlavorReplay = false;
+
+        // The zoomed-out epilogue that plays once the fishing-scene story (above) has been read
+        // all the way through. Shown one segment at a time in #story-ending-dialogue (see
+        // triggerStoryEnding/advanceStoryEnding), centered on screen rather than docked to the
+        // bottom to mark it as the story's closing beat. Finishing the last segment unlocks the
+        // 'story_complete' achievement and ends the run - see advanceStoryEnding.
+        const storyEndingSegments = [
+            "A widened perspective would first reveal a dilapidated, very old house with three skeletons held together by clay, sitting in a room, and the carcasses of two dogs laying directly outside, where they had pawed to be let in for 35 days before succumbing to hunger and consuming one another, though this event took place long ago.",
+            "Go even farther out and you would notice a glass serving dishes round top, covering the house in an effort to preserve what was inside.",
+            "The next level out would reveal a glass prism like container holding everything else, though the prism was two prisms, one with the top facing up, and the other with the top facing down, balancing perfectly on top of one of the tips of the prisms, though it was unnecessary, as it was inside of a vacuum, with a glass sphere sealing the vacuum a level higher.",
+            "Finally you would see that hundreds of thousands of similar tiny spheres filled up a sand hourglass on the desk of a man you would describe as \"eccentric.\"\nAnd all of this was as it is written, for that is how it must be, and has always been."
+        ];
+        let storyEndingIndex = 0;
 
         // Configurations
         // Regular stage themes now live one-per-file in themes/ (forest.js, desert.js,
@@ -5033,34 +5072,126 @@
         // game (same convention as the shop/settings/almanac modals) and pulls the next two
         // sentences of the story off wherever fishingStoryIndex left off, then persists the
         // advanced index immediately so the player keeps their place even if they quit right
-        // after reading - the story wraps back to the beginning once it runs out.
+        // after reading. Once the story's been fully read (see triggerStoryCompleteFlavor),
+        // every further touch replays its closing pair as flavor text instead - the story never
+        // wraps back to the beginning.
         function triggerFishingDialogue() {
+            if (storage.get('landSlidersStoryComplete') === 'true') { triggerStoryCompleteFlavor(); return; }
             if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
             let total = fishingStorySentences.length;
-            let idx = fishingStoryIndex % total;
-            fishingDialogueSentences = [fishingStorySentences[idx], fishingStorySentences[(idx + 1) % total]];
+            let idx = fishingStoryIndex;
+            // The last pair hands off into the story-ending epilogue on close (see
+            // advanceFishingDialogue) rather than just resuming the game like every earlier pair.
+            fishingDialogueIsFinal = (idx + 2) >= total;
+            fishingDialogueSentences = [fishingStorySentences[idx], fishingStorySentences[idx + 1]];
             fishingDialogueStep = 0;
-            fishingStoryIndex = (idx + 2) % total;
+            fishingStoryIndex = fishingDialogueIsFinal ? total : idx + 2;
             storage.set('landSlidersFishingIndex', fishingStoryIndex);
-            let seen = (parseInt(storage.get('landSlidersStorySeen')) || 0) + 2;
-            storage.set('landSlidersStorySeen', seen);
-            checkAchievements();
             showFishingDialogueStep();
             document.getElementById('fishing-dialogue').style.display = 'block';
         }
 
-        // Advances to the second sentence on the first tap, then closes the box and hands
-        // control back to the game on the second tap.
+        // Advances to the second sentence on the first tap, then closes the box on the second
+        // tap. What happens next depends on which pair this was: the story's last pair hands off
+        // straight into the story-ending epilogue; a post-completion flavor replay (see
+        // triggerStoryCompleteFlavor) gets a brief flicker before resuming; every other pair just
+        // hands control back to the game like before.
         function advanceFishingDialogue() {
             if (!fishingDialogueSentences) return;
             fishingDialogueStep++;
             if (fishingDialogueStep >= fishingDialogueSentences.length) {
                 document.getElementById('fishing-dialogue').style.display = 'none';
                 fishingDialogueSentences = null;
+                if (fishingDialogueIsFinal) {
+                    fishingDialogueIsFinal = false;
+                    triggerStoryEnding();
+                    return;
+                }
+                if (fishingFlavorReplay) {
+                    fishingFlavorReplay = false;
+                    stageFlicker(false, () => { if (gameState === 'paused') gameState = previousState; });
+                    return;
+                }
                 if (gameState === 'paused') gameState = previousState;
                 return;
             }
             showFishingDialogueStep();
+        }
+
+        // Once the story's already been fully read, every further touch of the man and boy just
+        // replays its closing pair as flavor text (reusing the same #fishing-dialogue box) rather
+        // than doing anything to progress or repeat the story, followed by a brief stage flicker
+        // rather than an instant resume - see the fishingFlavorReplay branch in
+        // advanceFishingDialogue above.
+        function triggerStoryCompleteFlavor() {
+            if (gameState === 'playing') { previousState = gameState; gameState = 'paused'; }
+            fishingDialogueIsFinal = false;
+            fishingFlavorReplay = true;
+            let total = fishingStorySentences.length;
+            fishingDialogueSentences = [fishingStorySentences[total - 2], fishingStorySentences[total - 1]];
+            fishingDialogueStep = 0;
+            showFishingDialogueStep();
+            document.getElementById('fishing-dialogue').style.display = 'block';
+        }
+
+        // Fills in the currently-showing segment of the story-ending epilogue (see
+        // triggerStoryEnding/advanceStoryEnding below).
+        function showStoryEndingStep() {
+            document.getElementById('story-ending-dialogue-text').innerText = storyEndingSegments[storyEndingIndex];
+        }
+
+        // Called once the story's final pair has been read out in #fishing-dialogue - plays the
+        // zoomed-out epilogue one segment at a time in the centered #story-ending-dialogue box.
+        // The game stays paused the whole way through, picking up from triggerFishingDialogue.
+        function triggerStoryEnding() {
+            storyEndingIndex = 0;
+            showStoryEndingStep();
+            document.getElementById('story-ending-dialogue').style.display = 'block';
+        }
+
+        // Advances through the epilogue's segments one tap at a time. Tapping past the final
+        // segment marks the story permanently complete, unlocks its achievement, and flickers the
+        // stage to black before ending the run - the story never loops back to the start after this.
+        function advanceStoryEnding() {
+            storyEndingIndex++;
+            if (storyEndingIndex >= storyEndingSegments.length) {
+                document.getElementById('story-ending-dialogue').style.display = 'none';
+                storage.set('landSlidersStoryComplete', 'true');
+                checkAchievements();
+                stageFlicker(true, () => {
+                    triggerGameOver('story');
+                    // The game-over screen has its own dimmed backdrop, so the blackout overlay
+                    // is no longer needed once it's up - clear it rather than leaving it sitting
+                    // on top at full opacity, which would hide the screen underneath.
+                    let overlay = document.getElementById('story-blackout');
+                    overlay.style.opacity = '0';
+                    overlay.style.pointerEvents = 'none';
+                });
+                return;
+            }
+            showStoryEndingStep();
+        }
+
+        // Flickers the full-screen #story-blackout overlay a few times, ending either fully dark
+        // (endDark true, ahead of the story-ending game over) or back to fully transparent
+        // (endDark false, the brief flicker after a post-completion flavor replay), then fires
+        // callback once the flicker settles.
+        function stageFlicker(endDark, callback) {
+            let overlay = document.getElementById('story-blackout');
+            overlay.style.pointerEvents = 'auto';
+            let steps = [1, 0, 1, 0, 1, 0, 1, endDark ? 1 : 0];
+            let i = 0;
+            function tick() {
+                if (i < steps.length) {
+                    overlay.style.opacity = steps[i];
+                    i++;
+                    setTimeout(tick, 80);
+                } else {
+                    if (!endDark) overlay.style.pointerEvents = 'none';
+                    if (callback) callback();
+                }
+            }
+            tick();
         }
 
         // Called once when the player physically touches a rare trader (see the collision
@@ -5275,6 +5406,7 @@
         // Tap/click anywhere on the fishing-scene story box to advance it - first tap reveals
         // the second sentence, second tap closes it and hands control back to the game.
         document.getElementById('fishing-dialogue').addEventListener('click', advanceFishingDialogue);
+        document.getElementById('story-ending-dialogue').addEventListener('click', advanceStoryEnding);
         // The Leave button already has the close-modal-btn class (hides the modal + resumes
         // gameState via the generic handler below) - this second listener just clears
         // activeMerchant so a stale reference doesn't linger into the next trader encounter.
@@ -8258,6 +8390,7 @@
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
             else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
             }
+            else if (reason === 'story') { document.getElementById('death-reason').innerText = "It has always been this way."; }
             else { 
                 document.getElementById('death-reason').innerText = `Killed by: ${enemyDB[reason].name}`;
                 unlockAlmanacEntry(reason);

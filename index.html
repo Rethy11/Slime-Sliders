@@ -177,24 +177,43 @@
         .level-stat-label { flex: 1; }
         .level-stat-value { color: #ffcf33; font-weight: bold; }
 
-        /* Letter-grade badge: slams into #level-modal's top-right corner once the level score
-           (coins 40% / enemies 30% / chest 30%) is tallied, at the end of runLevelCompleteSequence(). */
-        #level-grade-badge { position: absolute; top: 14px; right: 14px; width: 56px; height: 60px; border-radius: 12px; background: radial-gradient(circle at 35% 30%, #b3e5fc, #4fc3f7 70%, #0288d1); border: 3px solid #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; box-shadow: 0 6px 14px rgba(0,0,0,0.5); opacity: 0; z-index: 5; pointer-events: none; }
-        #level-grade-badge.grade-f { background: radial-gradient(circle at 35% 30%, #ff8a8a, #e53935 70%, #b71c1c); }
-        #level-grade-badge.grade-d { background: radial-gradient(circle at 35% 30%, #ffb37a, #ff8a3d 70%, #d35400); }
-        #level-grade-badge.grade-c { background: radial-gradient(circle at 35% 30%, #fff59d, #ffd54f 70%, #f9a825); }
-        #level-grade-badge.grade-b { background: radial-gradient(circle at 35% 30%, #b9f6ca, #66bb6a 70%, #2e7d32); }
-        #level-grade-badge.grade-a { background: radial-gradient(circle at 35% 30%, #b3e5fc, #4fc3f7 70%, #0288d1); }
-        #level-grade-badge.grade-aplus { background: radial-gradient(circle at 35% 30%, #f3e5ff, #ba68c8 70%, #6a1b9a); }
-        #level-grade-badge.slam { animation: gradeSlam 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
-        #level-grade-letter { font-size: 1.15rem; font-weight: bold; color: #fff; text-shadow: 0 2px 2px rgba(0,0,0,0.4); line-height: 1; }
-        #level-grade-percent { font-size: 0.4rem; color: rgba(255,255,255,0.9); margin-top: 3px; }
+        /* Letter-grade rosette: a color-coded award-ribbon medallion (pleated sunburst edge +
+           two hanging tails) that slams into place near #level-modal's top-right corner once the
+           level score (coins 40% / enemies 30% / chest 30%) is tallied, at the end of
+           runLevelCompleteSequence(). Lives OUTSIDE #level-modal (appended to <body> - see HTML)
+           specifically so it isn't clipped by the modal's own overflow:hidden, since it's meant
+           to poke slightly past the modal's edge. position:fixed and its left/top are set from
+           JS (positionGradeBadge()) using the modal's live bounding rect, anchored so the
+           rosette's own center - not its top-left corner - lands at the target point; see
+           transform-origin below, which is what keeps that anchor point fixed on screen through
+           the rotate/scale of the slam animation and its resting askew tilt.
+           No boxed background of any kind here - the ribbon shapes below ARE the only color. */
+        #level-grade-badge { position: fixed; width: 210px; height: 280px; transform-origin: 105px 105px; opacity: 0; z-index: 70; pointer-events: none; }
+        #level-grade-badge.grade-f { --grade-c1: #ff9d9d; --grade-c2: #b71c1c; }
+        #level-grade-badge.grade-d { --grade-c1: #ffc199; --grade-c2: #d35400; }
+        #level-grade-badge.grade-c { --grade-c1: #fff3a0; --grade-c2: #e6a800; }
+        #level-grade-badge.grade-b { --grade-c1: #b9f6ca; --grade-c2: #2e7d32; }
+        #level-grade-badge.grade-a { --grade-c1: #b3e5fc; --grade-c2: #0277bd; }
+        #level-grade-badge.grade-aplus { --grade-c1: #eecbff; --grade-c2: #6a1b9a; }
+        #level-grade-badge.slam { animation: gradeSlam 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
         @keyframes gradeSlam {
-            0% { opacity: 0; transform: scale(2.6) rotate(18deg) translateY(-45px); }
-            55% { opacity: 1; transform: scale(0.85) rotate(-6deg) translateY(3px); }
-            75% { transform: scale(1.12) rotate(2deg); }
-            100% { opacity: 1; transform: scale(1) rotate(0deg) translateY(0); }
+            0% { opacity: 0; transform: scale(2.8) rotate(30deg); }
+            55% { opacity: 1; transform: scale(0.8) rotate(-18deg); }
+            75% { transform: scale(1.1) rotate(-5deg); }
+            100% { opacity: 1; transform: scale(1) rotate(-9deg); }
         }
+        /* Pleated sunburst rim: alternating wedges of the grade's two shades, standing in for a
+           ribbon's stitched pleats. Sits behind the plain medallion face so only its rim shows. */
+        .rosette-pleats { position: absolute; top: 6px; left: 6px; width: 198px; height: 198px; border-radius: 50%; background: repeating-conic-gradient(var(--grade-c1) 0deg 9deg, var(--grade-c2) 9deg 18deg); box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        /* Medallion face: a plain glossy dome so the letter reads clearly against the busier
+           pleated rim behind it. */
+        .rosette-medal { position: absolute; top: 21px; left: 21px; width: 168px; height: 168px; border-radius: 50%; background: radial-gradient(circle at 35% 28%, var(--grade-c1), var(--grade-c2) 78%); border: 4px solid rgba(255,255,255,0.9); box-shadow: inset 0 -8px 16px rgba(0,0,0,0.28), inset 0 5px 10px rgba(255,255,255,0.3); }
+        /* Two ribbon tails hanging below the medallion, splayed slightly apart with a V-notch
+           cut into each bottom edge - the classic county-fair rosette silhouette. */
+        .rosette-tail { position: absolute; top: 150px; width: 36px; height: 92px; background: linear-gradient(var(--grade-c2), var(--grade-c1)); clip-path: polygon(0 0, 100% 0, 100% 76%, 50% 100%, 0 76%); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.15); }
+        .rosette-tail-l { left: 58px; transform: rotate(-16deg); transform-origin: top center; }
+        .rosette-tail-r { left: 116px; transform: rotate(16deg); transform-origin: top center; }
+        #level-grade-letter { position: absolute; top: 105px; left: 105px; transform: translate(-50%, -50%); font-size: 3.4rem; font-weight: bold; color: #fff; text-shadow: 0 3px 5px rgba(0,0,0,0.55), 0 0 14px rgba(0,0,0,0.3); line-height: 1; }
         /* Items-won section is hidden by default (most levels grant zero run items) and only
            switched on by showLevelCompleteSynopsis() when levelItemsWon actually has entries -
            typically true for a Survive stage, whose two flanking chests (see updateSurvivalMode)
@@ -642,7 +661,6 @@
     </div>
 
     <div id="level-modal" class="modal">
-        <div id="level-grade-badge"><span id="level-grade-letter"></span><span id="level-grade-percent"></span></div>
         <h2 id="level-title">Level Complete!</h2>
         <div id="level-synopsis">
             <div id="level-stat-row-coins" class="level-stat-row"><img class="icon-img level-stat-icon" id="level-stat-coin-icon" alt=""><span class="level-stat-label">Coins</span><span id="level-stat-coins" class="level-stat-value">0/0</span></div>
@@ -654,6 +672,17 @@
             <div id="level-items-won"></div>
         </div>
         <button id="level-continue-btn">Continue</button>
+    </div>
+
+    <!-- Deliberately NOT nested inside #level-modal: the modal clips its own content
+         (overflow:hidden) so it can scroll, but this rosette is meant to slam in slightly
+         outside the modal's edge, askew - see positionGradeBadge()/#level-grade-badge CSS. -->
+    <div id="level-grade-badge">
+        <div class="rosette-tail rosette-tail-l"></div>
+        <div class="rosette-tail rosette-tail-r"></div>
+        <div class="rosette-pleats"></div>
+        <div class="rosette-medal"></div>
+        <span id="level-grade-letter"></span>
     </div>
 
     <script src="sprites/wanderer.js"></script>
@@ -2594,15 +2623,31 @@
         }
 
         // Computes the grade and slams the badge into #level-modal's top-right corner.
+        // Anchors #level-grade-badge (a position:fixed sibling of #level-modal, deliberately not
+        // nested inside it - see the HTML comment) so the rosette's own center (its
+        // transform-origin, 105px/105px in its local box) lands near #level-modal's top-right
+        // corner, inset just enough that only the pleated rim/tails poke past the modal's edge
+        // rather than the whole rosette. Called once right before the slam-in, after the modal's
+        // final size (title + stat rows + items-won section) is already settled.
+        function positionGradeBadge() {
+            let modal = document.getElementById('level-modal');
+            let gradeBadge = document.getElementById('level-grade-badge');
+            if (!modal || !gradeBadge) return;
+            let rect = modal.getBoundingClientRect();
+            let anchorX = rect.right - 74;
+            let anchorY = rect.top + 74;
+            gradeBadge.style.left = (anchorX - 105) + 'px';
+            gradeBadge.style.top = (anchorY - 105) + 'px';
+        }
+
         function revealLevelGrade(onDone) {
             let gradeBadge = document.getElementById('level-grade-badge');
             let gradeLetterEl = document.getElementById('level-grade-letter');
-            let gradePercentEl = document.getElementById('level-grade-percent');
-            let { pct, grade } = calculateLevelGrade();
+            let { grade } = calculateLevelGrade();
             if (gradeBadge && gradeLetterEl) {
                 gradeLetterEl.innerText = grade;
-                if (gradePercentEl) gradePercentEl.innerText = pct + '%';
                 gradeBadge.classList.add('grade-' + grade.toLowerCase().replace('+', 'plus'));
+                positionGradeBadge();
                 gradeBadge.style.opacity = '1';
                 gradeBadge.classList.remove('slam'); void gradeBadge.offsetWidth; gradeBadge.classList.add('slam');
                 playSFX('grade_reveal');
@@ -4849,6 +4894,8 @@
         function nextLevel() {
             level++;
             document.getElementById('level-modal').style.display = 'none';
+            let gradeBadge = document.getElementById('level-grade-badge');
+            if (gradeBadge) gradeBadge.style.opacity = '0';
             gameState = 'playing'; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; generateLevel();
         }
 

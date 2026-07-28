@@ -5194,7 +5194,6 @@
                 storage.set('landSlidersStoryComplete', 'true');
                 checkAchievements();
                 stopMusicForStoryEnding();
-                playSFX('lightbulb_flicker');
                 stageFlicker(true, () => {
                     triggerGameOver('story');
                     // The game-over screen has its own dimmed backdrop, so the blackout overlay
@@ -5212,8 +5211,11 @@
         // Flickers the full-screen #story-blackout overlay a few times, ending either fully dark
         // (endDark true, ahead of the story-ending game over) or back to fully transparent
         // (endDark false, the brief flicker after a post-completion flavor replay), then fires
-        // callback once the flicker settles.
+        // callback once the flicker settles. Every call gets the lightbulb-buzz SFX (see
+        // playSFX's 'lightbulb_flicker' case) - the man-and-boy revisit flicker and the story's
+        // final flicker both use this same visual effect, so both get the sound.
         function stageFlicker(endDark, callback) {
+            playSFX('lightbulb_flicker');
             let overlay = document.getElementById('story-blackout');
             overlay.style.pointerEvents = 'auto';
             let steps = [1, 0, 1, 0, 1, 0, 1, endDark ? 1 : 0];

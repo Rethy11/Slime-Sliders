@@ -1992,24 +1992,40 @@
                 let slamGain = actx.createGain(); slamGain.gain.setValueAtTime(userSettings.sfxVol * 0.3, t + 0.03); slamGain.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
                 slamOsc.connect(slamGain); slamGain.connect(actx.destination); slamOsc.start(t + 0.03); slamOsc.stop(t + 0.14);
             } else if (type === 'lightbulb_flicker') {
-                // Stuttering electrical buzz synced to stageFlicker's on/off steps at the end of
-                // the story (see advanceStoryEnding) - a run of short, unevenly-pitched bursts
-                // like a dying bulb, ending on a harsher final pop right as the screen cuts to
-                // black for good.
+                // Electrical crackle+buzz synced to stageFlicker's on/off steps - each step gets
+                // a short burst of filtered noise (the "crackle") layered with a higher, more
+                // speaker-friendly buzz tone, since a low sine/square alone sits in a bass range
+                // that's easy to lose entirely on phone speakers. Ends on a louder, longer pop
+                // right as the screen settles.
                 let offsets = [0, 0.08, 0.16, 0.24, 0.32, 0.4, 0.48, 0.56];
-                osc.type = 'square'; osc.frequency.setValueAtTime(90 + Math.random() * 40, t);
-                gain.gain.setValueAtTime(userSettings.sfxVol * 0.18, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
-                osc.start(t); osc.stop(t + 0.05);
-                offsets.slice(1).forEach((offset, i) => {
-                    let isLast = i === offsets.slice(1).length - 1;
+                function noiseBurst(start, dur, vol, filterFreq) {
+                    let bufSize = Math.max(1, Math.floor(actx.sampleRate * dur));
+                    let buffer = actx.createBuffer(1, bufSize, actx.sampleRate);
+                    let data = buffer.getChannelData(0);
+                    for (let n = 0; n < bufSize; n++) data[n] = Math.random() * 2 - 1;
+                    let src = actx.createBufferSource(); src.buffer = buffer;
+                    let filt = actx.createBiquadFilter(); filt.type = 'bandpass';
+                    filt.frequency.value = filterFreq; filt.Q.value = 0.9;
+                    let nGain = actx.createGain();
+                    nGain.gain.setValueAtTime(vol, start);
+                    nGain.gain.exponentialRampToValueAtTime(0.001, start + dur);
+                    src.connect(filt); filt.connect(nGain); nGain.connect(actx.destination);
+                    src.start(start); src.stop(start + dur);
+                }
+                osc.disconnect();
+                offsets.forEach((offset, i) => {
+                    let isLast = i === offsets.length - 1;
+                    let dur = isLast ? 0.16 : 0.06;
+                    // Crackle: broadband filtered noise, the dominant/audible part of the sound.
+                    noiseBurst(t + offset, dur, userSettings.sfxVol * (isLast ? 0.85 : 0.55), 1800 + Math.random() * 1400);
+                    // Buzz: a short higher-pitched tone layered on top for an electrical character.
                     let bOsc = actx.createOscillator(); let bGain = actx.createGain();
                     bOsc.type = i % 2 === 0 ? 'sawtooth' : 'square';
-                    bOsc.frequency.setValueAtTime(80 + Math.random() * 50, t + offset);
-                    let vol = isLast ? userSettings.sfxVol * 0.55 : userSettings.sfxVol * (0.14 + Math.random() * 0.12);
-                    bGain.gain.setValueAtTime(vol, t + offset);
-                    bGain.gain.exponentialRampToValueAtTime(0.01, t + offset + (isLast ? 0.12 : 0.05));
+                    bOsc.frequency.setValueAtTime(260 + Math.random() * 180, t + offset);
+                    bGain.gain.setValueAtTime(userSettings.sfxVol * (isLast ? 0.45 : 0.25), t + offset);
+                    bGain.gain.exponentialRampToValueAtTime(0.001, t + offset + dur);
                     bOsc.connect(bGain); bGain.connect(actx.destination);
-                    bOsc.start(t + offset); bOsc.stop(t + offset + (isLast ? 0.12 : 0.05));
+                    bOsc.start(t + offset); bOsc.stop(t + offset + dur);
                 });
             } else if (type === 'grade_reveal') {
                 // Triumphant thud + rising four-note arpeggio as the letter-grade badge slams

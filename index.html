@@ -1404,6 +1404,12 @@
             { id: 'level3',          name: 'First Steps',        desc: 'Reach Level 3.',                              icon: 'ach_footprint',    check: () => highestLevel >= 3 },
             { id: 'level10',         name: 'Deep Dive',          desc: 'Reach Level 10.',                             icon: 'ach_medal_silver', check: () => highestLevel >= 10 },
             { id: 'level20',         name: 'Rimaru Tempest',     desc: 'Reach Level 20.',                             icon: 'ach_dragon',       check: () => highestLevel >= 20 },
+            // classicAplusEver/endlessAplusEver are set once, the moment revealLevelGrade()
+            // ever computes an A+ while gameMode is 'classic'/'endless' respectively - see the
+            // grade === 'A+' branch there. Kept as separate flags (rather than deriving from
+            // some other stat) since "ever got A+ in mode X" isn't otherwise recoverable from
+            // persisted state the way a high-water mark like highestLevel is.
+            { id: 'model_student',   name: 'Model Student',      desc: 'Get an A+ grade on a level in Classic mode.', icon: 'ach_model_student', check: () => storage.get('classicAplusEver') === 'true' },
             { id: 'bug_hunter',      name: 'Bug Hunter',         desc: 'Encounter 3 different enemies.',              icon: 'ach_bug',          check: () => Object.keys(enemyDB).filter(k => storage.get('almanac_' + k) === 'true').length >= 3 },
             { id: 'bestiary',        name: 'Bestiary Complete',  desc: 'Encounter every enemy in the game.',          icon: 'ach_bestiary',     check: () => Object.keys(enemyDB).every(k => storage.get('almanac_' + k) === 'true') },
             { id: 'centurion',       name: 'Centurion',          desc: 'Defeat 100 enemies.',                         icon: 'ach_helmet',       check: () => (parseInt(storage.get('totalEnemyKills')) || 0) >= 100 },
@@ -1429,6 +1435,7 @@
             { id: 'endless_level3',  name: 'Wave Rider',         desc: 'Reach Level 3 in Endless Waves.',             icon: 'ach_wave_small',   check: () => bestEndlessLevel >= 3 },
             { id: 'endless_level6',  name: 'Wave Breaker',       desc: 'Reach Level 6 in Endless Waves.',             icon: 'ach_wave_medium',  check: () => bestEndlessLevel >= 6 },
             { id: 'endless_level9',  name: 'Wave Master',        desc: 'Reach Level 9 in Endless Waves.',             icon: 'ach_wave_large',   check: () => bestEndlessLevel >= 9 },
+            { id: 'perfectionist',   name: 'Perfectionist',      desc: 'Get an A+ grade on a level in Endless Waves.', icon: 'ach_perfectionist', check: () => storage.get('endlessAplusEver') === 'true' },
             // Checked against the live in-memory balance rather than a persisted high-water
             // mark, matching "hoard" - the achievement fires the moment the player is actually
             // sitting on 50,000 coins at once, not merely on having earned that much lifetime.
@@ -2104,6 +2111,55 @@
         }
 
         // ---- Hand-drawn pixel-icon sprites (replaces all emoji) ----
+        // Shared drawer for the Model Student / Perfectionist achievement badges: a miniature
+        // version of the #level-grade-badge rosette (pleated rim + medal + two small ribbon
+        // tails + "A+"), rather than a generic star/medal. c1/c2 are that achievement's two
+        // grade-rosette accent colors; everything else (the pleat divider ring, tail trim, and
+        // the outer backing ring behind the pleats) stays a consistent gold, since every other
+        // achievement badge in the game reads as a solid gold medal and this should still read
+        // as one of those first, with the rosette colors as an accent rather than replacing the
+        // gold entirely.
+        function drawRosetteAchievementIcon(tctx, s, c1, c2) {
+            const gold1 = '#ffe27a', gold2 = '#c77000';
+            // Solid gold backing disc, slightly larger than the pleats, standing in for a medal's
+            // rim - this is what keeps the badge reading as "gold medal" at a glance.
+            tctx.fillStyle = gold2; tctx.beginPath(); tctx.arc(0, 0, 10.5 * s, 0, Math.PI * 2); tctx.fill();
+            tctx.fillStyle = gold1; tctx.beginPath(); tctx.arc(0, 0, 10 * s, 0, Math.PI * 2); tctx.fill();
+            // Pleated sunburst rim: alternating grade-colored wedges over the gold backing.
+            const wedges = 10;
+            for (let i = 0; i < wedges; i++) {
+                let a0 = (Math.PI * 2 / wedges) * i, a1 = (Math.PI * 2 / wedges) * (i + 1);
+                tctx.fillStyle = i % 2 === 0 ? c1 : c2;
+                tctx.beginPath(); tctx.moveTo(0, 0); tctx.arc(0, 0, 9 * s, a0, a1); tctx.closePath(); tctx.fill();
+            }
+            // Two small ribbon tails hanging below, flared outward like the level-complete
+            // rosette, trimmed in gold to tie back into the medal rim.
+            [-1, 1].forEach(side => {
+                tctx.save();
+                tctx.translate(side * 2.4 * s, 6.5 * s);
+                tctx.rotate(side * 0.3);
+                tctx.fillStyle = c2;
+                tctx.beginPath();
+                tctx.moveTo(-1.5 * s, 0); tctx.lineTo(1.5 * s, 0);
+                tctx.lineTo(1.5 * s, 4 * s); tctx.lineTo(0.7 * s, 3 * s); tctx.lineTo(0, 4 * s);
+                tctx.lineTo(-0.7 * s, 3 * s); tctx.lineTo(-1.5 * s, 4 * s);
+                tctx.closePath(); tctx.fill();
+                tctx.strokeStyle = gold1; tctx.lineWidth = 0.5 * s; tctx.stroke();
+                tctx.restore();
+            });
+            // Medal face + gold rim, letter last so it sits above everything.
+            let grad = tctx.createRadialGradient(-2 * s, -2.5 * s, 1 * s, 0, 0, 6.5 * s);
+            grad.addColorStop(0, c1); grad.addColorStop(1, c2);
+            tctx.fillStyle = grad;
+            tctx.beginPath(); tctx.arc(0, 0, 6.5 * s, 0, Math.PI * 2); tctx.fill();
+            tctx.strokeStyle = gold1; tctx.lineWidth = 1 * s; tctx.beginPath(); tctx.arc(0, 0, 6.5 * s, 0, Math.PI * 2); tctx.stroke();
+            tctx.fillStyle = '#fff';
+            tctx.font = 'bold ' + (6.5 * s) + 'px sans-serif';
+            tctx.textAlign = 'center'; tctx.textBaseline = 'middle';
+            tctx.shadowColor = 'rgba(0,0,0,0.55)'; tctx.shadowBlur = 1 * s;
+            tctx.fillText('A+', 0, 0.3 * s);
+            tctx.shadowBlur = 0;
+        }
         function drawPixelIcon(type, tctx, x, y, size) {
             tctx.save(); tctx.translate(x, y);
             const s = size / 24;
@@ -2241,6 +2297,16 @@
                     tctx.beginPath(); tctx.roundRect(-8*s,-7*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
                     tctx.fillStyle = '#90a4ae'; tctx.strokeStyle = '#37474f';
                     tctx.beginPath(); tctx.roundRect(-2*s,-3*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
+                    break;
+                // Model Student (Classic A+) and Perfectionist (Endless Waves A+): both use the
+                // shared mini grade-rosette drawer above, colored to match this game's actual
+                // grade-A+ rosette accents - yellow/green for Classic, yellow/red for Endless -
+                // rather than living as external sprites/ files like the other ach_* icons.
+                case 'ach_model_student':
+                    drawRosetteAchievementIcon(tctx, s, '#fff59d', '#2ecc71');
+                    break;
+                case 'ach_perfectionist':
+                    drawRosetteAchievementIcon(tctx, s, '#fff59d', '#c0392b');
                     break;
                 // skeletonkey/plasmabeam/wilkshirianknowledge item icons, and all 21
                 // ach_* achievement badge icons, now live in their own files under
@@ -2673,6 +2739,12 @@
                 gradeBadge.classList.remove('slam'); void gradeBadge.offsetWidth; gradeBadge.classList.add('slam');
                 playSFX('grade_reveal');
                 screenShake = Math.max(screenShake, 16);
+            }
+            // Feeds the Model Student / Perfectionist achievements (see achievementDB) - persist
+            // the first time an A+ lands in each mode, then let checkAchievements() pick it up.
+            if (grade === 'A+') {
+                let flagKey = gameMode === 'endless' ? 'endlessAplusEver' : 'classicAplusEver';
+                if (storage.get(flagKey) !== 'true') { storage.set(flagKey, 'true'); checkAchievements(); }
             }
             if (onDone) onDone();
         }
@@ -3655,8 +3727,8 @@
                         <canvas id="gacha-canvas" width="300" height="240"></canvas>
                     </div>
                     <div class="gacha-pull-row">
-                        <button class="gacha-btn" id="btn-pull">Pull (100 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
-                        <button class="gacha-btn gacha-btn-ten" id="btn-pull-ten">Pull x10 (900 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                        <button class="gacha-btn" id="btn-pull">Pull (250 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
+                        <button class="gacha-btn gacha-btn-ten" id="btn-pull-ten">Pull x10 (2250 <img class="icon-img" style="width:0.9em;height:0.9em;" src="${iconDataURL('coin',24)}" alt="">)</button>
                     </div>
                     <div class="shop-coin-bag">
                         <img class="icon-img" style="width:1.1em;height:1.1em;" src="${iconDataURL('coin',24)}" alt=""> <span id="shop-coin-display">0</span>
@@ -4196,16 +4268,17 @@
 
         function updateShopButtons() {
             let pullBtn = document.getElementById('btn-pull');
-            if (pullBtn) pullBtn.disabled = totalCoins < 100 || (crane && crane.state !== 'idle');
+            if (pullBtn) pullBtn.disabled = totalCoins < GACHA_ONE_COST || (crane && crane.state !== 'idle');
             let pullTenBtn = document.getElementById('btn-pull-ten');
             if (pullTenBtn) pullTenBtn.disabled = totalCoins < GACHA_TEN_COST || (crane && crane.state !== 'idle');
             let coinDisplay = document.getElementById('shop-coin-display');
             if (coinDisplay) coinDisplay.innerText = totalCoins;
         }
 
+        const GACHA_ONE_COST = 250;
         function pullGacha() {
-            if (totalCoins < 100 || crane.state !== 'idle' || gachaSlimes.length === 0) return;
-            totalCoins -= 100; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
+            if (totalCoins < GACHA_ONE_COST || crane.state !== 'idle' || gachaSlimes.length === 0) return;
+            totalCoins -= GACHA_ONE_COST; storage.set('landSlidersCoins', totalCoins); updateHUD(); updateShopButtons();
             storage.set('gachaPullCount', (parseInt(storage.get('gachaPullCount') || 0)) + 1);
             checkAchievements();
 
@@ -4220,7 +4293,7 @@
             crane.state = 'descending';
         }
 
-        // Bulk pull: a modest discount off 10x the single-pull price (900 vs. 1000), the usual
+        // Bulk pull: a modest discount off 10x the single-pull price (2250 vs. 2500), the usual
         // "buy in bulk" incentive gacha games use to make the x10 button worth reaching for.
         // Unlike a single pull (one claw, already resting over the bowl), a x10 pull brings in
         // 9 extra crane rigs that slide in from either side of the play field at varied speeds,
@@ -4229,7 +4302,7 @@
         // created here - before it's slid a single pixel on screen - so the whole sequence is
         // deterministic: the physics just has to get each claw to the slime it was already
         // promised, never pick one on arrival.
-        const GACHA_TEN_COST = 900;
+        const GACHA_TEN_COST = 2250;
         function pullGachaTen() {
             if (totalCoins < GACHA_TEN_COST || crane.state !== 'idle' || gachaTenInProgress) return;
 

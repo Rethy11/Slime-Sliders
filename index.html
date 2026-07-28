@@ -2376,7 +2376,7 @@
         // by tier since it's the no-farming-required option.
         function traderCost(kind, tier) {
             if (kind === 'skin') {
-                if (tier === 'common') return { type: 'dupe', dupeTier: 'basic', amount: 30 };
+                if (tier === 'common') return { type: 'dupe', dupeTier: 'basic', amount: 10 };
                 if (tier === 'epic') return { type: 'dupe', dupeTier: 'rare', amount: 1 };
                 return { type: 'dupe', dupeTier: 'rare', amount: 3 }; // legendary
             }

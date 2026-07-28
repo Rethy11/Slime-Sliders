@@ -5176,19 +5176,39 @@
         // (endDark true, ahead of the story-ending game over) or back to fully transparent
         // (endDark false, the brief flicker after a post-completion flavor replay), then fires
         // callback once the flicker settles.
+        // Flickers the full-screen #story-blackout overlay like a dying/struggling lightbulb -
+        // irregular timing and irregular dip depth (with the occasional harder stutter toward
+        // full dark) rather than a clean metronomic on/off - then settles with a slightly slower
+        // fade into its held end state: fully dark (endDark true, ahead of the story-ending game
+        // over) or fully transparent (endDark false, after a post-completion flavor replay).
+        // Fires callback once it's settled.
         function stageFlicker(endDark, callback) {
             let overlay = document.getElementById('story-blackout');
             overlay.style.pointerEvents = 'auto';
-            let steps = [1, 0, 1, 0, 1, 0, 1, endDark ? 1 : 0];
+            let dips = 6 + Math.floor(Math.random() * 4); // 6-9 uneven dips
+            let sequence = [];
+            for (let i = 0; i < dips; i++) {
+                let hardStutter = Math.random() < 0.3;
+                sequence.push({ opacity: hardStutter ? (0.75 + Math.random() * 0.25) : (0.15 + Math.random() * 0.4), hold: 25 + Math.random() * 60 });
+                sequence.push({ opacity: Math.random() * 0.12, hold: 35 + Math.random() * 90 });
+            }
             let i = 0;
             function tick() {
-                if (i < steps.length) {
-                    overlay.style.opacity = steps[i];
+                if (i < sequence.length) {
+                    overlay.style.transition = 'opacity 40ms ease-out';
+                    overlay.style.opacity = sequence[i].opacity;
+                    let hold = sequence[i].hold;
                     i++;
-                    setTimeout(tick, 80);
+                    setTimeout(tick, hold);
                 } else {
-                    if (!endDark) overlay.style.pointerEvents = 'none';
-                    if (callback) callback();
+                    // The final commit: a slower fade than any of the stutters above, so it reads
+                    // as the flicker settling/deciding rather than just another dip.
+                    overlay.style.transition = 'opacity 220ms ease-in';
+                    overlay.style.opacity = endDark ? 1 : 0;
+                    setTimeout(() => {
+                        if (!endDark) overlay.style.pointerEvents = 'none';
+                        if (callback) callback();
+                    }, 240);
                 }
             }
             tick();

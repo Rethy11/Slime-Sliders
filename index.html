@@ -1394,7 +1394,7 @@
             // Dupe Shop exclusive (common) - never in rollRoguelikeItem's chest/mimic pools or
             // roguelikeTierPools (the Gold Trader's pool), so the only way to get it is buying
             // it from the Dupe Trader (see dupeShopStock()).
-            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned by 100%. Each stack adds another 100%.' },
+            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned. Each additional stack adds progressively less.' },
             slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.', lockedBy: 'level3' },
             plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
             // Dupe Shop exclusive (epic) - see note on greedy above.
@@ -2529,13 +2529,18 @@
 
         function coinValue(type) { return type === 'ruby' ? 5 : type === 'sapphire' ? 10 : type === 'emerald' ? 15 : 1; }
 
-        // Dupe Shop item: Greedy. Adds 100% gold per stack (1 stack = double, 2 stacks = triple,
-        // etc). Applied at every point gold is actually added to totalCoins - goal progress
-        // (goal.collected) is left unscaled since that's tracking level-completion progress,
-        // not currency earned.
+        // Dupe Shop item: Greedy. Diminishing-returns gold multiplier: y = 1 + log base 4 of
+        // (stacks + 1), rather than a flat +100% per stack. The first stack still gives a solid
+        // boost, but each additional stack adds progressively less (log_4(2)=0.5 -> +50% at 1
+        // stack, log_4(3)-log_4(2)=~0.29 -> +29% more at 2 stacks, and so on), instead of scaling
+        // linearly forever. Applied at every point gold is actually added to totalCoins - goal
+        // progress (goal.collected) is left unscaled since that's tracking level-completion
+        // progress, not currency earned. +1 inside the log keeps stacks=0 at multiplier 1 (no
+        // bonus, log_4(1)=0) without needing a log(0) special case.
         function grantGold(amount) {
             let stacks = runItems.greedy || 0;
-            let gained = Math.round(amount * (1 + stacks));
+            let multiplier = 1 + Math.log(stacks + 1) / Math.log(4);
+            let gained = Math.round(amount * multiplier);
             totalCoins += gained;
             return gained;
         }

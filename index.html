@@ -751,6 +751,8 @@
     <script src="sprites/icon-ach_footprint.js"></script>
     <script src="sprites/icon-ach_medal_silver.js"></script>
     <script src="sprites/icon-ach_medal_gold.js"></script>
+    <script src="sprites/icon-ach_model_student.js"></script>
+    <script src="sprites/icon-ach_perfectionist.js"></script>
     <script src="sprites/icon-ach_bug.js"></script>
     <script src="sprites/icon-ach_bestiary.js"></script>
     <script src="sprites/icon-ach_helmet.js"></script>
@@ -2211,55 +2213,6 @@
         }
 
         // ---- Hand-drawn pixel-icon sprites (replaces all emoji) ----
-        // Shared drawer for the Model Student / Perfectionist achievement badges: a miniature
-        // version of the #level-grade-badge rosette (pleated rim + medal + two small ribbon
-        // tails + "A+"), rather than a generic star/medal. c1/c2 are that achievement's two
-        // grade-rosette accent colors; everything else (the pleat divider ring, tail trim, and
-        // the outer backing ring behind the pleats) stays a consistent gold, since every other
-        // achievement badge in the game reads as a solid gold medal and this should still read
-        // as one of those first, with the rosette colors as an accent rather than replacing the
-        // gold entirely.
-        function drawRosetteAchievementIcon(tctx, s, c1, c2) {
-            const gold1 = '#ffe27a', gold2 = '#c77000';
-            // Solid gold backing disc, slightly larger than the pleats, standing in for a medal's
-            // rim - this is what keeps the badge reading as "gold medal" at a glance.
-            tctx.fillStyle = gold2; tctx.beginPath(); tctx.arc(0, 0, 10.5 * s, 0, Math.PI * 2); tctx.fill();
-            tctx.fillStyle = gold1; tctx.beginPath(); tctx.arc(0, 0, 10 * s, 0, Math.PI * 2); tctx.fill();
-            // Pleated sunburst rim: alternating grade-colored wedges over the gold backing.
-            const wedges = 10;
-            for (let i = 0; i < wedges; i++) {
-                let a0 = (Math.PI * 2 / wedges) * i, a1 = (Math.PI * 2 / wedges) * (i + 1);
-                tctx.fillStyle = i % 2 === 0 ? c1 : c2;
-                tctx.beginPath(); tctx.moveTo(0, 0); tctx.arc(0, 0, 9 * s, a0, a1); tctx.closePath(); tctx.fill();
-            }
-            // Two small ribbon tails hanging below, flared outward like the level-complete
-            // rosette, trimmed in gold to tie back into the medal rim.
-            [-1, 1].forEach(side => {
-                tctx.save();
-                tctx.translate(side * 2.4 * s, 6.5 * s);
-                tctx.rotate(side * 0.3);
-                tctx.fillStyle = c2;
-                tctx.beginPath();
-                tctx.moveTo(-1.5 * s, 0); tctx.lineTo(1.5 * s, 0);
-                tctx.lineTo(1.5 * s, 4 * s); tctx.lineTo(0.7 * s, 3 * s); tctx.lineTo(0, 4 * s);
-                tctx.lineTo(-0.7 * s, 3 * s); tctx.lineTo(-1.5 * s, 4 * s);
-                tctx.closePath(); tctx.fill();
-                tctx.strokeStyle = gold1; tctx.lineWidth = 0.5 * s; tctx.stroke();
-                tctx.restore();
-            });
-            // Medal face + gold rim, letter last so it sits above everything.
-            let grad = tctx.createRadialGradient(-2 * s, -2.5 * s, 1 * s, 0, 0, 6.5 * s);
-            grad.addColorStop(0, c1); grad.addColorStop(1, c2);
-            tctx.fillStyle = grad;
-            tctx.beginPath(); tctx.arc(0, 0, 6.5 * s, 0, Math.PI * 2); tctx.fill();
-            tctx.strokeStyle = gold1; tctx.lineWidth = 1 * s; tctx.beginPath(); tctx.arc(0, 0, 6.5 * s, 0, Math.PI * 2); tctx.stroke();
-            tctx.fillStyle = '#fff';
-            tctx.font = 'bold ' + (6.5 * s) + 'px sans-serif';
-            tctx.textAlign = 'center'; tctx.textBaseline = 'middle';
-            tctx.shadowColor = 'rgba(0,0,0,0.55)'; tctx.shadowBlur = 1 * s;
-            tctx.fillText('A+', 0, 0.3 * s);
-            tctx.shadowBlur = 0;
-        }
         function drawPixelIcon(type, tctx, x, y, size) {
             tctx.save(); tctx.translate(x, y);
             const s = size / 24;
@@ -2398,22 +2351,13 @@
                     tctx.fillStyle = '#90a4ae'; tctx.strokeStyle = '#37474f';
                     tctx.beginPath(); tctx.roundRect(-2*s,-3*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
                     break;
-                // Model Student (Classic A+) and Perfectionist (Endless Waves A+): both use the
-                // shared mini grade-rosette drawer above, colored to match this game's actual
-                // grade-A+ rosette accents - yellow/green for Classic, yellow/red for Endless -
-                // rather than living as external sprites/ files like the other ach_* icons.
-                case 'ach_model_student':
-                    drawRosetteAchievementIcon(tctx, s, '#fff59d', '#2ecc71');
-                    break;
-                case 'ach_perfectionist':
-                    drawRosetteAchievementIcon(tctx, s, '#fff59d', '#c0392b');
-                    break;
-                // skeletonkey/plasmabeam/wilkshirianknowledge item icons, and all 21
-                // ach_* achievement badge icons, now live in their own files under
-                // sprites/ (icon-skeletonkey.js, icon-plasmabeam.js,
-                // icon-wilkshirianknowledge.js, icon-ach-common.js + icon-ach_*.js) and
-                // register themselves on window.IconSprites, same as the icons handled by
-                // the window.IconSprites check above.
+                // skeletonkey/plasmabeam/wilkshirianknowledge item icons, and all 23
+                // ach_* achievement badge icons (including ach_model_student and
+                // ach_perfectionist), now live in their own files under sprites/
+                // (icon-skeletonkey.js, icon-plasmabeam.js, icon-wilkshirianknowledge.js,
+                // icon-ach-common.js + icon-ach_*.js) and register themselves on
+                // window.IconSprites, same as the icons handled by the window.IconSprites
+                // check above.
             }
             tctx.restore();
         }

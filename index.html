@@ -228,8 +228,8 @@
             clip-path: polygon(0 0, 100% 0, 100% 100%, 72% 64%, 50% 100%, 28% 64%, 0 100%);
             box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15);
         }
-        .rosette-tail-l { left: 18px; transform: rotate(8deg); transform-origin: top center; }
-        .rosette-tail-r { left: 60px; transform: rotate(-8deg); transform-origin: top center; }
+        .rosette-tail-l { left: 21px; transform: rotate(8deg); transform-origin: top center; }
+        .rosette-tail-r { left: 57px; transform: rotate(-8deg); transform-origin: top center; }
         #level-grade-letter { position: absolute; top: 56px; left: 56px; transform: translate(-50%, -50%); font-size: 2.5rem; font-weight: bold; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.55), 0 0 10px rgba(0,0,0,0.3); line-height: 1; }
         /* Items-won section is hidden by default (most levels grant zero run items) and only
            switched on by showLevelCompleteSynopsis() when levelItemsWon actually has entries -
@@ -363,6 +363,10 @@
            localStorage state, not anything expressible in CSS. */
         .notif-dot { position: absolute; top: -4px; right: -4px; width: 12px; height: 12px; background: #ff2222; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 4px rgba(0,0,0,0.6); display: none; z-index: 3; pointer-events: none; }
         .notif-dot.show { display: block; }
+        /* Main-screen Almanac corner icon only (not the in-modal tab dots, which share
+           .notif-dot's default position/size) - sized up slightly and pulled inward so it
+           actually overlaps the icon's edge instead of floating just outside it. */
+        #almanac-corner-dot { width: 16px; height: 16px; top: 1px; right: 1px; }
         .gacha-container { position: relative; text-align: center; padding: 10px; display: flex; flex-direction: column; align-items: center; }
         
         .gacha-machine { 
@@ -2845,6 +2849,10 @@
         // Must run after buildFences()/buildSurvivalFences() (borderHexList + each tile's
         // fenceCandidateDirs need to already be computed) and after any other single-hex
         // placements it should avoid overlapping (chest, hives, fishingScene, traders).
+        // tile.hasFence is also excluded here so a dock never gets placed on the same hex
+        // border a fence already occupies - buildFences() puts a fence on every one of a
+        // hasFence tile's candidate edges, including whichever left/right edge a dock would
+        // otherwise want to use.
         const LARGE_POOL_SIZE = 5, dockChance = 0.4;
         function spawnHazardDocks(hazardClusters) {
             for (let cluster of hazardClusters) {
@@ -2853,7 +2861,7 @@
                 let clusterSet = new Set(cluster);
                 let edges = [];
                 for (let tile of borderHexList) {
-                    if (tile.element || tile.isBridge || !tile.fenceCandidateDirs) continue;
+                    if (tile.element || tile.isBridge || !tile.fenceCandidateDirs || tile.hasFence) continue;
                     for (let dirIdx of tile.fenceCandidateDirs) {
                         if (dirIdx !== 0 && dirIdx !== 3) continue; // only left/right sides
                         let d = HEX_DIRS[dirIdx];
@@ -4991,7 +4999,7 @@
                 let div = document.createElement('div');
                 div.className = 'shop-item';
                 div.innerHTML =
-                    '<div style="display:flex;align-items:center;gap:10px;">' +
+                    '<div style="display:flex;align-items:center;gap:10px;cursor:pointer;" id="merchant-item-info-' + idx + '">' +
                         '<img class="icon-img" style="width:28px;height:28px;" src="' + iconDataURL(slot.itemId, 28) + '" alt="">' +
                         '<div style="text-align:left;">' +
                             '<div class="item-rarity-name rarity-' + slot.tier + '" style="font-size:0.65rem;">' + def.name + '</div>' +
@@ -5000,6 +5008,12 @@
                             '</div>' +
                         '</div>' +
                     '</div>';
+                // Tapping the icon/name opens the same shared detail modal the Almanac uses, so
+                // players can check what an item does before spending their dupes/gold on it.
+                // seenKey/refreshFn are omitted (null) since there's no "NEW" badge concept here.
+                div.querySelector('#merchant-item-info-' + idx).addEventListener('click', () => {
+                    openAlmanacDetail(iconDataURL(slot.itemId, 40), def.name, def.desc, null, null);
+                });
                 let btn = document.createElement('button');
                 btn.className = 'menu-btn';
                 btn.style.cssText = 'min-width:0;padding:8px 16px;font-size:0.6rem;margin:0;box-shadow:0 4px 0 rgba(0,0,0,0.3);';

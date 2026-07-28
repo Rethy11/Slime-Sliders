@@ -1388,21 +1388,21 @@
         // stacking, and almanac behavior are otherwise untouched.
         const roguelikeItemDefs = {
             magnet:      { id: 'magnet',      rarity: 'common',    name: 'Magnet',      desc: 'Pulls nearby coins and gems toward you. Each stack widens the pull radius.' },
-            wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over a hazard longer before falling. Each stack adds more hover time.' },
-            spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Periodically unleashes an icy shockwave around you. Each stack makes it fire more often.' },
+            wings:       { id: 'wings',       rarity: 'common',    name: 'Wings',       desc: 'Lets you hover over hazards longer before falling. Each stack extends hover time.' },
+            spikes:      { id: 'spikes',      rarity: 'common',    name: 'Spikes',      desc: 'Occasionally unleashes an icy shockwave around you. Each stack makes it fire more often.' },
             wilkshirianknowledge: { id: 'wilkshirianknowledge', rarity: 'common', name: 'Wilkshirian Knowledge', desc: 'Grants brief invulnerability on a recurring timer. Each stack shortens the wait between activations.', lockedBy: 'endless_level3' },
             // Dupe Shop exclusive (common) - never in rollRoguelikeItem's chest/mimic pools or
             // roguelikeTierPools (the Gold Trader's pool), so the only way to get it is buying
             // it from the Dupe Trader (see dupeShopStock()).
-            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned. Each additional stack adds progressively less.' },
-            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a friendly companion slime that destroys enemies on contact. Each stack adds another companion.', lockedBy: 'level3' },
+            greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned. Corrupts, wholly.' },
+            slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a slimy friend and makes you immune to other slimes. Each stack adds another companion.', lockedBy: 'level3' },
             plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
             // Dupe Shop exclusive (epic) - see note on greedy above.
-            devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once, then is consumed. Each stack is another life saved.' },
+            devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once. Zero downsides! ' },
             shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.', lockedBy: 'centurion' },
-            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest each stage. Each stack adds another chest. Skeleton chests never hold legendaries.', lockedBy: 'endless_level9' },
+            skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest per stack each stage. Skeleton chests can’t contain legendary items.', lockedBy: 'endless_level9' },
             // Dupe Shop exclusive (legendary) - see note on greedy above.
-            spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost each time. Each stack boosts it further.' }
+            spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost that stacks. Your mortal soul, forfeit.' }
         };
 
         // Achievement definitions. Each check() reads from persisted storage / in-memory state

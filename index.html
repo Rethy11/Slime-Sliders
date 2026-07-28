@@ -1812,6 +1812,7 @@
         // once initAudio() unlocks things on the first tap.
         function playMusicTrack(idx) {
             currentTrack = idx;
+            stopLightbulbBuzz();
             musicPlayerNormal.src = musicFiles[idx];
             musicPlayerFast.src = musicFilesDanger[idx];
             musicPlayerNormal.currentTime = 0;
@@ -1991,42 +1992,6 @@
                 let slamOsc = actx.createOscillator(); slamOsc.type = 'triangle'; slamOsc.frequency.setValueAtTime(900, t + 0.03); slamOsc.frequency.exponentialRampToValueAtTime(1300, t + 0.12);
                 let slamGain = actx.createGain(); slamGain.gain.setValueAtTime(userSettings.sfxVol * 0.3, t + 0.03); slamGain.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
                 slamOsc.connect(slamGain); slamGain.connect(actx.destination); slamOsc.start(t + 0.03); slamOsc.stop(t + 0.14);
-            } else if (type === 'lightbulb_flicker') {
-                // Electrical crackle+buzz synced to stageFlicker's on/off steps - each step gets
-                // a short burst of filtered noise (the "crackle") layered with a higher, more
-                // speaker-friendly buzz tone, since a low sine/square alone sits in a bass range
-                // that's easy to lose entirely on phone speakers. Ends on a louder, longer pop
-                // right as the screen settles.
-                let offsets = [0, 0.08, 0.16, 0.24, 0.32, 0.4, 0.48, 0.56];
-                function noiseBurst(start, dur, vol, filterFreq) {
-                    let bufSize = Math.max(1, Math.floor(actx.sampleRate * dur));
-                    let buffer = actx.createBuffer(1, bufSize, actx.sampleRate);
-                    let data = buffer.getChannelData(0);
-                    for (let n = 0; n < bufSize; n++) data[n] = Math.random() * 2 - 1;
-                    let src = actx.createBufferSource(); src.buffer = buffer;
-                    let filt = actx.createBiquadFilter(); filt.type = 'bandpass';
-                    filt.frequency.value = filterFreq; filt.Q.value = 0.9;
-                    let nGain = actx.createGain();
-                    nGain.gain.setValueAtTime(vol, start);
-                    nGain.gain.exponentialRampToValueAtTime(0.001, start + dur);
-                    src.connect(filt); filt.connect(nGain); nGain.connect(actx.destination);
-                    src.start(start); src.stop(start + dur);
-                }
-                osc.disconnect();
-                offsets.forEach((offset, i) => {
-                    let isLast = i === offsets.length - 1;
-                    let dur = isLast ? 0.16 : 0.06;
-                    // Crackle: broadband filtered noise, the dominant/audible part of the sound.
-                    noiseBurst(t + offset, dur, userSettings.sfxVol * (isLast ? 0.85 : 0.55), 1800 + Math.random() * 1400);
-                    // Buzz: a short higher-pitched tone layered on top for an electrical character.
-                    let bOsc = actx.createOscillator(); let bGain = actx.createGain();
-                    bOsc.type = i % 2 === 0 ? 'sawtooth' : 'square';
-                    bOsc.frequency.setValueAtTime(260 + Math.random() * 180, t + offset);
-                    bGain.gain.setValueAtTime(userSettings.sfxVol * (isLast ? 0.45 : 0.25), t + offset);
-                    bGain.gain.exponentialRampToValueAtTime(0.001, t + offset + dur);
-                    bOsc.connect(bGain); bGain.connect(actx.destination);
-                    bOsc.start(t + offset); bOsc.stop(t + offset + dur);
-                });
             } else if (type === 'grade_reveal') {
                 // Triumphant thud + rising four-note arpeggio as the letter-grade badge slams
                 // into the level-complete screen's top-right corner (see revealLevelGrade).
@@ -2040,6 +2005,51 @@
                     nOsc.connect(nGain); nGain.connect(actx.destination); nOsc.start(t + i * 0.06); nOsc.stop(t + i * 0.06 + 0.15);
                 });
             }
+        }
+
+        // Continuous "dying lightbulb" buzz used by stageFlicker (see below), matching the
+        // reference recording: a single steady ~120Hz sawtooth hum (the classic mains-buzz
+        // pitch) that ramps in rather than a series of separate blips - not a cluster of
+        // short, differently-pitched bursts, which is what read as a "kazoo" before.
+        // sustain=true keeps it looping indefinitely (the story-ending flicker, held through
+        // the black game-over screen until Play Again restarts music - see startGame/
+        // playMusicTrack); sustain=false lets it fade itself out shortly after (the brief
+        // man-and-boy revisit flicker, which resumes normal play rather than ending the run).
+        let lightbulbBuzzOsc = null, lightbulbBuzzGain = null;
+        function startLightbulbBuzz(sustain) {
+            if (!actx || userSettings.sfxVol <= 0) return;
+            stopLightbulbBuzz();
+            let t = actx.currentTime;
+            let osc = actx.createOscillator();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(120, t);
+            let gain = actx.createGain();
+            gain.gain.setValueAtTime(0.0001, t);
+            gain.gain.exponentialRampToValueAtTime(userSettings.sfxVol * 0.32, t + 0.35);
+            osc.connect(gain); gain.connect(actx.destination);
+            osc.start(t);
+            lightbulbBuzzOsc = osc; lightbulbBuzzGain = gain;
+            if (!sustain) {
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.32, t + 0.5);
+                gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.85);
+                osc.stop(t + 0.9);
+                setTimeout(() => { if (lightbulbBuzzOsc === osc) { lightbulbBuzzOsc = null; lightbulbBuzzGain = null; } }, 950);
+            }
+        }
+        // Fades out and stops any currently-running buzz - called once a new run actually
+        // starts (see playMusicTrack) so a sustained (story-ending) buzz doesn't keep looping
+        // past the point the player hits Play Again.
+        function stopLightbulbBuzz() {
+            if (!lightbulbBuzzOsc) return;
+            let osc = lightbulbBuzzOsc, gain = lightbulbBuzzGain;
+            lightbulbBuzzOsc = null; lightbulbBuzzGain = null;
+            try {
+                let now = actx.currentTime;
+                gain.gain.cancelScheduledValues(now);
+                gain.gain.setValueAtTime(gain.gain.value, now);
+                gain.gain.linearRampToValueAtTime(0.0001, now + 0.15);
+                osc.stop(now + 0.2);
+            } catch (e) {}
         }
 
         function manageBeeBuzzing() {
@@ -5227,11 +5237,11 @@
         // Flickers the full-screen #story-blackout overlay a few times, ending either fully dark
         // (endDark true, ahead of the story-ending game over) or back to fully transparent
         // (endDark false, the brief flicker after a post-completion flavor replay), then fires
-        // callback once the flicker settles. Every call gets the lightbulb-buzz SFX (see
-        // playSFX's 'lightbulb_flicker' case) - the man-and-boy revisit flicker and the story's
-        // final flicker both use this same visual effect, so both get the sound.
+        // callback once the flicker settles. Every call starts the lightbulb buzz (see
+        // startLightbulbBuzz) - sustained through to the game over screen when endDark is true,
+        // brief and self-fading when it's just the man-and-boy revisit flicker.
         function stageFlicker(endDark, callback) {
-            playSFX('lightbulb_flicker');
+            startLightbulbBuzz(endDark);
             let overlay = document.getElementById('story-blackout');
             overlay.style.pointerEvents = 'auto';
             let steps = [1, 0, 1, 0, 1, 0, 1, endDark ? 1 : 0];

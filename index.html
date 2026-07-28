@@ -1248,6 +1248,11 @@
         // only purchasable once before the trader has to be re-encountered on a later level.
         let skinTrader = null;
         let goldTrader = null;
+        // Purely aesthetic wooden piers, occasionally placed jutting out over a large hazard
+        // pool's edge (see spawnHazardDocks below). No collision, no interaction - just set
+        // dressing that reads as "someone built a dock here", the same visual-only role
+        // decorations play for grass tufts.
+        let docks = [];
         // {kind: 'skin'|'gold', trader} for whichever trader modal is currently open - read by
         // renderMerchantItems/buyMerchantItem so they don't need the trigger site to keep
         // passing state through every call.
@@ -2371,7 +2376,7 @@
         // by tier since it's the no-farming-required option.
         function traderCost(kind, tier) {
             if (kind === 'skin') {
-                if (tier === 'common') return { type: 'dupe', dupeTier: 'basic', amount: 3 };
+                if (tier === 'common') return { type: 'dupe', dupeTier: 'basic', amount: 30 };
                 if (tier === 'epic') return { type: 'dupe', dupeTier: 'rare', amount: 1 };
                 return { type: 'dupe', dupeTier: 'rare', amount: 3 }; // legendary
             }
@@ -2518,10 +2523,14 @@
 
         // Builds every land hex that has at least one neighbor which is a hole or is missing
         // entirely (i.e. borders the sky). Populates each qualifying tile's fenceCandidateDirs
-        // and returns the flat list, also used elsewhere (ambient rim splashes).
+        // and returns the flat list, also used elsewhere (ambient rim splashes). Bridge tiles
+        // (see buildIslandBridges below) are excluded outright - a rope bridge crossing open
+        // sky/hazard is deliberately open-sided, so it never rolls a fence of its own even
+        // though its edges border the same sky/hole tiles a fenced border hex would.
         function findBorderHexes() {
             let border = [];
             for (let tile of landHexList) {
+                if (tile.isBridge) { tile.fenceCandidateDirs = null; continue; }
                 let dirs = [];
                 for (let i = 0; i < 6; i++) {
                     let d = HEX_DIRS[i];
@@ -2532,6 +2541,129 @@
                 else tile.fenceCandidateDirs = null;
             }
             return border;
+        }
+
+        // Finds every separate connected landmass (BFS over land-type hexes only, adjacent
+        // through the 6 HEX_DIRS neighbors - holes and missing/sky hexes never connect two
+        // tiles). Levels with disconnected footprint blobs (see the isDisconnected roll in
+        // generateLevel's shape-blob loop) can otherwise produce an island with no walkable
+        // path to it at all.
+        function findLandComponents() {
+            let visited = new Set();
+            let components = [];
+            for (let start of landHexList) {
+                if (visited.has(start)) continue;
+                let comp = [start];
+                visited.add(start);
+                let stack = [start];
+                while (stack.length) {
+                    let cur = stack.pop();
+                    for (let d of HEX_DIRS) {
+                        let nb = hexTiles.get(hexKey(cur.q + d.q, cur.r + d.r));
+                        if (nb && nb.type === 'land' && !visited.has(nb)) { visited.add(nb); comp.push(nb); stack.push(nb); }
+                    }
+                }
+                components.push(comp);
+            }
+            return components;
+        }
+
+        // Lays a rope-bridge path of hex tiles in a straight pixel-space line between tileA and
+        // tileB, creating any tile along the way that doesn't already exist (open sky) or
+        // converting one that was a hazard hole back to safe land. Every tile the bridge touches
+        // - including its two anchor tiles on each island - is flagged isBridge so
+        // findBorderHexes() above skips it entirely and no fence can ever spawn across the span.
+        function bridgeHexTiles(tileA, tileB) {
+            let span = dist(tileA.x, tileA.y, tileB.x, tileB.y);
+            let steps = Math.max(1, Math.ceil(span / (HEX_TILE_DIST * 0.6)));
+            for (let i = 0; i <= steps; i++) {
+                let t = i / steps;
+                let px = tileA.x + (tileB.x - tileA.x) * t;
+                let py = tileA.y + (tileB.y - tileA.y) * t;
+                let h = pixelToAxial(px, py);
+                let key = hexKey(h.q, h.r);
+                let tile = hexTiles.get(key);
+                if (!tile) {
+                    let p = axialToPixel(h.q, h.r);
+                    tile = { q: h.q, r: h.r, x: p.x, y: p.y, type: 'land', element: null, hasFence: false, fenceCandidateDirs: null, isBridge: true };
+                    hexTiles.set(key, tile);
+                    landHexList.push(tile);
+                } else if (tile.type === 'hole') {
+                    tile.type = 'land'; tile.isBridge = true;
+                    let hIdx = holeHexList.indexOf(tile);
+                    if (hIdx !== -1) holeHexList.splice(hIdx, 1);
+                    landHexList.push(tile);
+                } else {
+                    tile.isBridge = true;
+                }
+            }
+            tileA.isBridge = true;
+            tileB.isBridge = true;
+        }
+
+        // Occasionally decorates a large hazard pool (a carved cluster at or near the max cluster
+        // size) with a simple wooden pier jutting out from one of its shore tiles - purely
+        // atmospheric set dressing, no collision or interaction. Mirrors the fishingScene
+        // placement pattern above: only a hex's left/right edges (HEX_DIRS[0] east / [3] west)
+        // qualify, so the pier sprite only ever needs a horizontal mirror, never a rotation.
+        // Must run after buildFences()/buildSurvivalFences() (borderHexList + each tile's
+        // fenceCandidateDirs need to already be computed) and after any other single-hex
+        // placements it should avoid overlapping (chest, hives, fishingScene, traders).
+        const LARGE_POOL_SIZE = 5, dockChance = 0.4;
+        function spawnHazardDocks(hazardClusters) {
+            for (let cluster of hazardClusters) {
+                if (cluster.length < LARGE_POOL_SIZE) continue;
+                if (Math.random() >= dockChance) continue;
+                let clusterSet = new Set(cluster);
+                let edges = [];
+                for (let tile of borderHexList) {
+                    if (tile.element || tile.isBridge || !tile.fenceCandidateDirs) continue;
+                    for (let dirIdx of tile.fenceCandidateDirs) {
+                        if (dirIdx !== 0 && dirIdx !== 3) continue; // only left/right sides
+                        let d = HEX_DIRS[dirIdx];
+                        let nb = hexTiles.get(hexKey(tile.q + d.q, tile.r + d.r));
+                        if (nb && nb.type === 'hole' && clusterSet.has(nb)) edges.push({ tile, dirIdx });
+                    }
+                }
+                if (!edges.length) continue;
+                let pick = edges[Math.floor(Math.random() * edges.length)];
+                let d = HEX_DIRS[pick.dirIdx];
+                let [p1, p2] = hexEdgeCorners(pick.tile, d.q, d.r);
+                let edgeMidX = (p1.x + p2.x) / 2, edgeMidY = (p1.y + p2.y) / 2;
+                let angle = Math.atan2(edgeMidY - pick.tile.y, edgeMidX - pick.tile.x);
+                docks.push({
+                    x: pick.tile.x + Math.cos(angle) * HEX_SIZE * 0.15,
+                    y: pick.tile.y + Math.sin(angle) * HEX_SIZE * 0.15,
+                    faceLeft: pick.dirIdx === 3, seed: Math.random() * 1000
+                });
+                pick.tile.element = { type: 'dock' };
+            }
+        }
+
+        // Joins every disconnected landmass back to the main one with a rope bridge at the pair
+        // of tiles closest to each other, repeating (recomputing components after each bridge,
+        // since a bridge merges two components into one) until only a single connected
+        // landmass remains. Called once per generateLevel(), before buildFences() so the fresh
+        // bridge tiles are already in place when fence candidacy is computed.
+        function buildIslandBridges() {
+            let components = findLandComponents();
+            let guard = 0;
+            while (components.length > 1 && guard++ < 20) {
+                components.sort((a, b) => b.length - a.length);
+                let main = components[0];
+                let best = null;
+                for (let ci = 1; ci < components.length; ci++) {
+                    for (let a of main) {
+                        for (let b of components[ci]) {
+                            let d = dist(a.x, a.y, b.x, b.y);
+                            if (!best || d < best.d) best = { d, a, b };
+                        }
+                    }
+                }
+                if (!best) break;
+                bridgeHexTiles(best.a, best.b);
+                components = findLandComponents();
+            }
         }
 
         // Fences have a base chance to appear along any land-hex edge that faces a hazard hole
@@ -2583,7 +2715,7 @@
 
         function generateLevel() {
             items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
-            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = []; surviveChests = []; skinTrader = null; goldTrader = null;
+            flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = []; surviveChests = []; skinTrader = null; goldTrader = null; docks = [];
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
@@ -2679,6 +2811,9 @@
             function isInterior(tile) { return HEX_DIRS.every(d => hexTiles.has(hexKey(tile.q + d.q, tile.r + d.r))); }
             const holeSeedChance = 0.03, holeGrowChance = 0.55, minClusterSize = 2, maxClusterSize = 6;
             let carved = new Set();
+            // Every carved cluster gets recorded here (used below by spawnHazardDocks to find
+            // large pools worth decorating with a pier).
+            let hazardClusters = [];
             for (let tile of hexTiles.values()) {
                 if (tile === goalTile || carved.has(tile)) continue;
                 if (dist(tile.x, tile.y, 0, 0) < 220) continue;
@@ -2703,9 +2838,11 @@
                         if (forceAdd || Math.random() < holeGrowChance) { nb.type = 'hole'; carved.add(nb); cluster.push(nb); frontier.push(nb); }
                     }
                 }
+                hazardClusters.push(cluster);
             }
             landHexList = []; holeHexList = [];
             for (let tile of hexTiles.values()) { if (tile.type === 'hole') holeHexList.push(tile); else landHexList.push(tile); }
+            buildIslandBridges();
             buildLandTileGrid();
 
             goal.x = goalTile.x; goal.y = goalTile.y; goal.active = true;
@@ -2775,6 +2912,8 @@
                     pick.tile.element = { type: 'fishingScene' };
                 }
             }
+
+            spawnHazardDocks(hazardClusters);
 
             // Rare traveling traders: same land-hex-placement pattern as fishingScene above,
             // just without the water-edge requirement (any open land hex works - see
@@ -2938,6 +3077,9 @@
             function survivalIsInterior(tile) { return HEX_DIRS.every(d => hexTiles.has(hexKey(tile.q + d.q, tile.r + d.r))); }
             const holeSeedChance = 0.035, holeGrowChance = 0.55, minClusterSize = 2, maxClusterSize = 6;
             let carved = new Set();
+            // Every carved cluster gets recorded here (used below by spawnHazardDocks to find
+            // large pools worth decorating with a pier) - same bookkeeping generateLevel() does.
+            let hazardClusters = [];
             for (let tile of hexTiles.values()) {
                 if (tile === goalTile || carved.has(tile)) continue;
                 if (dist(tile.x, tile.y, 0, 0) < 220) continue;
@@ -2960,6 +3102,7 @@
                         if (forceAdd || Math.random() < holeGrowChance) { nb.type = 'hole'; carved.add(nb); cluster.push(nb); frontier.push(nb); }
                     }
                 }
+                hazardClusters.push(cluster);
             }
 
             landHexList = []; holeHexList = [];
@@ -2976,6 +3119,7 @@
             // No starting chest for Survive stages - the two chests flanking the goal, spawned
             // once the timer runs out (see updateSurvivalMode), are the level's only chests.
             spawnSkeletonChests();
+            spawnHazardDocks(hazardClusters);
 
             // Bees need a hive to home to - mirrors generateLevel()'s stage-4-and-up hive
             // placement so a Survival arena standing in for stage 4+ can spawn them too.
@@ -5143,7 +5287,18 @@
                                 c.vx += (dx / d) * pull; c.vy += (dy / d) * pull;
                             }
                         }
-                        if (Math.abs(c.vx) > 0.1 || Math.abs(c.vy) > 0.1) { c.x += c.vx; c.y += c.vy; c.vx *= 0.88; c.vy *= 0.88; }
+                        if (Math.abs(c.vx) > 0.1 || Math.abs(c.vy) > 0.1) {
+                            c.x += c.vx; c.y += c.vy; c.vx *= 0.88; c.vy *= 0.88;
+                            // Fences are solid - stop loot items (magnet pull, knockback) from
+                            // sliding through them, same treatment resolveFenceCollision gives
+                            // the player/enemies each tick. Zero the velocity on a hit rather
+                            // than just repositioning, so the item settles at the fence instead
+                            // of jittering back and forth against it every frame.
+                            let itemFencePushed = resolveFenceCollision(c.x, c.y, c.radius, false);
+                            if (itemFencePushed.x !== c.x || itemFencePushed.y !== c.y) {
+                                c.x = itemFencePushed.x; c.y = itemFencePushed.y; c.vx = 0; c.vy = 0;
+                            }
+                        }
                         if (!isSafe(c.x, c.y) && !c.beingEaten) { spawnSplash(c.x, c.y); items.splice(i, 1); continue; }
                         if (!c.collected && !c.beingEaten && dist(player.worldX, player.worldY, c.x, c.y) < player.radius + c.radius) {
                             c.collected = true; levelCoinsCollected++;
@@ -6402,6 +6557,68 @@
             ctx.restore();
         }
 
+        // Purely aesthetic wooden pier, placed at a hazard pool's shore edge by
+        // spawnHazardDocks() and extending out over the hazard. No collision, no interaction -
+        // drawn facing right by default and mirrored horizontally (never rotated, same
+        // convention as drawFishingScene) when faceLeft is set. 1-Bit skin gets a flat
+        // black/white treatment inline rather than a whole separate function, since the shape
+        // is simple enough not to need one.
+        function drawDock(x, y, faceLeft, seed) {
+            let isOnebit = player.color === 'onebit';
+            let plank = isOnebit ? '#ffffff' : '#a9764f';
+            let plankShade = isOnebit ? '#ffffff' : '#8a5f3d';
+            let plankEdge = isOnebit ? '#000000' : '#5c3d26';
+            let post = isOnebit ? '#000000' : '#6b4529';
+
+            ctx.save();
+            ctx.translate(x, y); if (faceLeft) ctx.scale(-1, 1);
+
+            // Two support posts sunk into the hazard, drawn first so the deck sits on top.
+            ctx.fillStyle = post;
+            ctx.fillRect(18, -6, 5, 20);
+            ctx.fillRect(44, -8, 5, 22);
+            if (!isOnebit) {
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.ellipse(20, 15, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(46, 15, 6, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Deck: a short run of horizontal planks jutting from the shore, slightly angled
+            // corners so it doesn't read as a hard rectangle. Outlined for readability against
+            // both light ground and dark hazard textures.
+            ctx.fillStyle = plankEdge;
+            ctx.beginPath();
+            ctx.moveTo(-4, -12); ctx.lineTo(58, -14); ctx.lineTo(58, 10); ctx.lineTo(-4, 12); ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = plank;
+            ctx.beginPath();
+            ctx.moveTo(-2, -10); ctx.lineTo(55, -12); ctx.lineTo(55, 8); ctx.lineTo(-2, 10); ctx.closePath();
+            ctx.fill();
+
+            // Individual plank seams, alternating slightly lighter/darker for a wood-grain feel.
+            if (!isOnebit) {
+                for (let i = 0; i < 6; i++) {
+                    let px = -2 + i * 9.5;
+                    ctx.strokeStyle = plankShade; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(px, -11); ctx.lineTo(px - 1, 9); ctx.stroke();
+                }
+            } else {
+                for (let i = 0; i < 6; i++) {
+                    let px = -2 + i * 9.5;
+                    ctx.strokeStyle = '#000000'; ctx.lineWidth = 1;
+                    ctx.beginPath(); ctx.moveTo(px, -11); ctx.lineTo(px - 1, 9); ctx.stroke();
+                }
+            }
+
+            // A couple of low rope-and-post railings near the shore end for a lived-in touch.
+            ctx.strokeStyle = isOnebit ? '#000000' : '#4a3220'; ctx.lineWidth = 2; ctx.lineCap = 'round';
+            ctx.beginPath(); ctx.moveTo(2, -11); ctx.lineTo(2, -20); ctx.moveTo(20, -12.5); ctx.lineTo(20, -21); ctx.stroke();
+            ctx.strokeStyle = isOnebit ? '#000000' : '#8a6a45'; ctx.lineWidth = 1.4;
+            ctx.beginPath(); ctx.moveTo(2, -19); ctx.quadraticCurveTo(11, -15, 20, -20); ctx.stroke();
+
+            ctx.restore();
+        }
+
         // Shared visual for both rare traders (skinTrader/goldTrader) - a small market stall
         // with a swaying cloth awning in the trader's accent color (purple for the dupe trader,
         // gold for the gold trader) and a floating badge icon overhead advertising what it
@@ -6833,6 +7050,7 @@
             for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             for (let i = 0; i < surviveChests.length; i++) { let sv = surviveChests[i]; if (isOnScreen(sv.x + tiltX, sv.y + tiltY, cullBuffer)) pushRQ('chest', sv, sv.y + (sv.radius || 0)); }
             if (fishingScene && isOnScreen(fishingScene.x + tiltX, fishingScene.y + tiltY, cullBuffer)) pushRQ('fishingScene', fishingScene, fishingScene.y + 20);
+            for (let i = 0; i < docks.length; i++) { let dk = docks[i]; if (isOnScreen(dk.x + tiltX, dk.y + tiltY, cullBuffer)) pushRQ('dock', dk, dk.y - 5); }
             if (skinTrader && isOnScreen(skinTrader.x + tiltX, skinTrader.y + tiltY, cullBuffer)) pushRQ('skinTrader', skinTrader, skinTrader.y + 20);
             if (goldTrader && isOnScreen(goldTrader.x + tiltX, goldTrader.y + tiltY, cullBuffer)) pushRQ('goldTrader', goldTrader, goldTrader.y + 20);
             pushRQ('player', player, player.worldY + (player.radius || 0));
@@ -7214,6 +7432,10 @@
                 else if (item.type === 'fishingScene') {
                     let fs = item.obj;
                     drawFishingScene(fs.x, fs.y, fs.faceLeft, fs.seed);
+                }
+                else if (item.type === 'dock') {
+                    let dk = item.obj;
+                    drawDock(dk.x, dk.y, dk.faceLeft, dk.seed);
                 }
                 else if (item.type === 'skinTrader') {
                     let t = item.obj;

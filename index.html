@@ -4739,10 +4739,15 @@
         }
 
         // Promo codes redeemable from the tiny "Promo Codes" button in the Skin Shop's Skins
-        // tab. Keyed by the 4-digit code entered via the slider widget; each entry grants one
-        // inventory copy of the given skin the same way unlockSecretGlitchSkin does.
+        // tab. Keyed by the 4-digit code entered via the slider widget. Two reward shapes:
+        //  - type 'skin': grants one inventory copy of the given skin (same as
+        //    unlockSecretGlitchSkin); "already redeemed" is derived from already owning it.
+        //  - type 'coins': grants a flat coin amount. Coins have no natural "already owned"
+        //    signal the way a skin does, so redemption is tracked separately per-code via
+        //    'promoRedeemed_<code>' to stop the same code being reused for infinite coins.
         const promoCodes = {
-            "8424": { id: "onebit", name: "1-Bit" }
+            "8424": { type: "skin", id: "onebit", name: "1-Bit" },
+            "9999": { type: "coins", amount: 99999 }
         };
 
         function openPromoModal() {
@@ -4758,6 +4763,23 @@
             if (!reward) {
                 msgEl.style.color = '#e74c3c';
                 msgEl.innerText = 'Invalid code.';
+                return;
+            }
+            if (reward.type === 'coins') {
+                let redeemedKey = 'promoRedeemed_' + code;
+                if (storage.get(redeemedKey) === 'true') {
+                    msgEl.style.color = '#f1c40f';
+                    msgEl.innerText = 'You already redeemed this code.';
+                    return;
+                }
+                storage.set(redeemedKey, 'true');
+                totalCoins += reward.amount;
+                storage.set('landSlidersCoins', totalCoins);
+                updateHUD();
+                updateShopButtons();
+                playSFX('secret_unlock');
+                msgEl.style.color = '#2ecc71';
+                msgEl.innerText = `+${reward.amount.toLocaleString()} coins!`;
                 return;
             }
             let alreadyOwned = parseInt(storage.get('inv_' + reward.id) || 0) > 0;

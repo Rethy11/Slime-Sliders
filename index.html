@@ -188,7 +188,7 @@
            transform-origin below, which is what keeps that anchor point fixed on screen through
            the rotate/scale of the slam animation and its resting askew tilt.
            No boxed background of any kind here - the ribbon shapes below ARE the only color. */
-        #level-grade-badge { position: fixed; width: 210px; height: 280px; transform-origin: 105px 105px; opacity: 0; z-index: 70; pointer-events: none; }
+        #level-grade-badge { position: fixed; width: 112px; height: 168px; transform-origin: 56px 56px; opacity: 0; z-index: 70; pointer-events: none; }
         #level-grade-badge.grade-f { --grade-c1: #ff9d9d; --grade-c2: #b71c1c; }
         #level-grade-badge.grade-d { --grade-c1: #ffc199; --grade-c2: #d35400; }
         #level-grade-badge.grade-c { --grade-c1: #fff3a0; --grade-c2: #e6a800; }
@@ -204,16 +204,20 @@
         }
         /* Pleated sunburst rim: alternating wedges of the grade's two shades, standing in for a
            ribbon's stitched pleats. Sits behind the plain medallion face so only its rim shows. */
-        .rosette-pleats { position: absolute; top: 6px; left: 6px; width: 198px; height: 198px; border-radius: 50%; background: repeating-conic-gradient(var(--grade-c1) 0deg 9deg, var(--grade-c2) 9deg 18deg); box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+        .rosette-pleats { position: absolute; top: 6px; left: 6px; width: 100px; height: 100px; border-radius: 50%; background: repeating-conic-gradient(var(--grade-c1) 0deg 9deg, var(--grade-c2) 9deg 18deg); box-shadow: 0 6px 12px rgba(0,0,0,0.5); }
         /* Medallion face: a plain glossy dome so the letter reads clearly against the busier
-           pleated rim behind it. */
-        .rosette-medal { position: absolute; top: 21px; left: 21px; width: 168px; height: 168px; border-radius: 50%; background: radial-gradient(circle at 35% 28%, var(--grade-c1), var(--grade-c2) 78%); border: 4px solid rgba(255,255,255,0.9); box-shadow: inset 0 -8px 16px rgba(0,0,0,0.28), inset 0 5px 10px rgba(255,255,255,0.3); }
-        /* Two ribbon tails hanging below the medallion, splayed slightly apart with a V-notch
-           cut into each bottom edge - the classic county-fair rosette silhouette. */
-        .rosette-tail { position: absolute; top: 150px; width: 36px; height: 92px; background: linear-gradient(var(--grade-c2), var(--grade-c1)); clip-path: polygon(0 0, 100% 0, 100% 76%, 50% 100%, 0 76%); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.15); }
-        .rosette-tail-l { left: 58px; transform: rotate(-16deg); transform-origin: top center; }
-        .rosette-tail-r { left: 116px; transform: rotate(16deg); transform-origin: top center; }
-        #level-grade-letter { position: absolute; top: 105px; left: 105px; transform: translate(-50%, -50%); font-size: 3.4rem; font-weight: bold; color: #fff; text-shadow: 0 3px 5px rgba(0,0,0,0.55), 0 0 14px rgba(0,0,0,0.3); line-height: 1; }
+           pleated rim behind it. Sized close to the pleats so the grade letter fills most of
+           the medal rather than floating in a lot of empty dome. */
+        .rosette-medal { position: absolute; top: 14px; left: 14px; width: 84px; height: 84px; border-radius: 50%; background: radial-gradient(circle at 35% 28%, var(--grade-c1), var(--grade-c2) 78%); border: 3px solid rgba(255,255,255,0.9); box-shadow: inset 0 -5px 10px rgba(0,0,0,0.28), inset 0 3px 6px rgba(255,255,255,0.3); }
+        /* Two long, narrow ribbon tails hanging below the medallion, tapering to a swallowtail
+           point at the bottom. Rotated so each tail's free end swings AWAY from the badge's
+           centerline (outward flare) rather than crossing back toward it - see transform-origin:
+           top center, which keeps each tail's top end pinned under the medal while only the
+           bottom end swings out. */
+        .rosette-tail { position: absolute; top: 82px; width: 15px; height: 82px; background: linear-gradient(var(--grade-c2), var(--grade-c1)); clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15); }
+        .rosette-tail-l { left: 30px; transform: rotate(24deg); transform-origin: top center; }
+        .rosette-tail-r { left: 67px; transform: rotate(-24deg); transform-origin: top center; }
+        #level-grade-letter { position: absolute; top: 56px; left: 56px; transform: translate(-50%, -50%); font-size: 2.5rem; font-weight: bold; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.55), 0 0 10px rgba(0,0,0,0.3); line-height: 1; }
         /* Items-won section is hidden by default (most levels grant zero run items) and only
            switched on by showLevelCompleteSynopsis() when levelItemsWon actually has entries -
            typically true for a Survive stage, whose two flanking chests (see updateSurvivalMode)
@@ -2634,10 +2638,10 @@
             let gradeBadge = document.getElementById('level-grade-badge');
             if (!modal || !gradeBadge) return;
             let rect = modal.getBoundingClientRect();
-            let anchorX = rect.right - 74;
-            let anchorY = rect.top + 74;
-            gradeBadge.style.left = (anchorX - 105) + 'px';
-            gradeBadge.style.top = (anchorY - 105) + 'px';
+            let anchorX = rect.right - 40;
+            let anchorY = rect.top + 40;
+            gradeBadge.style.left = (anchorX - 56) + 'px';
+            gradeBadge.style.top = (anchorY - 56) + 'px';
         }
 
         function revealLevelGrade(onDone) {
@@ -4895,7 +4899,11 @@
             level++;
             document.getElementById('level-modal').style.display = 'none';
             let gradeBadge = document.getElementById('level-grade-badge');
-            if (gradeBadge) gradeBadge.style.opacity = '0';
+            // Must also drop 'slam' here, not just zero the inline opacity: the .slam keyframe
+            // ends on opacity:1 with animation-fill-mode:forwards, and a fill-forwards animation
+            // value beats a plain inline style in the cascade. Leaving the class on left the
+            // badge visibly stuck on-screen after Continue was pressed.
+            if (gradeBadge) { gradeBadge.classList.remove('slam'); gradeBadge.style.opacity = '0'; }
             gameState = 'playing'; player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0; generateLevel();
         }
 

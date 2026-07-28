@@ -1585,7 +1585,7 @@
             "Without further use this boy ceased as well, and was forgotten.",
             "Now the boy saw his mother for the first time, she had dark brown hair, hazel eyes and an olive green colored turtleneck.",
             "Her skin was a soft, rosy shade of peach.",
-            "The room they were in was bright and exiting, and being inside of it seemed underlyingly blissful.",
+            "The room they were in was bright and exciting, and being inside of it seemed underlyingly blissful.",
             "The boy stayed in it for a short period of time, but a hand appeared at the door to the room and when the boy approached it he was dragged outside.",
             "The warm feeling stopped instantaneously, and the boy recognized the man who was his father.",
             "The house was dark and sad, lichen covered some of the walls and gave the house a green hue.",
@@ -1627,7 +1627,7 @@
         // 'story_complete' achievement and ends the run - see advanceStoryEnding.
         const storyEndingSegments = [
             "A widened perspective would first reveal a dilapidated, very old house with three skeletons held together by clay, sitting in a room, and the carcasses of two dogs laying directly outside, where they had pawed to be let in for 35 days before succumbing to hunger and consuming one another, though this event took place long ago.",
-            "Go even farther out and you would notice a glass serving dishes round top, covering the house in an effort to preserve what was inside.",
+            "Go even farther out and you would notice a glass serving dish’s round top, covering the house in an effort to preserve what was inside.",
             "The next level out would reveal a glass prism like container holding everything else, though the prism was two prisms, one with the top facing up, and the other with the top facing down, balancing perfectly on top of one of the tips of the prisms, though it was unnecessary, as it was inside of a vacuum, with a glass sphere sealing the vacuum a level higher.",
             "Finally you would see that hundreds of thousands of similar tiny spheres filled up a sand hourglass on the desk of a man you would describe as \"eccentric.\"\nAnd all of this was as it is written, for that is how it must be, and has always been."
         ];
@@ -1875,6 +1875,19 @@
             if (musicDangerActive) musicPlayerFast.play().catch(() => {});
         }
 
+        // Cuts music dead the instant the story-ending flicker fires (see advanceStoryEnding) -
+        // unlike setMusicDanger's crossfade or pauseMusicForVisibility's pause/resume pair,
+        // nothing here schedules music to come back; it stays silent until playMusicTrack is
+        // next called, which only happens via startGame() (Play Again / Main Menu -> Play).
+        function stopMusicHard() {
+            if (!audioGraphReady) return;
+            dangerFadeToken++; // invalidate any crossfade-scheduled pause still pending
+            musicPlayerNormal.pause();
+            musicPlayerFast.pause();
+            musicDangerActive = false;
+            musicSped = false;
+        }
+
         function playSFX(type, pitchMult = 1) {
             if (!actx || userSettings.sfxVol <= 0) return;
             let osc = actx.createOscillator(); let gain = actx.createGain();
@@ -1988,10 +2001,27 @@
                     let nGain = actx.createGain(); nGain.gain.setValueAtTime(userSettings.sfxVol * 0.35, t + i * 0.06); nGain.gain.exponentialRampToValueAtTime(0.01, t + i * 0.06 + 0.15);
                     nOsc.connect(nGain); nGain.connect(actx.destination); nOsc.start(t + i * 0.06); nOsc.stop(t + i * 0.06 + 0.15);
                 });
+            } else if (type === 'bulb_tick') {
+                // Short, buzzy electrical stutter - fired once per flicker dip in stageFlicker.
+                // pitchMult comes from that dip's depth: harder/deeper dips pass a lower
+                // multiplier for a rougher, chunkier crackle; shallow dips pass a higher one for
+                // a lighter, higher-pitched stutter.
+                osc.type = 'sawtooth';
+                let base = 90 * pitchMult;
+                osc.frequency.setValueAtTime(base + Math.random() * 40, t);
+                osc.frequency.exponentialRampToValueAtTime(base * 0.6, t + 0.03);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.18, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.035);
+                osc.start(t); osc.stop(t + 0.035);
+            } else if (type === 'bulb_die') {
+                // The bulb finally giving out: a low buzzing hum that sags and cuts to silence,
+                // timed to land right as stageFlicker's overlay settles to full black.
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(140, t); osc.frequency.exponentialRampToValueAtTime(30, t + 0.35);
+                let dieOsc2 = actx.createOscillator(); dieOsc2.type = 'square'; dieOsc2.frequency.setValueAtTime(70, t); dieOsc2.frequency.exponentialRampToValueAtTime(20, t + 0.3);
+                let dieGain2 = actx.createGain(); dieGain2.gain.setValueAtTime(userSettings.sfxVol * 0.15, t); dieGain2.gain.exponentialRampToValueAtTime(0.01, t + 0.3);
+                dieOsc2.connect(dieGain2); dieGain2.connect(actx.destination); dieOsc2.start(t); dieOsc2.stop(t + 0.3);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.25, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.35);
+                osc.start(t); osc.stop(t + 0.35);
             }
-        }
-
-        function manageBeeBuzzing() {
             if (!actx || userSettings.sfxVol <= 0 || gameState !== 'playing') {
                 if (beeBuzzOsc) { beeBuzzOsc.stop(); beeBuzzOsc = null; }
                 return;
@@ -5158,6 +5188,7 @@
                 document.getElementById('story-ending-dialogue').style.display = 'none';
                 storage.set('landSlidersStoryComplete', 'true');
                 checkAchievements();
+                stopMusicHard();
                 stageFlicker(true, () => {
                     triggerGameOver('story');
                     // The game-over screen has its own dimmed backdrop, so the blackout overlay
@@ -5189,15 +5220,17 @@
             let sequence = [];
             for (let i = 0; i < dips; i++) {
                 let hardStutter = Math.random() < 0.3;
-                sequence.push({ opacity: hardStutter ? (0.75 + Math.random() * 0.25) : (0.15 + Math.random() * 0.4), hold: 25 + Math.random() * 60 });
+                sequence.push({ opacity: hardStutter ? (0.75 + Math.random() * 0.25) : (0.15 + Math.random() * 0.4), hold: 25 + Math.random() * 60, tick: true, pitchMult: hardStutter ? 0.6 : 1.3 });
                 sequence.push({ opacity: Math.random() * 0.12, hold: 35 + Math.random() * 90 });
             }
             let i = 0;
             function tick() {
                 if (i < sequence.length) {
+                    let step = sequence[i];
                     overlay.style.transition = 'opacity 40ms ease-out';
-                    overlay.style.opacity = sequence[i].opacity;
-                    let hold = sequence[i].hold;
+                    overlay.style.opacity = step.opacity;
+                    if (step.tick) playSFX('bulb_tick', step.pitchMult);
+                    let hold = step.hold;
                     i++;
                     setTimeout(tick, hold);
                 } else {
@@ -5205,6 +5238,7 @@
                     // as the flicker settling/deciding rather than just another dip.
                     overlay.style.transition = 'opacity 220ms ease-in';
                     overlay.style.opacity = endDark ? 1 : 0;
+                    if (endDark) playSFX('bulb_die');
                     setTimeout(() => {
                         if (!endDark) overlay.style.pointerEvents = 'none';
                         if (callback) callback();
@@ -8393,7 +8427,12 @@
             if (domRefs.surviveAnnouncement) { domRefs.surviveAnnouncement.classList.remove('show'); domRefs.surviveAnnouncement.style.display = 'none'; }
             // Almanac and Settings corner icons are intentionally left visible here so the player can
             // still check what killed them or adjust settings from the Game Over screen.
-            document.getElementById('game-over-screen').style.display = 'flex';
+            let goScreen = document.getElementById('game-over-screen');
+            goScreen.style.display = 'flex';
+            // The story-ending death keeps the stage's black flicker-out going into the game
+            // over screen itself, rather than cutting back to the usual tinted backdrop -
+            // reset to the default (the CSS rule's rgba tint) for every other death reason.
+            goScreen.style.background = (reason === 'story') ? '#000' : '';
             lastCountdownSecond = -1;
             setMusicDanger(false);
             updateHazardVignette(0);

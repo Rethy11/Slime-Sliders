@@ -1754,6 +1754,19 @@
         let musicDangerActive = false;
         let dangerFadeToken = 0; // bumped on every setMusicDanger() call; lets a delayed pause() no-op if re-triggered mid-fade
 
+        // Set the instant the story-ending flicker fires (see advanceStoryEnding) so the music
+        // cuts out immediately and - unlike a normal pause - stays silent through every other
+        // screen (game over, almanac, settings) instead of getting auto-resumed by initAudio()
+        // or a visibility-change resume. Only a fresh playMusicTrack() (i.e. actually starting a
+        // new run via Play Again) clears it, per spec: music shouldn't come back until then.
+        let musicStoppedForStory = false;
+        function stopMusicForStoryEnding() {
+            musicStoppedForStory = true;
+            if (!audioGraphReady) return;
+            musicPlayerNormal.pause();
+            musicPlayerFast.pause();
+        }
+
         const musicPlayerNormal = new Audio();
         musicPlayerNormal.loop = true;
         musicPlayerNormal.preload = 'auto';
@@ -1805,6 +1818,7 @@
             musicPlayerFast.currentTime = 0;
             musicDangerActive = false;
             musicSped = false;
+            musicStoppedForStory = false;
             dangerFadeToken++;
             if (audioGraphReady) {
                 let now = actx.currentTime;
@@ -1854,6 +1868,7 @@
                 playMusicTrack(currentTrack);
             }
             if (actx.state === 'suspended') actx.resume();
+            if (musicStoppedForStory) return;
             if (musicPlayerNormal.paused) musicPlayerNormal.play().catch(() => {});
             if (musicDangerActive && musicPlayerFast.paused) musicPlayerFast.play().catch(() => {});
         }
@@ -1869,7 +1884,7 @@
             if (actx.state === 'running') actx.suspend();
         }
         function resumeMusicForVisibility() {
-            if (!audioGraphReady || !musicWasPlayingBeforeHidden) return;
+            if (!audioGraphReady || !musicWasPlayingBeforeHidden || musicStoppedForStory) return;
             if (actx.state === 'suspended') actx.resume();
             musicPlayerNormal.play().catch(() => {});
             if (musicDangerActive) musicPlayerFast.play().catch(() => {});
@@ -1976,6 +1991,26 @@
                 let slamOsc = actx.createOscillator(); slamOsc.type = 'triangle'; slamOsc.frequency.setValueAtTime(900, t + 0.03); slamOsc.frequency.exponentialRampToValueAtTime(1300, t + 0.12);
                 let slamGain = actx.createGain(); slamGain.gain.setValueAtTime(userSettings.sfxVol * 0.3, t + 0.03); slamGain.gain.exponentialRampToValueAtTime(0.01, t + 0.14);
                 slamOsc.connect(slamGain); slamGain.connect(actx.destination); slamOsc.start(t + 0.03); slamOsc.stop(t + 0.14);
+            } else if (type === 'lightbulb_flicker') {
+                // Stuttering electrical buzz synced to stageFlicker's on/off steps at the end of
+                // the story (see advanceStoryEnding) - a run of short, unevenly-pitched bursts
+                // like a dying bulb, ending on a harsher final pop right as the screen cuts to
+                // black for good.
+                let offsets = [0, 0.08, 0.16, 0.24, 0.32, 0.4, 0.48, 0.56];
+                osc.type = 'square'; osc.frequency.setValueAtTime(90 + Math.random() * 40, t);
+                gain.gain.setValueAtTime(userSettings.sfxVol * 0.18, t); gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+                osc.start(t); osc.stop(t + 0.05);
+                offsets.slice(1).forEach((offset, i) => {
+                    let isLast = i === offsets.slice(1).length - 1;
+                    let bOsc = actx.createOscillator(); let bGain = actx.createGain();
+                    bOsc.type = i % 2 === 0 ? 'sawtooth' : 'square';
+                    bOsc.frequency.setValueAtTime(80 + Math.random() * 50, t + offset);
+                    let vol = isLast ? userSettings.sfxVol * 0.55 : userSettings.sfxVol * (0.14 + Math.random() * 0.12);
+                    bGain.gain.setValueAtTime(vol, t + offset);
+                    bGain.gain.exponentialRampToValueAtTime(0.01, t + offset + (isLast ? 0.12 : 0.05));
+                    bOsc.connect(bGain); bGain.connect(actx.destination);
+                    bOsc.start(t + offset); bOsc.stop(t + offset + (isLast ? 0.12 : 0.05));
+                });
             } else if (type === 'grade_reveal') {
                 // Triumphant thud + rising four-note arpeggio as the letter-grade badge slams
                 // into the level-complete screen's top-right corner (see revealLevelGrade).
@@ -5158,6 +5193,8 @@
                 document.getElementById('story-ending-dialogue').style.display = 'none';
                 storage.set('landSlidersStoryComplete', 'true');
                 checkAchievements();
+                stopMusicForStoryEnding();
+                playSFX('lightbulb_flicker');
                 stageFlicker(true, () => {
                     triggerGameOver('story');
                     // The game-over screen has its own dimmed backdrop, so the blackout overlay
@@ -8387,6 +8424,17 @@
             }
             document.getElementById('go-level').innerText = level;
             document.getElementById('go-best').innerText = (gameMode === 'endless') ? bestEndlessLevel : highestLevel;
+            // The story ending's game over gets a solid black backdrop instead of the usual
+            // dark-green/blurred one, to match the lights-out flicker that led into it. Reset
+            // back to the normal look for every other death reason so it doesn't linger.
+            let goScreenEl = document.getElementById('game-over-screen');
+            if (reason === 'story') {
+                goScreenEl.style.background = '#000';
+                goScreenEl.style.backdropFilter = 'none';
+            } else {
+                goScreenEl.style.background = '';
+                goScreenEl.style.backdropFilter = '';
+            }
             if (reason === 'time') document.getElementById('death-reason').innerText = "Out of Time!";
             else if (reason === 'hazard') { document.getElementById('death-reason').innerText = "Fell into the abyss!";
             }

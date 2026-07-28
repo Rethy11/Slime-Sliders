@@ -188,7 +188,7 @@
            transform-origin below, which is what keeps that anchor point fixed on screen through
            the rotate/scale of the slam animation and its resting askew tilt.
            No boxed background of any kind here - the ribbon shapes below ARE the only color. */
-        #level-grade-badge { position: fixed; width: 112px; height: 168px; transform-origin: 56px 56px; opacity: 0; z-index: 70; pointer-events: none; }
+        #level-grade-badge { position: fixed; width: 112px; height: 178px; transform-origin: 56px 56px; opacity: 0; z-index: 70; pointer-events: none; }
         #level-grade-badge.grade-f { --grade-c1: #ff9d9d; --grade-c2: #b71c1c; }
         #level-grade-badge.grade-d { --grade-c1: #ffc199; --grade-c2: #d35400; }
         #level-grade-badge.grade-c { --grade-c1: #fff3a0; --grade-c2: #e6a800; }
@@ -203,20 +203,33 @@
             100% { opacity: 1; transform: scale(1) rotate(-9deg); }
         }
         /* Pleated sunburst rim: alternating wedges of the grade's two shades, standing in for a
-           ribbon's stitched pleats. Sits behind the plain medallion face so only its rim shows. */
-        .rosette-pleats { position: absolute; top: 6px; left: 6px; width: 100px; height: 100px; border-radius: 50%; background: repeating-conic-gradient(var(--grade-c1) 0deg 9deg, var(--grade-c2) 9deg 18deg); box-shadow: 0 6px 12px rgba(0,0,0,0.5); }
+           ribbon's stitched pleats. Sits behind the plain medallion face so only its rim shows.
+           clip-path traces a 48-point circle whose radius alternates by ~2.7px, giving the
+           rim a lightly crinkle/pinked-cut outer edge (like pinking shears on real ribbon)
+           instead of a perfectly smooth circle. */
+        .rosette-pleats { position: absolute; top: 6px; left: 6px; width: 100px; height: 100px; border-radius: 50%; background: repeating-conic-gradient(var(--grade-c1) 0deg 9deg, var(--grade-c2) 9deg 18deg); box-shadow: 0 6px 12px rgba(0,0,0,0.5); clip-path: polygon(50.00% 0.00%, 56.17% 3.10%, 62.94% 1.70%, 68.10% 6.30%, 75.00% 6.70%, 78.79% 12.47%, 85.36% 14.64%, 87.53% 21.21%, 93.30% 25.00%, 93.70% 31.90%, 98.30% 37.06%, 96.90% 43.83%, 100.00% 50.00%, 96.90% 56.17%, 98.30% 62.94%, 93.70% 68.10%, 93.30% 75.00%, 87.53% 78.79%, 85.36% 85.36%, 78.79% 87.53%, 75.00% 93.30%, 68.10% 93.70%, 62.94% 98.30%, 56.17% 96.90%, 50.00% 100.00%, 43.83% 96.90%, 37.06% 98.30%, 31.90% 93.70%, 25.00% 93.30%, 21.21% 87.53%, 14.64% 85.36%, 12.47% 78.79%, 6.70% 75.00%, 6.30% 68.10%, 1.70% 62.94%, 3.10% 56.17%, 0.00% 50.00%, 3.10% 43.83%, 1.70% 37.06%, 6.30% 31.90%, 6.70% 25.00%, 12.47% 21.21%, 14.64% 14.64%, 21.21% 12.47%, 25.00% 6.70%, 31.90% 6.30%, 37.06% 1.70%, 43.83% 3.10%); }
         /* Medallion face: a plain glossy dome so the letter reads clearly against the busier
            pleated rim behind it. Sized close to the pleats so the grade letter fills most of
            the medal rather than floating in a lot of empty dome. */
         .rosette-medal { position: absolute; top: 14px; left: 14px; width: 84px; height: 84px; border-radius: 50%; background: radial-gradient(circle at 35% 28%, var(--grade-c1), var(--grade-c2) 78%); border: 3px solid rgba(255,255,255,0.9); box-shadow: inset 0 -5px 10px rgba(0,0,0,0.28), inset 0 3px 6px rgba(255,255,255,0.3); }
-        /* Two long, narrow ribbon tails hanging below the medallion, tapering to a swallowtail
-           point at the bottom. Rotated so each tail's free end swings AWAY from the badge's
-           centerline (outward flare) rather than crossing back toward it - see transform-origin:
-           top center, which keeps each tail's top end pinned under the medal while only the
-           bottom end swings out. */
-        .rosette-tail { position: absolute; top: 82px; width: 15px; height: 82px; background: linear-gradient(var(--grade-c2), var(--grade-c1)); clip-path: polygon(0 0, 100% 0, 100% 82%, 50% 100%, 0 82%); box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15); }
-        .rosette-tail-l { left: 30px; transform: rotate(24deg); transform-origin: top center; }
-        .rosette-tail-r { left: 67px; transform: rotate(-24deg); transform-origin: top center; }
+        /* Two thick ribbon tails hanging below the medallion, cut with a W notch at the bottom
+           (two forked points either side of a center point) rather than a single V - the
+           classic fuller rosette-ribbon silhouette. The extra background layer is a faint
+           lighter/darker edge stripe standing in for a ribbon's folded crease, so the tail
+           reads as cloth rather than a flat color swatch. Rotated so each tail's free end
+           swings AWAY from the badge's centerline (outward flare) rather than crossing back
+           toward it - see transform-origin: top center, which keeps each tail's top end
+           pinned under the medal while only the bottom end swings out. */
+        .rosette-tail {
+            position: absolute; top: 76px; width: 28px; height: 88px;
+            background:
+                linear-gradient(90deg, rgba(0,0,0,0.18) 0%, rgba(255,255,255,0.22) 12%, transparent 30%, transparent 70%, rgba(0,0,0,0.22) 100%),
+                linear-gradient(var(--grade-c2), var(--grade-c1));
+            clip-path: polygon(0 0, 100% 0, 100% 100%, 72% 64%, 50% 100%, 28% 64%, 0 100%);
+            box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.15);
+        }
+        .rosette-tail-l { left: 21px; transform: rotate(26deg); transform-origin: top center; }
+        .rosette-tail-r { left: 63px; transform: rotate(-26deg); transform-origin: top center; }
         #level-grade-letter { position: absolute; top: 56px; left: 56px; transform: translate(-50%, -50%); font-size: 2.5rem; font-weight: bold; color: #fff; text-shadow: 0 2px 4px rgba(0,0,0,0.55), 0 0 10px rgba(0,0,0,0.3); line-height: 1; }
         /* Items-won section is hidden by default (most levels grant zero run items) and only
            switched on by showLevelCompleteSynopsis() when levelItemsWon actually has entries -
@@ -2638,8 +2651,8 @@
             let gradeBadge = document.getElementById('level-grade-badge');
             if (!modal || !gradeBadge) return;
             let rect = modal.getBoundingClientRect();
-            let anchorX = rect.right - 40;
-            let anchorY = rect.top + 40;
+            let anchorX = rect.right - 22;
+            let anchorY = rect.top + 22;
             gradeBadge.style.left = (anchorX - 56) + 'px';
             gradeBadge.style.top = (anchorY - 56) + 'px';
         }

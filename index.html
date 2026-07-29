@@ -29,14 +29,13 @@
         canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
         .icon-img { width: 1em; height: 1em; vertical-align: middle; image-rendering: pixelated; }
         
-        #title-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 30, 20, 0.7); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: flex-start; align-items: center; z-index: 20; color: white; text-align: center; padding-bottom: 90px; }
-        #game-over-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 30, 20, 0.7); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 20; color: white; text-align: center; }
-        #title-header { padding-top: 8vh; }
-        #title-buttons { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
+        #title-screen, #game-over-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 30, 20, 0.7); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: flex-start; align-items: center; z-index: 20; color: white; text-align: center; padding-bottom: 90px; }
+        .menu-header { padding-top: 8vh; }
+        .menu-buttons { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
         #title-screen h1, #game-over-screen h1 { font-size: 2rem; margin-bottom: 14px; text-shadow: 0 4px 0 rgba(0,0,0,0.5); letter-spacing: 1px; line-height: 1.4; }
         #title-screen p, #game-over-screen p { margin-bottom: 30px; font-size: 0.7rem; line-height: 1.6; text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
         
-        .menu-btn { font-size: 0.75rem; padding: 16px 30px; box-shadow: 0 6px 0 rgba(0,0,0,0.3); border-radius: 4px; margin: 10px; min-width: 200px; border: 2px solid rgba(0,0,0,0.35); }
+        .menu-btn { font-size: 0.9rem; padding: 22px 38px; box-shadow: 0 6px 0 rgba(0,0,0,0.3); border-radius: 4px; margin: 14px; min-width: 240px; border: 2px solid rgba(0,0,0,0.35); }
         .menu-btn:active { transform: translateY(5px); box-shadow: 0 3px 0 rgba(0,0,0,0.3); }
 
         #ui-layer { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; padding: 20px; z-index: 5;}
@@ -549,12 +548,12 @@
 </head>
 <body>
     <div id="title-screen">
-        <div id="title-header">
+        <div class="menu-header">
             <h1>SLIME SLIDERS</h1>
             <p>Swipe to move. Collect coins to unlock the Goal!</p>
             <p id="title-best-level" style="margin-top: -20px; margin-bottom: 0; font-size: 0.65rem; color: #ffcf33;">Best: Level 1</p>
         </div>
-        <div id="title-buttons">
+        <div class="menu-buttons">
             <button id="play-btn" class="menu-btn" style="background: var(--accent)">Play</button>
             <button id="title-gamemode-btn" class="menu-btn" style="background: #47a8ff;">Classic</button>
             <button id="title-settings-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
@@ -562,12 +561,16 @@
     </div>
 
     <div id="game-over-screen">
-        <h1 style="color: #ff477e;">GAME OVER</h1>
-        <p id="death-reason" style="color: #ffcf33; font-weight: bold;"></p>
-        <p>You reached <b>Level <span id="go-level"></span></b><br>Best: <b>Level <span id="go-best"></span></b></p>
-        <button id="go-play-again" class="menu-btn" style="background: var(--accent)">Play Again</button>
-        <button id="go-main-menu" class="menu-btn" style="background: #4caf50;">Main Menu</button>
-        <button id="go-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
+        <div class="menu-header">
+            <h1 style="color: #ff477e;">GAME OVER</h1>
+            <p id="death-reason" style="color: #ffcf33; font-weight: bold;"></p>
+            <p style="margin-bottom: 0;">You reached <b>Level <span id="go-level"></span></b><br>Best: <b>Level <span id="go-best"></span></b></p>
+        </div>
+        <div class="menu-buttons">
+            <button id="go-play-again" class="menu-btn" style="background: var(--accent)">Play Again</button>
+            <button id="go-main-menu" class="menu-btn" style="background: #4caf50;">Main Menu</button>
+            <button id="go-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
+        </div>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -1021,7 +1024,14 @@
         // themes/legendary-void.js; voidGrayscaleActive stays here since it's flipped on/off
         // all over the specific-interaction rendering code (rocks, trees, etc.) elsewhere in
         // this file.
-        window.LegendaryStageEffects.void.installGrayscaleIntercept(ctx, () => voidGrayscaleActive);
+        // Guarded (rather than a bare call) because this runs immediately at script load, before
+        // any gameplay code exists to catch a failure - if themes/legendary-void.js didn't load
+        // (network hiccup, offline, or a standalone/sandboxed preview without that file present),
+        // an unguarded call here would throw synchronously and take down every function
+        // definition, event listener, and the game loop itself below it in this same script.
+        if (window.LegendaryStageEffects && window.LegendaryStageEffects.void) {
+            window.LegendaryStageEffects.void.installGrayscaleIntercept(ctx, () => voidGrayscaleActive);
+        }
         
         const memoryStorage = {};
         const storage = {

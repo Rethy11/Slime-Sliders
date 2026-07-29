@@ -4500,8 +4500,14 @@
         // when the document has an active non-zero scroll position - the #scroll-runway spacer
         // (1px, margin-collapsed so nothing visually shifts) exists purely to give it that room.
         // touch-action:none above still blocks the player from ever scrolling this by touch.
-        window.scrollTo(0, 1);
-        window.addEventListener('resize', () => window.scrollTo(0, 1));
+        // Standalone/PWA mode has no toolbar to consume this scroll - the page would genuinely
+        // shift instead - and it already gets real edge-to-edge content for free via
+        // viewport-fit=cover with no scroll trick needed, so this only runs in a browser tab.
+        const isStandaloneApp = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
+        if (!isStandaloneApp) {
+            window.scrollTo(0, 1);
+            window.addEventListener('resize', () => window.scrollTo(0, 1));
+        }
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) { flushCoinsIfDirty(); pauseMusicForVisibility(); }
             else { resumeMusicForVisibility(); }

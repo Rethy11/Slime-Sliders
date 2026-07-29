@@ -148,7 +148,7 @@
         
         #game-over-screen { display: none; z-index: 25; }
 
-        .corner-icon { position: absolute; bottom: 30px; width: 60px; height: 60px; border-radius: 50%; font-size: 1.5rem; display: none; justify-content: center; align-items: center; pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 50; border: 3px solid #fff; }
+        .corner-icon { position: absolute; bottom: 30px; width: 60px; height: 60px; border-radius: 50%; font-size: 1.5rem; display: flex; justify-content: center; align-items: center; pointer-events: auto; box-shadow: 0 5px 15px rgba(0,0,0,0.5); z-index: 50; border: 3px solid #fff; }
         #settings-corner-btn { left: 30px; background: #6c7a89; }
         #almanac-corner-btn { right: 30px; background: #9b59b6; }
         
@@ -551,7 +551,7 @@
         <p id="title-best-level" style="margin-top: -20px; margin-bottom: 25px; font-size: 0.65rem; color: #ffcf33;">Best: Level 1</p>
         <button id="play-btn" class="menu-btn" style="background: var(--accent)">Play</button>
         <button id="title-gamemode-btn" class="menu-btn" style="background: #47a8ff;">Mode: Classic</button>
-        <button id="title-settings-btn" class="menu-btn" style="background: #6c7a89;">Settings</button>
+        <button id="title-settings-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
     </div>
 
     <div id="game-over-screen">
@@ -587,13 +587,12 @@
     <div id="story-ending-dialogue"><span id="story-ending-dialogue-text"></span><span id="story-ending-dialogue-hint">tap to continue</span></div>
     <div id="story-blackout"></div>
 
-    <!-- Bottom-left corner icon: used to open Settings, now repurposed as a quick Shop shortcut
-         during gameplay. Settings is still reachable from the title screen's own Settings button. -->
+    <!-- Bottom-left corner icon: opens Settings. Visible everywhere, including the title screen. -->
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
-    <!-- Bottom-right corner icon: shows a "?" info icon during normal play (opens the About/
-         Privacy/Terms links tab - see info-modal), but swaps to an achievements trophy and opens
-         the Almanac's Achievements tab instead once the Game Over screen is up (see
-         updateCornerRightIconForGameOver). -->
+    <!-- Bottom-right corner icon: shows a "?" info icon only on the title screen (opens the
+         About/Privacy/Terms links tab - see info-modal). Everywhere else - during gameplay and
+         on the Game Over screen - it's the achievements trophy, opening the Almanac's
+         Achievements tab instead (see updateCornerRightIconForTitle). -->
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""><span class="notif-dot" id="almanac-corner-dot"></span></button>
     <div id="unlock-popup"><img class="icon-img" id="unlock-star-l" style="width:1em;height:1em;" alt=""> <span id="unlock-popup-text">New Enemy Entry Unlocked!</span> <img class="icon-img" id="unlock-star-r" style="width:1em;height:1em;" alt=""></div>
     <div id="lion-tutorial-popup"><span id="lion-tutorial-text"></span><span id="lion-tutorial-sub" class="lion-tutorial-sub">Double tap to continue</span></div>
@@ -739,7 +738,6 @@
             <span style="font-weight:bold;">Controls</span>
             <button id="controls-toggle" class="toggle-btn">Regular</button>
         </div>
-        <button id="skip-level-btn" class="menu-btn" style="display:none; background:#8e44ad; width:100%; margin:15px 0 0 0; min-width:0; box-sizing:border-box;">Skip Level (+3 Items) [DEV]</button>
         <button id="leave-game-btn" class="menu-btn" style="display:none; background:#e74c3c; width:100%; margin:10px 0 0 0; min-width:0; box-sizing:border-box;">Leave Game</button>
     </div>
 
@@ -4488,7 +4486,7 @@
         document.getElementById('level-stat-coin-icon').src = iconDataURL('coin', 20);
         document.getElementById('unlock-star-l').src = iconDataURL('star', 20);
         document.getElementById('unlock-star-r').src = iconDataURL('star', 20);
-        document.getElementById('settings-icon-img').src = iconDataURL('shop', 32);
+        document.getElementById('settings-icon-img').src = iconDataURL('settings', 32);
         document.getElementById('almanac-icon-img').src = iconDataURL('question', 32);
         document.querySelectorAll('button').forEach(btn => { btn.addEventListener('mousedown', () => playSFX('click')); });
 
@@ -5766,19 +5764,19 @@
             initAudio();
         }
 
-        // The bottom-right corner icon does double duty: a "?" info button during normal
-        // gameplay, or an achievements trophy (opening the Almanac's Achievements tab) once the
-        // Game Over screen is up - see updateCornerRightIconForGameOver, which flips the icon
-        // itself at the moment the game actually ends.
+        // The bottom-right corner icon does double duty: a "?" info button on the title screen,
+        // or an achievements trophy (opening the Almanac's Achievements tab) everywhere else -
+        // during gameplay and on the Game Over screen - see updateCornerRightIconForTitle, which
+        // flips the icon itself whenever the title screen is shown or left.
         function toggleCornerRightIcon() {
-            if (gameState === 'game_over') toggleAlmanac(); else toggleInfo();
+            if (gameState === 'title') toggleInfo(); else toggleAlmanac();
         }
 
         // Swaps the bottom-right corner icon's artwork between the "?" info glyph and the
-        // achievements trophy. isGameOver true -> trophy (Game Over screen); false -> "?" (normal
-        // gameplay, restored on every fresh startGame()).
-        function updateCornerRightIconForGameOver(isGameOver) {
-            document.getElementById('almanac-icon-img').src = iconDataURL(isGameOver ? 'trophy' : 'question', 32);
+        // achievements trophy. isTitle true -> "?" (title screen); false -> trophy (everywhere
+        // else - restored on every fresh startGame() and left in place through Game Over).
+        function updateCornerRightIconForTitle(isTitle) {
+            document.getElementById('almanac-icon-img').src = iconDataURL(isTitle ? 'question' : 'trophy', 32);
         }
 
         function toggleAlmanac() {
@@ -5800,9 +5798,6 @@
             gameState = 'paused'; }
             document.getElementById('settings-modal').style.display = 'block'; syncSettingsUI(); initAudio();
             document.getElementById('leave-game-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
-            // DEV: skip button only makes sense mid-run (not on the title/game-over screens),
-            // same visibility gate as Leave Game above.
-            document.getElementById('skip-level-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
         }
 
         // Records a newly-reached level against whichever mode is currently active, persisting
@@ -6159,8 +6154,8 @@
         document.getElementById('tab-almanac-enemies').addEventListener('click', () => switchAlmanacTab('enemies'));
         document.getElementById('tab-almanac-items').addEventListener('click', () => switchAlmanacTab('items'));
         document.getElementById('tab-almanac-achievements').addEventListener('click', () => switchAlmanacTab('achievements'));
-        document.getElementById('title-settings-btn').addEventListener('click', toggleSettings);
-        document.getElementById('settings-corner-btn').addEventListener('click', toggleShop);
+        document.getElementById('title-settings-btn').addEventListener('click', toggleShop);
+        document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
         document.getElementById('almanac-detail-close-btn').addEventListener('click', () => {
             document.getElementById('almanac-detail-modal').style.display = 'none';
         });
@@ -6177,7 +6172,7 @@
             });
         });
         document.getElementById('go-play-again').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; resetGame(); startGame(); });
-        document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none'); resetGame(); gameState = 'title'; updateGameModeButton(); });
+        document.getElementById('go-main-menu').addEventListener('click', () => { document.getElementById('game-over-screen').style.display = 'none'; document.getElementById('title-screen').style.display = 'flex'; updateCornerRightIconForTitle(true); resetGame(); gameState = 'title'; updateGameModeButton(); });
         document.getElementById('music-slider').addEventListener('input', e => { userSettings.musicVol = parseFloat(e.target.value); storage.set('ls_music', userSettings.musicVol); if (musicGainMaster) musicGainMaster.gain.value = userSettings.musicVol; initAudio(); });
         document.getElementById('sfx-slider').addEventListener('input', e => { userSettings.sfxVol = parseFloat(e.target.value); storage.set('ls_sfx', userSettings.sfxVol); playSFX('click'); initAudio(); });
         document.getElementById('controls-toggle').addEventListener('click', e => { userSettings.invert = !userSettings.invert; storage.set('ls_invert', userSettings.invert); syncSettingsUI(); });
@@ -6186,19 +6181,9 @@
             document.getElementById('game-over-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'none';
             document.getElementById('title-screen').style.display = 'flex';
-            document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
+            updateCornerRightIconForTitle(true);
             resetGame();
             gameState = 'title';
-        });
-        // DEV: instantly clears the current level, no run stats/coins/achievements from it are
-        // recorded (matches nothing-happened-here since destroyEnemyByIndex/goal-collect never
-        // ran), and hands out 3 random roguelike items on top - same roll/grant path a normal
-        // level-up chest uses (rollRoguelikeItem + grantRoguelikeItem), so locked-item filtering,
-        // stack-record tracking, and the level-end "Items Won" summary all just work unmodified.
-        document.getElementById('skip-level-btn').addEventListener('click', () => {
-            document.getElementById('settings-modal').style.display = 'none';
-            for (let i = 0; i < 3; i++) grantRoguelikeItem(rollRoguelikeItem());
-            nextLevel();
         });
         document.getElementById('promo-redeem-btn').addEventListener('click', redeemPromoCode);
         [0, 1, 2, 3].forEach(i => {
@@ -9665,8 +9650,7 @@
         function startGame() {
             document.getElementById('title-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
-            document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'flex');
-            updateCornerRightIconForGameOver(false);
+            updateCornerRightIconForTitle(false);
             gameState = 'playing'; camera.x = player.worldX - canvas.width / 2;
             camera.y = player.worldY - canvas.height / 2;
             camera.prevX = camera.x; camera.prevY = camera.y;
@@ -9749,9 +9733,9 @@
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
             clearTimeout(surviveAnnounceTimeout);
             if (domRefs.surviveAnnouncement) { domRefs.surviveAnnouncement.classList.remove('show'); domRefs.surviveAnnouncement.style.display = 'none'; }
-            // Shop and Achievements corner icons are intentionally left visible here so the player
-            // can still check what they've unlocked or hop into the Shop from the Game Over screen.
-            updateCornerRightIconForGameOver(true);
+            // Settings and Achievements corner icons are intentionally left visible here so the
+            // player can still check what they've unlocked or adjust settings from the Game Over screen.
+            updateCornerRightIconForTitle(false);
             document.getElementById('game-over-screen').style.display = 'flex';
             lastCountdownSecond = -1;
             setMusicDanger(false);

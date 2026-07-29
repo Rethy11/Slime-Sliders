@@ -4486,14 +4486,28 @@
             }
         }
         function resize() {
-            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
-            displayCanvas.width = window.innerWidth; displayCanvas.height = window.innerHeight;
+            let vw = window.innerWidth, vh = window.innerHeight;
+            canvas.width = vw; canvas.height = vh;
+            displayCanvas.width = vw; displayCanvas.height = vh;
             pixelCanvas.width = Math.max(1, Math.ceil(canvas.width / PIXEL_SCALE));
             pixelCanvas.height = Math.max(1, Math.ceil(canvas.height / PIXEL_SCALE));
             pixelCtx.imageSmoothingEnabled = false;
             displayCtx.imageSmoothingEnabled = false;
+            // Force html/body to this exact pixel height, the same number used for the canvas
+            // above. #title-screen, #game-over-screen, #ui-layer, etc. are all height:100% of
+            // body - on iOS Safari that CSS percentage can resolve against a different box than
+            // window.innerHeight (especially mid-toolbar-animation), which is what left the dark
+            // overlay ending above the bottom of the canvas. Pinning both to the same number by
+            // construction removes the mismatch instead of hoping the two agree.
+            document.documentElement.style.height = vh + 'px';
+            document.body.style.height = vh + 'px';
         }
-        window.addEventListener('resize', resize); resize();
+        window.addEventListener('resize', resize);
+        // Safari's toolbar show/hide doesn't reliably fire a plain window 'resize' at the right
+        // moment - visualViewport's resize event is what's documented to fire when the visible
+        // area actually changes, so hook that too wherever it's available.
+        if (window.visualViewport) { window.visualViewport.addEventListener('resize', resize); }
+        resize();
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) { flushCoinsIfDirty(); pauseMusicForVisibility(); }
             else { resumeMusicForVisibility(); }

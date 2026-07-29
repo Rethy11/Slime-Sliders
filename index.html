@@ -43,6 +43,13 @@
         #timer-container { position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%); width: calc(100% - 180px); max-width: 300px; height: 25px; background: rgba(0,0,0,0.5); border-radius: 15px; border: 3px solid #fff; pointer-events: none; overflow: hidden; }
         #timer-fill { height: 100%; background: linear-gradient(90deg, #ff477e, #ffcf33); width: 100%; transform-origin: left; transition: background 0.3s; }
         #timer-container.danger #timer-fill { background: #ff0000; animation: pulse 0.5s infinite; }
+        /* Level 50+ boss-gauntlet stages: no countdown, so the bar itself instead reports
+           whether every boss on the map is still alive - full red with a lock icon while any
+           remain, swapping to a clear/ready color with the lock gone once they're all down. */
+        #timer-container.gauntlet-locked #timer-fill { background: #d0021b; animation: none; }
+        #timer-container.gauntlet-unlocked #timer-fill { background: linear-gradient(90deg, #33e07a, #ffcf33); animation: none; }
+        #timer-lock-icon { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; align-items: center; justify-content: center; font-size: 15px; text-shadow: 0 1px 2px rgba(0,0,0,0.7); pointer-events: none; }
+        #timer-container.gauntlet-locked #timer-lock-icon { display: flex; }
         @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
 
         #hazard-warning { position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%); display: none; background: rgba(0, 0, 0, 0.7); color: #ff477e; padding: 10px 20px; border-radius: 30px; border: 2px solid #ff477e; font-size: 1.5rem; font-weight: bold; text-shadow: 0 0 5px #000; z-index: 10; pointer-events: none; animation: pulse 0.5s infinite; }
@@ -53,6 +60,15 @@
            blink, since this is a one-shot announcement rather than an ongoing status. */
         #survive-announcement { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.6); display: none; opacity: 0; background: rgba(0, 0, 0, 0.75); color: #ff2e4d; padding: 18px 38px; border-radius: 16px; border: 3px solid #ff2e4d; font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px #000; z-index: 15; pointer-events: none; text-align: center; transition: opacity 0.4s ease, transform 0.4s ease; }
         #survive-announcement.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        /* Sandstorm Mane (Lion mythic item) one-time dash tutorial popups - "Double tap to
+           dash!" the first time the ring ever fills, and "Swipe to change dash direction!"
+           the first time the aim window ever reaches its halfway point. Both pause game logic
+           (see lionTutorialPause). "Double tap to dash!" is dismissed by double-tapping;
+           "Swipe to change dash direction!" is dismissed by swiping instead, to match the
+           gesture it's teaching. */
+        #lion-tutorial-popup { position: absolute; top: 38%; left: 50%; transform: translate(-50%, -50%) scale(0.6); display: none; opacity: 0; background: rgba(0,0,0,0.82); color: #ff3b52; padding: 18px 32px; border-radius: 16px; border: 3px solid #ff3b52; font-size: 1.3rem; font-weight: bold; text-shadow: 0 0 8px #000; z-index: 60; pointer-events: none; text-align: center; transition: opacity 0.3s ease, transform 0.3s ease; }
+        #lion-tutorial-popup.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+        #lion-tutorial-popup .lion-tutorial-sub { display: block; font-size: 0.8rem; font-weight: normal; margin-top: 6px; opacity: 0.85; }
 
         /* Corrupted Data's color-invert filter now lives in themes/legendary-corrupted.css,
            and the 1-Bit page filter now lives in themes/legendary-onebit.css - see the
@@ -155,6 +171,14 @@
         .item-badge img { width: 20px; height: 20px; image-rendering: pixelated; }
         .item-badge.rarity-epic { border-color: #9b59b6; box-shadow: 0 0 6px rgba(155,89,182,0.6); }
         .item-badge.rarity-legendary { border-color: #ffcf33; box-shadow: 0 0 6px rgba(255,207,51,0.6); }
+        /* Mythic: the unique first-boss-kill drops, one tier above legendary. An animated
+           shifting-hue glow instead of a fixed color so it reads as "beyond" the fixed-color
+           tiers below it even at a glance. */
+        .item-badge.rarity-mythic { border-color: #ff3b6b; animation: mythicPulse 1.6s ease-in-out infinite; }
+        @keyframes mythicPulse {
+            0%, 100% { box-shadow: 0 0 6px rgba(255,59,107,0.7), 0 0 14px rgba(255,150,40,0.4); }
+            50% { box-shadow: 0 0 10px rgba(255,150,40,0.8), 0 0 20px rgba(255,59,107,0.6); }
+        }
         .item-count { position: absolute; bottom: -5px; right: -5px; background: #ff477e; color: #fff; font-size: 0.5rem; padding: 1px 4px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.5); min-width: 12px; text-align: center; line-height: 1.3; }
         #item-toast { position: absolute; top: 45%; left: 50%; transform: translate(-50%, -50%) scale(0); background: #2b2d42; color: #fff; padding: 12px 24px; border-radius: 30px; font-weight: bold; z-index: 56; pointer-events: none; opacity: 0; box-shadow: 0 10px 20px rgba(0,0,0,0.5); border: 2px solid rgba(255,255,255,0.3); font-size: 0.7rem; display: flex; align-items: center; gap: 8px; }
 
@@ -283,6 +307,7 @@
         .item-rarity-name.rarity-common, .item-rarity-name.rarity-unknown { color: #fff; }
         .item-rarity-name.rarity-epic { color: #9b59b6; }
         .item-rarity-name.rarity-legendary { color: #ffcf33; }
+        .item-rarity-name.rarity-mythic { background: linear-gradient(90deg, #ff3b6b, #ff9628, #ff3b6b); -webkit-background-clip: text; background-clip: text; color: transparent; }
 
         /* Compact almanac rows (enemies/items/achievements): just an icon + name that opens
            the shared detail modal on tap, rather than the old always-expanded icon+description
@@ -534,8 +559,8 @@
         <p id="death-reason" style="color: #ffcf33; font-weight: bold;"></p>
         <p>You reached <b>Level <span id="go-level"></span></b><br>Best: <b>Level <span id="go-best"></span></b></p>
         <button id="go-play-again" class="menu-btn" style="background: var(--accent)">Play Again</button>
-        <button id="go-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
         <button id="go-main-menu" class="menu-btn" style="background: #4caf50;">Main Menu</button>
+        <button id="go-shop-btn" class="menu-btn" style="background: #ffd700; color: #000;">Shop</button>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -543,7 +568,7 @@
     <div id="ui-layer">
         <div id="hazard-vignette"></div>
         <div id="devildeal-flash"></div>
-        <div id="timer-container"><div id="timer-fill"></div></div>
+        <div id="timer-container"><div id="timer-fill"></div><div id="timer-lock-icon">🔒</div></div>
         <div id="hazard-warning">HAZARD</div>
         <div id="survive-announcement">Survive!</div>
         <div id="time-countdown"></div>
@@ -562,9 +587,16 @@
     <div id="story-ending-dialogue"><span id="story-ending-dialogue-text"></span><span id="story-ending-dialogue-hint">tap to continue</span></div>
     <div id="story-blackout"></div>
 
+    <!-- Bottom-left corner icon: used to open Settings, now repurposed as a quick Shop shortcut
+         during gameplay. Settings is still reachable from the title screen's own Settings button. -->
     <button id="settings-corner-btn" class="corner-icon"><img class="icon-img" id="settings-icon-img" style="width:1.6rem;height:1.6rem;" alt=""></button>
+    <!-- Bottom-right corner icon: shows a "?" info icon during normal play (opens the About/
+         Privacy/Terms links tab - see info-modal), but swaps to an achievements trophy and opens
+         the Almanac's Achievements tab instead once the Game Over screen is up (see
+         updateCornerRightIconForGameOver). -->
     <button id="almanac-corner-btn" class="corner-icon"><img class="icon-img" id="almanac-icon-img" style="width:1.6rem;height:1.6rem;" alt=""><span class="notif-dot" id="almanac-corner-dot"></span></button>
     <div id="unlock-popup"><img class="icon-img" id="unlock-star-l" style="width:1em;height:1em;" alt=""> <span id="unlock-popup-text">New Enemy Entry Unlocked!</span> <img class="icon-img" id="unlock-star-r" style="width:1em;height:1em;" alt=""></div>
+    <div id="lion-tutorial-popup"><span id="lion-tutorial-text"></span><span id="lion-tutorial-sub" class="lion-tutorial-sub">Double tap to continue</span></div>
 
     <div id="shop-modal" class="modal">
         <div class="modal-header">
@@ -572,6 +604,20 @@
             <button class="close-modal-btn">Close</button>
         </div>
         <div id="shop-items"></div>
+    </div>
+
+    <!-- Info tab opened from the bottom-right "?" corner icon during gameplay. Just links out
+         to the site's About/Privacy/Terms pages, each in a new tab. -->
+    <div id="info-modal" class="modal">
+        <div class="modal-header">
+            <h2 style="color: #fff;">Info</h2>
+            <button class="close-modal-btn">Close</button>
+        </div>
+        <div id="info-items">
+            <a class="shop-item" href="about.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">About</a>
+            <a class="shop-item" href="privacy.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">Privacy Policy</a>
+            <a class="shop-item" href="terms.html" target="_blank" rel="noopener" style="text-decoration:none;color:inherit;">Terms of Use</a>
+        </div>
     </div>
 
     <div id="promo-modal" class="modal">
@@ -693,7 +739,8 @@
             <span style="font-weight:bold;">Controls</span>
             <button id="controls-toggle" class="toggle-btn">Regular</button>
         </div>
-        <button id="leave-game-btn" class="menu-btn" style="display:none; background:#e74c3c; width:100%; margin:15px 0 0 0; min-width:0; box-sizing:border-box;">Leave Game</button>
+        <button id="skip-level-btn" class="menu-btn" style="display:none; background:#8e44ad; width:100%; margin:15px 0 0 0; min-width:0; box-sizing:border-box;">Skip Level (+3 Items) [DEV]</button>
+        <button id="leave-game-btn" class="menu-btn" style="display:none; background:#e74c3c; width:100%; margin:10px 0 0 0; min-width:0; box-sizing:border-box;">Leave Game</button>
     </div>
 
     <div id="level-modal" class="modal">
@@ -727,6 +774,153 @@
     <script src="sprites/shooter.js"></script>
     <script src="sprites/hopper.js"></script>
     <script src="sprites/mimic.js"></script>
+    <script>
+        // Boss sprites - drawn entirely in canvas (no external art assets) so they plug into
+        // the existing window.EnemySprites dispatch (see the 'enemy' render-queue case in
+        // SECTION 8) exactly like wanderer.js/dasher.js/etc do. Each boss shares one generic
+        // body-and-feedback wrapper (shadow, hit-flash, iframe tint, telegraph glow, HP pips)
+        // and supplies its own silhouette function for a bit of per-boss visual identity.
+        window.EnemySprites = window.EnemySprites || {};
+
+        function bossBobOffset(e) { return Math.sin((e.animTimer || 0) / 18) * (e.radius * 0.06); }
+
+        function drawBossHPPips(ctx, e) {
+            let n = e.maxHp || 3; let spacing = 16;
+            let startX = -((n - 1) * spacing) / 2;
+            let py = -e.radius - 26;
+            for (let i = 0; i < n; i++) {
+                let filled = i < e.hp;
+                ctx.beginPath(); ctx.arc(startX + i * spacing, py, 6, 0, Math.PI * 2);
+                ctx.fillStyle = filled ? '#ff3b5c' : 'rgba(40,40,40,0.55)';
+                ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#1a0a0a'; ctx.stroke();
+            }
+        }
+
+        // Silhouette functions - drawn centered at (0,0) facing along +x (toward e.angle,
+        // already rotated in by the wrapper), body radius r, given this boss's colors.
+        const bossSilhouettes = {
+            kingslime: (ctx, r, def, e) => {
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.ellipse(0, r * 0.15, r, r * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.darkColor;
+                ctx.beginPath(); ctx.ellipse(0, r * 0.5, r * 0.8, r * 0.35, 0, 0, Math.PI); ctx.fill();
+                // Little jagged crown on top.
+                ctx.fillStyle = def.crownColor;
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.4, -r * 0.55); ctx.lineTo(-r * 0.28, -r * 0.95); ctx.lineTo(-r * 0.12, -r * 0.6);
+                ctx.lineTo(0, -r * 1.05); ctx.lineTo(r * 0.12, -r * 0.6); ctx.lineTo(r * 0.28, -r * 0.95); ctx.lineTo(r * 0.4, -r * 0.55);
+                ctx.closePath(); ctx.fill();
+                // Eyes
+                ctx.fillStyle = '#0a2a12';
+                ctx.beginPath(); ctx.arc(-r * 0.28, -r * 0.05, r * 0.13, 0, Math.PI * 2); ctx.arc(r * 0.28, -r * 0.05, r * 0.13, 0, Math.PI * 2); ctx.fill();
+            },
+            desertlion: (ctx, r, def, e) => {
+                ctx.fillStyle = def.crownColor; // mane
+                ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.darkColor;
+                ctx.beginPath(); ctx.ellipse(r * 0.35, r * 0.2, r * 0.28, r * 0.2, 0, 0, Math.PI * 2); ctx.fill(); // snout
+                ctx.fillStyle = '#1a1206';
+                ctx.beginPath(); ctx.arc(-r * 0.18, -r * 0.1, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.22, -r * 0.1, r * 0.1, 0, Math.PI * 2); ctx.fill();
+            },
+            yeti: (ctx, r, def, e) => {
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.ellipse(0, 0, r * 0.85, r, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.darkColor;
+                ctx.beginPath(); ctx.ellipse(0, r * 0.7, r * 0.6, r * 0.25, 0, 0, Math.PI * 2); ctx.fill(); // feet shadowline
+                // shaggy tufts
+                ctx.fillStyle = def.crownColor;
+                for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * r * 0.3, -r * 0.75, r * 0.18, 0, Math.PI * 2); ctx.fill(); }
+                ctx.fillStyle = '#123';
+                ctx.beginPath(); ctx.arc(-r * 0.22, -r * 0.05, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.22, -r * 0.05, r * 0.1, 0, Math.PI * 2); ctx.fill();
+            },
+            lavaworm: (ctx, r, def, e) => {
+                // segmented worm body, 3 rounded segments trailing behind the head
+                ctx.fillStyle = def.darkColor;
+                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-r * (0.55 + i * 0.55), 0, r * (0.65 - i * 0.08), 0, Math.PI * 2); ctx.fill(); }
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.crownColor;
+                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-r * (0.4 + i * 0.5), 0, r * 0.14, 0, Math.PI * 2); ctx.fill(); }
+                ctx.fillStyle = '#3a0d02';
+                ctx.beginPath(); ctx.arc(-r * 0.2, -r * 0.12, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.2, -r * 0.12, r * 0.1, 0, Math.PI * 2); ctx.fill();
+            },
+            crocodile: (ctx, r, def, e) => {
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.ellipse(-r * 0.1, 0, r * 0.85, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.darkColor;
+                ctx.beginPath(); ctx.ellipse(r * 0.55, 0, r * 0.4, r * 0.22, 0, 0, Math.PI * 2); ctx.fill(); // snout
+                ctx.fillStyle = def.crownColor;
+                for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * r * 0.28, -r * 0.42, r * 0.08, 0, Math.PI * 2); ctx.fill(); } // back ridges
+                ctx.fillStyle = '#0e1503';
+                ctx.beginPath(); ctx.arc(r * 0.2, -r * 0.28, r * 0.09, 0, Math.PI * 2); ctx.arc(r * 0.42, -r * 0.2, r * 0.07, 0, Math.PI * 2); ctx.fill();
+            },
+            bear: (ctx, r, def, e) => {
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.ellipse(0, 0, r * 0.85, r * 0.95, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = def.darkColor;
+                ctx.beginPath(); ctx.arc(0, r * 0.25, r * 0.32, 0, Math.PI * 2); ctx.fill(); // snout
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.arc(-r * 0.6, -r * 0.6, r * 0.28, 0, Math.PI * 2); ctx.arc(r * 0.6, -r * 0.6, r * 0.28, 0, Math.PI * 2); ctx.fill(); // ears
+                ctx.fillStyle = def.crownColor;
+                ctx.beginPath(); ctx.arc(-r * 0.6, -r * 0.6, r * 0.14, 0, Math.PI * 2); ctx.arc(r * 0.6, -r * 0.6, r * 0.14, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#1a0f08';
+                ctx.beginPath(); ctx.arc(-r * 0.24, -r * 0.15, r * 0.09, 0, Math.PI * 2); ctx.arc(r * 0.24, -r * 0.15, r * 0.09, 0, Math.PI * 2); ctx.fill();
+            }
+        };
+
+        function drawBossGeneric(ctx, e, player) {
+            let def = (typeof bossDB !== 'undefined') ? bossDB[e.bossId] : null;
+            if (!def) return; // safety net if the boss data isn't ready yet
+            let bob = bossBobOffset(e);
+            drawGroundShadow(ctx, e.x, e.y + e.radius * 0.85, e.radius * 0.9, e.radius * 0.35);
+
+            ctx.save();
+            ctx.translate(e.x, e.y + bob);
+
+            // Telegraph: a pulsing warning glow behind the boss while it winds up an attack.
+            if (e.state === 'telegraph') {
+                let t = (e.currentAttack && e.currentAttack.telegraph) ? e.stateTimer / e.currentAttack.telegraph : 0;
+                ctx.globalAlpha = 0.25 + 0.35 * (0.5 + 0.5 * Math.sin(Date.now() / 60));
+                ctx.fillStyle = '#ff2d2d';
+                ctx.beginPath(); ctx.arc(0, 0, e.radius * (1.1 + t * 0.5), 0, Math.PI * 2); ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+
+            // Squash/stretch: a light idle breathe, a bigger anticipation squash mid-telegraph,
+            // and a stretch-toward-target during the attack itself (charges/lunges especially).
+            let scaleX = 1, scaleY = 1;
+            if (e.state === 'telegraph') { scaleX = 1.08; scaleY = 0.9; }
+            else if (e.state === 'attack') { scaleX = 0.92; scaleY = 1.1; }
+            else { let breathe = Math.sin((e.animTimer || 0) / 24) * 0.03; scaleX = 1 + breathe; scaleY = 1 - breathe; }
+            ctx.scale(scaleX, scaleY);
+
+            // Face the player/movement direction without mirroring the hand-drawn silhouettes.
+            let facingRight = Math.cos(e.angle || 0) >= 0;
+            if (!facingRight) ctx.scale(-1, 1);
+
+            if (e.iframe > 0 && e.hp > 0) ctx.globalAlpha = 0.55 + 0.25 * Math.sin((e.iframe || 0) * 0.6);
+
+            let silhouette = bossSilhouettes[e.bossId];
+            if (silhouette) silhouette(ctx, e.radius, def, e);
+
+            if (e.hitFlash > 0) {
+                ctx.globalCompositeOperation = 'source-atop';
+                ctx.globalAlpha = Math.min(0.7, e.hitFlash / 24);
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath(); ctx.arc(0, 0, e.radius * 1.1, 0, Math.PI * 2); ctx.fill();
+                ctx.globalCompositeOperation = 'source-over';
+            }
+            ctx.restore();
+
+            ctx.save(); ctx.translate(e.x, e.y);
+            drawBossHPPips(ctx, e);
+            ctx.restore();
+        }
+
+        window.EnemySprites.boss = drawBossGeneric;
+    </script>
     <script src="sprites/icon-almanac.js"></script>
     <script src="sprites/icon-settings.js"></script>
     <script src="sprites/icon-magnet.js"></script>
@@ -1092,6 +1286,11 @@
         // Reused/bucketed here instead - see the icicle/flame branches of the render loop for
         // why each one is safe to cache (identical output every time vs. bucketed by size).
         let icicleGradientCache = null;
+        // Mythic boss items fire their "attack mimic" bursts through the same icicles[] array
+        // (it already pierces/damages every enemy it touches, bosses included, with zero new
+        // collision code needed) - but they shouldn't visually read as ice. Any icicle tagged
+        // with a .tint gets its own cached gradient keyed by that color instead.
+        let mythicIcicleGradientCache = {};
         const flameGradientCache = new Map();
         // PERF: see drawSkyBackground (SECTION 8) - both cached the same way, keyed off
         // canvas.height so a resize correctly invalidates and rebuilds them.
@@ -1165,6 +1364,15 @@
         const SURVIVAL_LEVEL_CHANCE = 0.12; // rolled once per level-up, skipped on level 1
         const SURVIVAL_DURATION = 30;
         let isSurvivalLevel = false;
+        // Level 50+ ("every enemy slot is a boss" - see bossChanceForLevel/forceAllSlotsBoss):
+        // these stages drop the usual countdown timer entirely and gate completion purely on
+        // clearing every boss on the map instead of also requiring a coin quota. Set once per
+        // generateLevel() call (see there) alongside isSurvivalLevel.
+        let isBossGauntletLevel = false;
+        // True once every boss on a boss-gauntlet stage has been cleared - at that instant the
+        // timer bar stops showing the locked/red state and starts a fresh countdown (see the
+        // isBossGauntletLevel tick in update() and updateHUD()).
+        let bossGauntletUnlocked = false;
         let lastLevelWasSurvival = false; // avoids two survival levels back-to-back
         let survivalElapsed = 0;
         let survivalWaveNum = 0;
@@ -1176,6 +1384,11 @@
         // Rendered as a pulsing/blinking red warning circle; when timer runs out the actual
         // enemy is spawned at that position and the telegraph is removed (see update()/draw()).
         let enemyTelegraphs = [];
+        // Ground AOE warnings for boss attacks: {x,y,radius,timer,duration,bossId}. Separate
+        // from enemyTelegraphs (survival-only enemy spawn warnings) since these resolve into
+        // an actual hit-check against the player rather than a spawn - see the resolution pass
+        // in update() and the drawing pass alongside enemyTelegraphs in draw().
+        let bossTelegraphs = [];
         let surviveAnnounceTimeout = null;
         // prevX/prevY hold the camera's position as of the start of the current physics tick;
         // x/y hold it after this tick's smoothing lerp runs. draw() blends between the two using
@@ -1197,7 +1410,9 @@
             hat: storage.get('landSlidersHat') || null,
             jiggleForceX: 0, jiggleForceY: 0, activePowerup: null, powerupDuration: 0,
             powerupTimeLeft: 0, powerupTickTimer: 0, facing: 0, hazardTimer: 0, spikesTimer: 0,
-            plasmaTimer: 0, invulnerableTimer: 0, wilkshirianTimer: 0, spectreBoostTimer: 0
+            plasmaTimer: 0, invulnerableTimer: 0, wilkshirianTimer: 0, spectreBoostTimer: 0,
+            lionRingCharge: 0, lionAimTimer: 0, lionAimMax: 0, lionAimAngle: 0, lionAimTargetAngle: 0,
+            lionDashTimer: 0, lionDashAngle: 0
         };
         // Number of Devil Deal charges burned so far this run (see triggerGameOver) - tracked
         // separately from runItems.devildeal (remaining active charges) so the HUD can keep
@@ -1323,6 +1538,11 @@
         let fences = [];
         let items = []; let enemies = []; let trees = []; let hives = [];
         let projectiles = []; let icicles = []; let flameParticles = []; let leaves = [];
+        // Yeti's Avalanche Charge leaves these behind instead of live bullets: stationary
+        // blocks of ice, each {x,y,radius,bossId}, that sit harmlessly until the player
+        // touches one, at which point it explodes into an outward ring of bullets (see the
+        // iceBlocks collision/explosion block in update() and its 'iceblock' render branch).
+        let iceBlocks = [];
         let splashes = []; let decorations = []; let powerups = []; let chest = null;
         // Roguelite: Skeleton Key item - one extra bonus chest per stack, placed alongside the
         // level's normal chest. Kept as its own array (rather than reusing `chest`) since there
@@ -1336,6 +1556,11 @@
         // Roguelite: Plasma Beam item - transient zap-line visuals, one per target hit, each
         // {x1,y1,x2,y2,life}. Purely cosmetic bookkeeping, faded out and removed in update().
         let plasmaBeamFX = [];
+        // Mythic: Sandstorm Mane (Lion) - which one-time dash tutorial (if any) currently has
+        // game logic paused: null, 'ringfull' ("Double tap to dash!") or 'aimhalf' ("Swipe to
+        // change dash direction!"). See handleLionDoubleTap/showLionTutorial and the ring-fill
+        // and aim-timer ticks in update().
+        let lionTutorialPause = null;
         // Ambient vignette: a man and boy sitting at the water's edge, fishing (see the spawn
         // logic in generateLevel and drawFishingScene below). At most one per level. Guaranteed
         // on level 1 no matter what theme/hazard is in play; a rare water-only treat on every
@@ -1361,8 +1586,23 @@
         // Roguelite run-items state: items acquired from chests/mimics that persist and stack
         // for the duration of a run (cleared on resetGame(), re-applied fresh each level).
         let runItems = {};
+        // Which boss ids have already handed out their unique mythic item this run - reset in
+        // resetGame(). Only the first kill of each boss type per run grants the item; repeat
+        // kills of the same boss (themes repeat every 6 levels) just drop normal bonus loot.
+        let bossItemsAwarded = {};
         let companions = [];
         let playerTrail = [];
+        // Mythic: Royal Jelly (King Slime) - periodically summoned patrol slimes, each
+        // {x,y,radius,colorId,vx,vy,spawnX,spawnY,patrolTargetX,patrolTargetY,patrolTimer}.
+        // Function exactly like Slime Squad companions (mutually destroy any enemy they touch,
+        // die to enemy projectiles) except they never follow the player - instead they wander
+        // within ROYAL_JELLY_PATROL_RADIUS of spawnX/spawnY (the nearest non-hazard tile to
+        // wherever they were actually summoned), picking a new safe patrol point at random and
+        // refusing to step into a hazard tile along the way. Any enemy within
+        // ROYAL_JELLY_SIGHT_RANGE breaks a slime off its patrol to go attack it instead.
+        // Kept as its own array (rather than reusing `companions`) since these are transient
+        // summons on a recurring timer, not a persistent stack tied to an owned item count.
+        let royalJellySlimes = [];
         // Hex tiles the player has slid over while the Glacier ("ice") skin is equipped - these
         // render with Snow-biome ground colors for the rest of the level (see drawIceFrostOverlay).
         let iceFrostedTiles = new Set();
@@ -1398,13 +1638,34 @@
             // it from the Dupe Trader (see dupeShopStock()).
             greedy:      { id: 'greedy',      rarity: 'common',    name: 'Greedy',      desc: 'Increases gold earned. Corrupts, wholly.' },
             slimefriend: { id: 'slimefriend', rarity: 'epic',      name: 'Slime Squad', desc: 'Summons a slimy friend and makes you immune to other slimes. Each stack adds another companion.', lockedBy: 'level3' },
-            plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by a tile.', lockedBy: 'endless_level6' },
+            plasmabeam:  { id: 'plasmabeam',  rarity: 'epic',      name: 'Plasma Beam', desc: 'Charges up, then zaps the nearest enemy in range. Each stack hits one more enemy and extends the range by half a tile.', lockedBy: 'endless_level6' },
             // Dupe Shop exclusive (epic) - see note on greedy above.
             devildeal:   { id: 'devildeal',   rarity: 'epic',      name: 'Devil Deal',  desc: 'Prevents death once. Zero downsides! ' },
             shuriken:    { id: 'shuriken',    rarity: 'legendary', name: 'Shuriken',    desc: 'Orbiting blades circle you, deflecting bullets and slaying enemies they touch. Each stack adds another blade.', lockedBy: 'centurion' },
             skeletonkey: { id: 'skeletonkey', rarity: 'legendary', name: 'Skeleton Key', desc: 'Spawns an extra skeleton chest per stack each stage. Skeleton chests can’t contain legendary items.', lockedBy: 'endless_level9' },
             // Dupe Shop exclusive (legendary) - see note on greedy above.
-            spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost that stacks. Your mortal soul, forfeit.' }
+            spectre:     { id: 'spectre',     rarity: 'legendary', name: 'Spectre',     desc: 'Pass through walls and obstacles, gaining a brief speed boost that stacks. Your mortal soul, forfeit.' },
+
+            // ---- Mythic: unique boss drops ----
+            // One tier above legendary (see .rarity-mythic in CSS), and deliberately absent
+            // from rollRoguelikeItem/roguelikeTierPools/dupeShopStock - like greedy/devildeal/
+            // spectre these are exclusive to a single source, but that source is defeating a
+            // stage's boss for the first time in a run (see the isBoss branch in
+            // destroyEnemyByIndex). Each mimics one of its boss's own attacks as a recurring
+            // passive proc (reusing the icicles[] projectile - it already damages every enemy,
+            // bosses included, on contact) plus a bit of extra utility beyond just the attack.
+            mythic_kingslime: { id: 'mythic_kingslime', rarity: 'mythic', bossId: 'kingslime', name: 'Royal Jelly',
+                desc: 'Periodically summons two angry gacha slimes at your sides, mimicking King Slime\'s own Slime Split - they home in on the nearest enemy and attack.' },
+            mythic_desertlion: { id: 'mythic_desertlion', rarity: 'mythic', bossId: 'desertlion', name: 'Sandstorm Mane',
+                desc: 'Charges up a ring, then stays ready - double tap to plant yourself in place, swipe to aim, and unleash a short invincible Sand Pounce dash that kills every enemy in your path.' },
+            mythic_yeti: { id: 'mythic_yeti', rarity: 'mythic', bossId: 'yeti', name: 'Frostbound Horn',
+                desc: 'Periodically unleashes the Yeti\'s own Frost Breath - a spray of many icicle shards toward wherever you\'re heading.' },
+            mythic_lavaworm: { id: 'mythic_lavaworm', rarity: 'mythic', bossId: 'lavaworm', name: 'Molten Core',
+                desc: 'Periodically erupts in a Magma Burst of embers, melting a little extra gold out of the ground each time.' },
+            mythic_crocodile: { id: 'mythic_crocodile', rarity: 'mythic', bossId: 'crocodile', name: 'Ancient Jaws',
+                desc: 'Periodically lashes out with a Tail Sweep and snaps any nearby projectiles out of the air.' },
+            mythic_bear: { id: 'mythic_bear', rarity: 'mythic', bossId: 'bear', name: 'Timberclaw',
+                desc: 'Periodically slams the ground in a Ground Pound that also shoves every nearby enemy back.' }
         };
 
         // Achievement definitions. Each check() reads from persisted storage / in-memory state
@@ -1430,8 +1691,9 @@
             { id: 'bug_hunter',      name: 'Bug Hunter',         desc: 'Encounter 3 different enemies.',              icon: 'ach_bug',          check: () => Object.keys(enemyDB).filter(k => storage.get('almanac_' + k) === 'true').length >= 3 },
             { id: 'bestiary',        name: 'Bestiary Complete',  desc: 'Encounter every enemy in the game.',          icon: 'ach_bestiary',     check: () => Object.keys(enemyDB).every(k => storage.get('almanac_' + k) === 'true') },
             { id: 'centurion',       name: 'Centurion',          desc: 'Defeat 100 enemies.',                         icon: 'ach_helmet',       check: () => (parseInt(storage.get('totalEnemyKills')) || 0) >= 100 },
-            { id: 'loadout_ready',   name: 'Loadout Ready',      desc: 'Find every run item at least once.',         icon: 'ach_backpack',     check: () => Object.keys(roguelikeItemDefs).every(id => storage.get('runitem_' + id) === 'true') },
+            { id: 'loadout_ready',   name: 'Loadout Ready',      desc: 'Find every run item at least once.',         icon: 'ach_backpack',     check: () => Object.keys(roguelikeItemDefs).filter(id => roguelikeItemDefs[id].rarity !== 'mythic').every(id => storage.get('runitem_' + id) === 'true') },
             { id: 'legendary_find',  name: 'Ultimate Ninja',     desc: 'Have 3 Shurikens at once.',                    icon: 'ach_legendary',    check: () => (parseInt(storage.get('maxShurikenStack')) || 0) >= 3 },
+            { id: 'boss_slayer',     name: 'Trophy Room',        desc: 'Find all 6 unique boss items.',               icon: 'ach_bestiary',     check: () => Object.keys(roguelikeItemDefs).filter(id => roguelikeItemDefs[id].rarity === 'mythic').every(id => storage.get('runitem_' + id) === 'true') },
             { id: 'my_slime',        name: 'My Slime',           desc: 'Have 3 Slime Squad companions at once.',      icon: 'ach_companion',    check: () => (parseInt(storage.get('maxSlimefriendStack')) || 0) >= 3 },
             { id: 'cult_leader',     name: 'Cult Leader',        desc: 'Have 5 Slime Squad companions at once.',      icon: 'ach_cult',         check: () => (parseInt(storage.get('maxSlimefriendStack')) || 0) >= 5 },
             { id: 'gacha_addict',    name: 'Gacha Addict',       desc: 'Pull the gacha crane 10 times.',              icon: 'ach_crane',        check: () => (parseInt(storage.get('gachaPullCount') || 0)) >= 10 },
@@ -1651,8 +1913,213 @@
             chaser:   { name: 'Bee', desc: 'Defends its hive. Don’t get too close!' },
             shooter:  { name: 'Evil Eye', desc: 'Keeps its distance and fires slow-moving plasma orbs. Avoids being touched at all costs.' },
             hopper:   { name: 'Frog', desc: 'Targets a fly and jumps high to catch it. Apparently can’t swim.' },
-            mimic:    { name: 'Chest Mimic', desc: 'Curiosity killed the… Slime?' }
+            mimic:    { name: 'Chest Mimic', desc: 'Curiosity killed the… Slime?' },
+            boss_kingslime:  { name: 'King Slime',   desc: 'The bloated ruler of the forest. Splits itself into lesser slimes when angered. 3 hits to topple.' },
+            boss_desertlion: { name: 'Desert Lion',  desc: 'A great maned beast of the dunes. Roars a shockwave and pounces like a sandstorm. 3 hits to topple.' },
+            boss_yeti:       { name: 'Yeti',         desc: 'A towering ice-beast of the frozen peaks. Slams the ground and breathes killing frost. 3 hits to topple.' },
+            boss_lavaworm:   { name: 'Lava Worm',    desc: 'Burrows through molten rock, erupting in showers of magma. 3 hits to topple.' },
+            boss_crocodile:  { name: 'Crocodile',    desc: 'An ancient swamp predator. Death-rolls and snaps with a bone-crushing bite. 3 hits to topple.' },
+            boss_bear:       { name: 'Bear',         desc: 'A hulking woodland brute. Pounds the earth and swipes with claws like falling branches. 3 hits to topple.' }
         };
+
+        // ==========================================
+        // BOSS SYSTEM
+        // One boss per main stage theme (same order as `themes`/musicFiles: forest, desert,
+        // snow, volcano, swamp, autumn). Bosses are just enemy objects with type:'boss' and
+        // isBoss:true, so they flow through the existing enemies[] array, render queue, and
+        // destroyEnemyByIndex() choke point untouched - see the isBoss branch added there.
+        // Each takes 3 "hits" (any existing kill-trigger: powerup contact, fire/lightning/ice,
+        // deflected projectile, icicle, companion touch) to defeat, with a long invulnerability
+        // window between hits so it can't be melted in one tick by e.g. fire breath's fast tick
+        // rate. Each has 3 unique telegraphed attacks, cycled in order so a player is guaranteed
+        // to see all three across a fight.
+        // ==========================================
+        const BOSS_HITS_REQUIRED = 3;
+        const BOSS_IFRAME_FRAMES = 95; // ~1.6s @60fps - "long Iframes between each hit"
+
+        // Rare-replace chance for a regular enemy spawn slot to become this level's boss
+        // instead: zero on stages 1-6, jumps to 15% on stage 7, scales linearly up to 100%
+        // at level 50 (every enemy slot becomes a boss from level 50 on).
+        function bossChanceForLevel(lvl) {
+            if (lvl < 7) return 0;
+            if (lvl >= 50) return 1;
+            return 0.15 + (lvl - 7) * (0.85 / 43);
+        }
+
+        function bossFireRadial(e, count, speed, projRadius) {
+            for (let i = 0; i < count; i++) {
+                let a = (i / count) * Math.PI * 2 + (e.animTimer || 0) * 0.001;
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, radius: projRadius || 9, bossId: e.bossId });
+            }
+        }
+        function bossFireAimedSpread(e, count, spreadRad, speed, projRadius) {
+            let base = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+            for (let i = 0; i < count; i++) {
+                let t = count === 1 ? 0 : (i / (count - 1)) - 0.5;
+                let a = base + t * spreadRad;
+                projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * speed, vy: Math.sin(a) * speed, radius: projRadius || 9, bossId: e.bossId });
+            }
+        }
+        function bossTelegraphAoe(e, x, y, radius, delayFrames) {
+            bossTelegraphs.push({ x, y, radius, timer: delayFrames, duration: delayFrames, bossId: e.bossId });
+        }
+        // Yeti's Avalanche Charge trail hazard (iceBlocks): besides bursting when the player
+        // walks into one directly, it should also go off if the player damages it any other
+        // way - shuriken, plasma beam, icicles, powerups, companions, the Lion dash, etc.
+        // Every one of those call sites hits this same helper instead of duplicating the
+        // burst logic. Checks every block in hitRadius (not just the first) so a wide-area
+        // attack can pop more than one at once.
+        // Bursts a single iceBlock (by its current index) into a ring of bullets. Safe to call
+        // while iterating iceBlocks backwards (see explodeIceBlockAt and the various player
+        // damage-source call sites below) since it only ever splices the one index given.
+        function explodeIceBlockIndex(i) {
+            let ib = iceBlocks[i];
+            iceBlocks.splice(i, 1);
+            bossFireRadial({ x: ib.x, y: ib.y, bossId: ib.bossId, animTimer: 0 }, 8, 3.2, 8);
+            screenShake = Math.max(screenShake, 8);
+            playSFX('ice_nova');
+        }
+        function explodeIceBlockAt(x, y, hitRadius) {
+            for (let i = iceBlocks.length - 1; i >= 0; i--) {
+                let ib = iceBlocks[i];
+                if (dist(x, y, ib.x, ib.y) < hitRadius + ib.radius) explodeIceBlockIndex(i);
+            }
+        }
+
+        // Every boss attack: { name, telegraph (frames of windup), duration (frames the attack
+        // itself plays out over), cooldown (frames of recovery before the next pick), exec(e)
+        // fired once when telegraph ends, tick(e) optional per-frame logic during 'attack'. }
+        const bossDB = {
+            kingslime: {
+                themeIndex: 0, radius: 46, speedMult: 0.65, name: 'King Slime',
+                bodyColor: '#3fd67a', darkColor: '#1f8a4c', crownColor: '#ffd23f',
+                attacks: [
+                    { // Slime Split - lobs 5 small gobs outward in a ring
+                        name: 'Slime Split', telegraph: 70, duration: 20, cooldown: 150,
+                        exec: (e) => { playSFX('enemy_hit'); bossFireRadial(e, 5, 3.2, 8); screenShake = Math.max(screenShake, 6); }
+                    },
+                    { // Bounce Slam - jumps then slams down with a telegraphed shockwave AOE
+                        name: 'Bounce Slam', telegraph: 55, duration: 40, cooldown: 160,
+                        exec: (e) => { e.slamTargetX = player.worldX; e.slamTargetY = player.worldY; bossTelegraphAoe(e, e.slamTargetX, e.slamTargetY, 90, 40); },
+                        tick: (e) => { let t = e.stateTimer / 40; e.x += (e.slamTargetX - e.x) * 0.06; e.y += (e.slamTargetY - e.y) * 0.06; if (e.stateTimer === 39) { screenShake = Math.max(screenShake, 10); playSFX('enemy_hit'); } }
+                    },
+                    { // Sticky Spit - 3-shot aimed spread
+                        name: 'Sticky Spit', telegraph: 60, duration: 15, cooldown: 130,
+                        exec: (e) => { playSFX('eye_fire'); bossFireAimedSpread(e, 3, 0.5, 4.2, 9); }
+                    }
+                ]
+            },
+            desertlion: {
+                themeIndex: 1, radius: 42, speedMult: 1.05, name: 'Desert Lion',
+                bodyColor: '#d9a441', darkColor: '#8a5a1e', crownColor: '#6b3f16',
+                attacks: [
+                    { // Sand Pounce - fast charge toward the player, dasher-style. Direction is
+                      // locked in and telegraphed the instant the wind-up starts (see the dash
+                      // flag handling in the boss telegraph-state update / draw code) rather
+                      // than only decided the instant it fires.
+                        name: 'Sand Pounce', telegraph: 65, duration: 55, cooldown: 150, dash: true,
+                        exec: (e) => { playSFX('bull_charge'); },
+                        tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 3.2; e.y += Math.sin(e.chargeAngle) * e.speed * 3.2; }
+                    },
+                    { // Roar Shockwave - full-ring bullet-hell burst
+                        name: 'Roar Shockwave', telegraph: 75, duration: 20, cooldown: 170,
+                        exec: (e) => { playSFX('lightning'); bossFireRadial(e, 10, 3.6, 7); screenShake = Math.max(screenShake, 8); }
+                    },
+                    { // Sandstorm Claws - quick 3-swipe fan of close-range shots
+                        name: 'Sandstorm Claws', telegraph: 50, duration: 30, cooldown: 130,
+                        exec: (e) => { e._clawTicks = 3; },
+                        tick: (e) => { if (e._clawTicks > 0 && e.stateTimer % 10 === 0) { bossFireAimedSpread(e, 3, 0.8, 5, 8); e._clawTicks--; playSFX('enemy_hit'); } }
+                    }
+                ]
+            },
+            yeti: {
+                themeIndex: 2, radius: 44, speedMult: 0.7, name: 'Yeti',
+                bodyColor: '#eef7fb', darkColor: '#a9c9d6', crownColor: '#4fa3c7',
+                attacks: [
+                    { // Ice Slam - telegraphed ground AOE plus an outward ring of icicle shards
+                        name: 'Ice Slam', telegraph: 70, duration: 20, cooldown: 160,
+                        exec: (e) => { bossTelegraphAoe(e, e.x, e.y, 110, 30); bossFireRadial(e, 8, 3, 7); playSFX('ice_nova'); }
+                    },
+                    { // Frost Breath - slow-moving cone of projectiles toward the player
+                        name: 'Frost Breath', telegraph: 60, duration: 45, cooldown: 170,
+                        exec: (e) => { e._breathTicks = 6; },
+                        tick: (e) => { if (e._breathTicks > 0 && e.stateTimer % 8 === 0) { bossFireAimedSpread(e, 2, 0.35, 2.6, 8); e._breathTicks--; } }
+                    },
+                    { // Avalanche Charge - charges across the map leaving a trail of stationary
+                      // ice blocks behind it. Each block sits harmlessly until the player
+                      // touches it, then explodes into an outward ring of bullets (see the
+                      // iceBlocks handling in update()).
+                        name: 'Avalanche Charge', telegraph: 65, duration: 60, cooldown: 170, dash: true,
+                        exec: (e) => { playSFX('bull_charge'); },
+                        tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 2.4; e.y += Math.sin(e.chargeAngle) * e.speed * 2.4; if (e.stateTimer % 12 === 0) iceBlocks.push({ x: e.x, y: e.y, radius: 14, bossId: e.bossId }); }
+                    }
+                ]
+            },
+            lavaworm: {
+                themeIndex: 3, radius: 48, speedMult: 0.55, name: 'Lava Worm',
+                bodyColor: '#ff6a2b', darkColor: '#9c2b0e', crownColor: '#ffcf4a',
+                attacks: [
+                    { // Magma Burst - erupting ring of embers
+                        name: 'Magma Burst', telegraph: 70, duration: 20, cooldown: 160,
+                        exec: (e) => { playSFX('fire'); bossFireRadial(e, 9, 3.4, 8); screenShake = Math.max(screenShake, 8); }
+                    },
+                    { // Burrow Strike - vanishes briefly then erupts under the player with a telegraphed AOE
+                        name: 'Burrow Strike', telegraph: 80, duration: 25, cooldown: 180,
+                        exec: (e) => { e.burrowed = true; e.slamTargetX = player.worldX; e.slamTargetY = player.worldY; bossTelegraphAoe(e, e.slamTargetX, e.slamTargetY, 100, 45); },
+                        tick: (e) => { if (e.stateTimer === 24) { e.x = e.slamTargetX; e.y = e.slamTargetY; e.burrowed = false; screenShake = Math.max(screenShake, 10); playSFX('enemy_hit'); } }
+                    },
+                    { // Ember Spray - rotating spiral of embers over a few ticks
+                        name: 'Ember Spray', telegraph: 60, duration: 40, cooldown: 160,
+                        exec: (e) => { e._sprayTicks = 5; e._sprayAngle = Math.random() * Math.PI * 2; },
+                        tick: (e) => { if (e._sprayTicks > 0 && e.stateTimer % 8 === 0) { e._sprayAngle += 0.9; for (let i = 0; i < 3; i++) { let a = e._sprayAngle + i * (Math.PI * 2 / 3); projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * 3, vy: Math.sin(a) * 3, radius: 7, bossId: e.bossId }); } e._sprayTicks--; } }
+                    }
+                ]
+            },
+            crocodile: {
+                themeIndex: 4, radius: 44, speedMult: 0.85, name: 'Crocodile',
+                bodyColor: '#5a7a2e', darkColor: '#33471a', crownColor: '#dfe6b0',
+                attacks: [
+                    { // Tail Sweep - a 180 degree sweeping arc of projectiles
+                        name: 'Tail Sweep', telegraph: 65, duration: 35, cooldown: 150,
+                        exec: (e) => { e._sweepStep = 0; e._sweepBase = Math.atan2(player.worldY - e.y, player.worldX - e.x) - Math.PI / 2; },
+                        tick: (e) => { if (e.stateTimer % 6 === 0 && e._sweepStep <= 6) { let a = e._sweepBase + (e._sweepStep / 6) * Math.PI; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, radius: 8, bossId: e.bossId }); e._sweepStep++; } }
+                    },
+                    { // Death Roll - short charge that ends in a full-ring burst
+                        name: 'Death Roll', telegraph: 60, duration: 45, cooldown: 170, dash: true,
+                        exec: (e) => { playSFX('bull_charge'); },
+                        tick: (e) => { if (e.stateTimer < 30) { e.x += Math.cos(e.chargeAngle) * e.speed * 2.6; e.y += Math.sin(e.chargeAngle) * e.speed * 2.6; } if (e.stateTimer === 30) { bossFireRadial(e, 8, 3.4, 8); screenShake = Math.max(screenShake, 8); playSFX('lightning'); } }
+                    },
+                    { // Snap Lunge - quick short dash bite with a brief AOE at the mouth
+                        name: 'Snap Lunge', telegraph: 45, duration: 20, cooldown: 120, dash: true,
+                        exec: (e) => { bossTelegraphAoe(e, e.x + Math.cos(e.chargeAngle) * 70, e.y + Math.sin(e.chargeAngle) * 70, 55, 20); },
+                        tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 1.6; e.y += Math.sin(e.chargeAngle) * e.speed * 1.6; }
+                    }
+                ]
+            },
+            bear: {
+                themeIndex: 5, radius: 44, speedMult: 0.75, name: 'Bear',
+                bodyColor: '#7a5233', darkColor: '#4a2f1c', crownColor: '#c98a4b',
+                attacks: [
+                    { // Ground Pound - telegraphed AOE shockwave ring
+                        name: 'Ground Pound', telegraph: 70, duration: 20, cooldown: 160,
+                        exec: (e) => { bossTelegraphAoe(e, e.x, e.y, 120, 35); },
+                        tick: (e) => { if (e.stateTimer === 34) { bossFireRadial(e, 8, 3, 7); screenShake = Math.max(screenShake, 9); playSFX('enemy_hit'); } }
+                    },
+                    { // Charge Swipe - dash across the arena leaving a projectile trail
+                        name: 'Charge Swipe', telegraph: 60, duration: 50, cooldown: 160, dash: true,
+                        exec: (e) => { playSFX('bull_charge'); },
+                        tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 2.5; e.y += Math.sin(e.chargeAngle) * e.speed * 2.5; if (e.stateTimer % 10 === 0) projectiles.push({ x: e.x, y: e.y, vx: 0, vy: 0.01, radius: 9, bossId: e.bossId }); }
+                    },
+                    { // Leaf Fling - 3-way spread
+                        name: 'Leaf Fling', telegraph: 55, duration: 15, cooldown: 130,
+                        exec: (e) => { playSFX('eye_fire'); bossFireAimedSpread(e, 3, 0.6, 4, 8); }
+                    }
+                ]
+            }
+        };
+        // themeIndex -> bossId, built once for O(1) lookup during level generation.
+        const bossIdByThemeIndex = {};
+        Object.keys(bossDB).forEach(id => { bossIdByThemeIndex[bossDB[id].themeIndex] = id; });
 
         const powerupTypes = [
             { id: 'fire',      name: 'Fire Breath', desc: 'Fire Breath', color: '#ff6b35', duration: 6, radius: 150, tick: 0.08, mode: 'cone',     coinDrop: [2,4] },
@@ -2271,6 +2738,36 @@
                     starPath(10*s, 5*s, 8); tctx.fillStyle = '#ff477e'; tctx.fill();
                     tctx.fillStyle = '#fff'; tctx.beginPath(); tctx.arc(0,0,3*s,0,Math.PI*2); tctx.fill();
                     break;
+                // Shop-bag icon: used on the bottom-left corner button, repurposed from Settings.
+                case 'shop':
+                    tctx.fillStyle = '#e8b34d';
+                    tctx.beginPath(); tctx.moveTo(-8*s,-6*s); tctx.lineTo(8*s,-6*s); tctx.lineTo(9*s,9*s); tctx.lineTo(-9*s,9*s); tctx.closePath(); tctx.fill();
+                    tctx.strokeStyle = '#a06a1c'; tctx.lineWidth = 1*s; tctx.stroke();
+                    tctx.strokeStyle = '#a06a1c'; tctx.lineWidth = 1.5*s;
+                    tctx.beginPath(); tctx.arc(0,-6*s,4.5*s,Math.PI,0); tctx.stroke();
+                    tctx.strokeStyle = '#c77000'; tctx.lineWidth = 1*s;
+                    tctx.beginPath(); tctx.moveTo(-9*s,0); tctx.lineTo(9*s,0); tctx.stroke();
+                    break;
+                // "?" info icon: bottom-right corner button during normal gameplay, opens the
+                // About/Privacy/Terms links tab (see info-modal).
+                case 'question':
+                    tctx.fillStyle = '#3fa7d6'; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.fill();
+                    tctx.strokeStyle = '#256a89'; tctx.lineWidth = 1.5*s; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.stroke();
+                    tctx.fillStyle = '#fff'; tctx.font = 'bold ' + (13*s) + 'px sans-serif'; tctx.textAlign = 'center'; tctx.textBaseline = 'middle';
+                    tctx.fillText('?', 0, 0.5*s);
+                    break;
+                // Achievements trophy: bottom-right corner button once the Game Over screen is
+                // showing, opens the Almanac straight to its Achievements tab.
+                case 'trophy':
+                    tctx.fillStyle = '#f1c40f';
+                    tctx.beginPath(); tctx.moveTo(-6*s,-8*s); tctx.lineTo(6*s,-8*s); tctx.lineTo(5*s,1*s); tctx.quadraticCurveTo(0,5*s,-5*s,1*s); tctx.closePath(); tctx.fill();
+                    tctx.strokeStyle = '#b8860b'; tctx.lineWidth = 1*s; tctx.stroke();
+                    tctx.strokeStyle = '#b8860b'; tctx.lineWidth = 1.4*s;
+                    tctx.beginPath(); tctx.moveTo(-6*s,-7*s); tctx.quadraticCurveTo(-11*s,-7*s,-9*s,-2*s); tctx.quadraticCurveTo(-7*s,1*s,-4.5*s,-0.5*s); tctx.stroke();
+                    tctx.beginPath(); tctx.moveTo(6*s,-7*s); tctx.quadraticCurveTo(11*s,-7*s,9*s,-2*s); tctx.quadraticCurveTo(7*s,1*s,4.5*s,-0.5*s); tctx.stroke();
+                    tctx.fillStyle = '#f1c40f'; tctx.fillRect(-2*s,4*s,4*s,4*s);
+                    tctx.fillStyle = '#d4a017'; tctx.fillRect(-6*s,8*s,12*s,2.5*s);
+                    break;
                 case 'lock':
                     tctx.fillStyle = '#888'; tctx.fillRect(-6*s,-1*s,12*s,10*s);
                     tctx.strokeStyle = '#555'; tctx.lineWidth = 1*s; tctx.strokeRect(-6*s,-1*s,12*s,10*s);
@@ -2351,6 +2848,41 @@
                     tctx.fillStyle = '#90a4ae'; tctx.strokeStyle = '#37474f';
                     tctx.beginPath(); tctx.roundRect(-2*s,-3*s,10*s,10*s,2*s); tctx.fill(); tctx.stroke();
                     break;
+                // Mythic boss items - simplified single-color echoes of each boss's own icon
+                // element (see bossSilhouettes in the boss-sprites <script> block), so they read
+                // as "belongs to that boss" at a glance even at badge size.
+                case 'mythic_kingslime':
+                    tctx.fillStyle = '#3fd67a'; tctx.beginPath(); tctx.arc(0,2*s,8*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#ffd23f';
+                    tctx.beginPath(); tctx.moveTo(-5*s,-3*s); tctx.lineTo(-3*s,-9*s); tctx.lineTo(0,-4*s); tctx.lineTo(3*s,-9*s); tctx.lineTo(5*s,-3*s); tctx.closePath(); tctx.fill();
+                    break;
+                case 'mythic_desertlion':
+                    tctx.fillStyle = '#6b3f16'; tctx.beginPath(); tctx.arc(0,0,10*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#d9a441'; tctx.beginPath(); tctx.arc(0,0,6.5*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#8a5a1e'; tctx.beginPath(); tctx.arc(3*s,2*s,2.5*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'mythic_yeti':
+                    tctx.fillStyle = '#eef7fb'; tctx.beginPath(); tctx.arc(0,1*s,8*s,0,Math.PI*2); tctx.fill();
+                    tctx.strokeStyle = '#4fa3c7'; tctx.lineWidth = 1.5*s;
+                    tctx.beginPath(); tctx.arc(0,1*s,8*s,0,Math.PI*2); tctx.stroke();
+                    tctx.fillStyle = '#4fa3c7'; tctx.beginPath(); tctx.arc(-3*s,-1*s,1.4*s,0,Math.PI*2); tctx.arc(3*s,-1*s,1.4*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'mythic_lavaworm':
+                    tctx.fillStyle = '#9c2b0e'; tctx.beginPath(); tctx.arc(-5*s,0,4*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#ff6a2b'; tctx.beginPath(); tctx.arc(2*s,0,6.5*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#ffcf4a'; tctx.beginPath(); tctx.arc(2*s,0,2.5*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'mythic_crocodile':
+                    tctx.fillStyle = '#5a7a2e'; tctx.beginPath(); tctx.ellipse(-2*s,0,8*s,5*s,0,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#33471a'; tctx.beginPath(); tctx.ellipse(6*s,0,3.5*s,2.2*s,0,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#dfe6b0'; tctx.beginPath(); tctx.arc(-4*s,-3*s,1.2*s,0,Math.PI*2); tctx.fill();
+                    break;
+                case 'mythic_bear':
+                    tctx.fillStyle = '#7a5233'; tctx.beginPath(); tctx.arc(0,1*s,8*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#7a5233'; tctx.beginPath(); tctx.arc(-6*s,-5*s,2.6*s,0,Math.PI*2); tctx.arc(6*s,-5*s,2.6*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#c98a4b'; tctx.beginPath(); tctx.arc(-6*s,-5*s,1.3*s,0,Math.PI*2); tctx.arc(6*s,-5*s,1.3*s,0,Math.PI*2); tctx.fill();
+                    tctx.fillStyle = '#4a2f1c'; tctx.beginPath(); tctx.arc(0,3*s,3*s,0,Math.PI*2); tctx.fill();
+                    break;
                 // skeletonkey/plasmabeam/wilkshirianknowledge item icons, and all 23
                 // ach_* achievement badge icons (including ach_model_student and
                 // ach_perfectionist), now live in their own files under sprites/
@@ -2387,6 +2919,21 @@
             let h = pixelToAxial(x, y);
             let tile = hexTiles.get(hexKey(h.q, h.r));
             return !!tile && tile.type === 'land';
+        }
+
+        // Finds the closest land-tile center to (x,y) - used to anchor things that must never
+        // sit over a hazard/hole (e.g. Royal Jelly's patrol slimes) to solid ground even when
+        // summoned from a spot that happens to be over a hazard. Falls back to (x,y) itself in
+        // the (extremely unlikely) case a level has no land tiles at all.
+        function nearestSafeTile(x, y) {
+            if (isSafe(x, y)) return { x, y };
+            let best = null, bestD = Infinity;
+            for (let i = 0; i < landHexList.length; i++) {
+                let t = landHexList[i];
+                let d = dist(x, y, t.x, t.y);
+                if (d < bestD) { bestD = d; best = t; }
+            }
+            return best ? { x: best.x, y: best.y } : { x, y };
         }
 
         // Docks now double as safe ground: their deck juts out over a hazard hole (see
@@ -2491,6 +3038,132 @@
         function itemRadiusFor(type) { return type === 'coin' ? 12 : (type === 'emerald' ? 11 : 10); }
 
         function spawnLoot(x, y, type, vx, vy) { items.push({ x, y, vx: vx || 0, vy: vy || 0, radius: itemRadiusFor(type), type, collected: false, seed: Math.random()*1000, beingEaten: false }); levelCoinsPossible++; }
+
+        // ==========================================
+        // MYTHIC BOSS ITEM ENGINE
+        // Each mythic item procs on its own recurring timer (like Spikes/Wilkshirian Knowledge)
+        // while at least 1 stack is held. Every proc fires an icicles[] burst - reusing that
+        // array's existing piercing damage-to-every-enemy collision verbatim, just tagged with
+        // a .tint so it doesn't render icy blue (see the icicle draw code) - shaped to echo the
+        // boss's own attack, plus one small utility effect beyond just damage. Ticked from a
+        // per-id counter on `player.mythicTimers` (reset in resetGame's player fields reset).
+        // ==========================================
+        // Lion mythic item (Sandstorm Mane) timing. Unlike the other mythic items this one
+        // isn't a recurring auto-fire proc: a ring around the player fills over
+        // LION_RING_CHARGE_TIME seconds (like Plasma Beam) and then just stays full/ready
+        // instead of firing on its own. Double-tapping while ready starts a short
+        // LION_AIM_FRAMES "hold in place and aim" window (player frozen, swipe to redirect),
+        // at the end of which a short, fixed-distance invincible dash fires. See
+        // handleLionDoubleTap/startLionAim and the ring/aim/dash ticks in update().
+        const LION_RING_CHARGE_TIME = 3;
+        const LION_AIM_FRAMES = 45;
+        const LION_DASH_DISTANCE = 2.5 * HEX_TILE_DIST;
+        const LION_DASH_FRAMES = 14;
+        const LION_DASH_SPEED = LION_DASH_DISTANCE / LION_DASH_FRAMES;
+        // Royal Jelly (King Slime mythic item): how far from its spawn point (the nearest
+        // non-hazard tile to wherever it was actually summoned) a patrol slime will wander.
+        const ROYAL_JELLY_PATROL_RADIUS = 3 * HEX_TILE_DIST;
+        // How far a patrol slime can "see" - any enemy within this range breaks it off its
+        // patrol to go attack, same as the mutual-destroy collision already does on contact.
+        const ROYAL_JELLY_SIGHT_RANGE = 2 * HEX_TILE_DIST;
+
+        const mythicItemEngine = {
+            mythic_kingslime: {
+                baseInterval: 420, tint: '#3fd67a',
+                // Mimics King Slime's own Slime Split: summons two angry gacha slimes flanking
+                // the player (left/right of whichever way they're facing), every 7s at base.
+                // Each one's spawn point is snapped to the nearest non-hazard tile to wherever
+                // it actually popped in (see nearestSafeTile), and it then just patrols within
+                // ROYAL_JELLY_PATROL_RADIUS of that point - it never follows the player.
+                // Otherwise these function exactly like Slime Squad companions - see the
+                // royalJellySlimes movement/collision blocks in update().
+                proc: (count) => {
+                    let facing = (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) ? Math.atan2(player.vy, player.vx) : (player.facing || 0);
+                    let sides = [facing - Math.PI / 2, facing + Math.PI / 2];
+                    for (let side of sides) {
+                        let sx = player.worldX + Math.cos(side) * (player.radius + 26);
+                        let sy = player.worldY + Math.sin(side) * (player.radius + 26);
+                        let anchor = nearestSafeTile(sx, sy);
+                        royalJellySlimes.push({
+                            x: anchor.x, y: anchor.y, prevX: anchor.x, prevY: anchor.y,
+                            radius: 16, colorId: 'red', vx: 0, vy: 0, isRoyalJelly: true,
+                            spawnX: anchor.x, spawnY: anchor.y,
+                            patrolTargetX: anchor.x, patrolTargetY: anchor.y, patrolTimer: 0
+                        });
+                    }
+                    playSFX('enemy_hit');
+                }
+            },
+            // mythic_desertlion (Sandstorm Mane) intentionally has no entry here - it's not a
+            // recurring auto-fire proc like the others. Its ring-charge/aim/dash logic is
+            // ticked directly in update() and triggered by handleLionDoubleTap().
+            mythic_yeti: {
+                baseInterval: 480, tint: '#bfe8f5',
+                proc: (count) => {
+                    // Mimics the Yeti's own many-bullets attack (Frost Breath): a spray of
+                    // icicle shards fired in a tight cone toward wherever you're heading.
+                    let facing = (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) ? Math.atan2(player.vy, player.vx) : (player.facing || 0);
+                    let n = 9 + count * 3; let spread = 0.85;
+                    for (let i = 0; i < n; i++) {
+                        let t = n === 1 ? 0 : (i / (n - 1)) - 0.5;
+                        let a = facing + t * spread;
+                        let speed = 3 + Math.random() * 1.5;
+                        icicles.push({ x: player.worldX, y: player.worldY, vx: Math.cos(a)*speed, vy: Math.sin(a)*speed, angle: a, traveled: 0, maxRange: 260, radius: 7, tint: '#bfe8f5' });
+                    }
+                    playSFX('ice_nova');
+                }
+            },
+            mythic_lavaworm: {
+                baseInterval: 440, tint: '#ff6a2b',
+                proc: (count) => {
+                    let n = 5 + count * 2; let baseA = Math.random() * Math.PI * 2;
+                    for (let i = 0; i < n; i++) { let a = baseA + (i / n) * Math.PI * 2; icicles.push({ x: player.worldX, y: player.worldY, vx: Math.cos(a)*3.4, vy: Math.sin(a)*3.4, angle: a, traveled: 0, maxRange: 280, radius: 7, tint: '#ff6a2b' }); }
+                    // Utility: melts a little bonus gold out of the ground each proc.
+                    grantGold(3 + count * 2);
+                    playSFX('fire');
+                }
+            },
+            mythic_crocodile: {
+                baseInterval: 460, tint: '#5a7a2e',
+                proc: (count) => {
+                    let facing = Math.atan2(player.vy, player.vx) || 0;
+                    let n = 5 + count;
+                    for (let i = 0; i < n; i++) { let a = facing - Math.PI/2 + (i/(n-1||1)) * Math.PI; icicles.push({ x: player.worldX, y: player.worldY, vx: Math.cos(a)*4.5, vy: Math.sin(a)*4.5, angle: a, traveled: 0, maxRange: 260, radius: 7, tint: '#5a7a2e' }); }
+                    // Utility: snaps any nearby incoming projectiles out of the air.
+                    for (let p of projectiles) { if (!p.deflected && dist(p.x, p.y, player.worldX, player.worldY) < 130) p.deflected = true; }
+                    playSFX('enemy_hit');
+                }
+            },
+            mythic_bear: {
+                baseInterval: 500, tint: '#7a5233',
+                proc: (count) => {
+                    let n = 7 + count; let speed = 3.2;
+                    for (let i = 0; i < n; i++) { let a = (i / n) * Math.PI * 2; icicles.push({ x: player.worldX, y: player.worldY, vx: Math.cos(a)*speed, vy: Math.sin(a)*speed, angle: a, traveled: 0, maxRange: 240, radius: 8, tint: '#7a5233' }); }
+                    // Utility: shoves every nearby enemy back away from the player.
+                    for (let e of enemies) { let d = dist(player.worldX, player.worldY, e.x, e.y); if (d < 200 && d > 1) { let dx = e.x - player.worldX, dy = e.y - player.worldY; e.x += (dx/d) * 14; e.y += (dy/d) * 14; } }
+                    screenShake = Math.max(screenShake, 8);
+                    playSFX('enemy_hit');
+                }
+            }
+        };
+
+        // Ticks every mythic item currently held, once per frame. Each stack shortens the
+        // interval (diminishing, like Spikes/Wilkshirian Knowledge) rather than firing extra
+        // bursts on the same frame count - keeps a single timer per id instead of one per stack.
+        function updateMythicItems() {
+            for (let id in mythicItemEngine) {
+                let count = runItems[id];
+                if (!count) continue;
+                let eng = mythicItemEngine[id];
+                player.mythicTimers = player.mythicTimers || {};
+                player.mythicTimers[id] = (player.mythicTimers[id] || 0) + 1;
+                let interval = Math.max(120, eng.baseInterval - (count - 1) * 60);
+                if (player.mythicTimers[id] >= interval) {
+                    player.mythicTimers[id] = 0;
+                    eng.proc(count);
+                }
+            }
+        }
 
         // ---- Roguelite run-item system ----
         // Chests and mimics always drop exactly one of these: 70% common (split evenly across
@@ -2657,7 +3330,7 @@
             let container = domRefs.itemsHud;
             if (!container) return;
             container.innerHTML = '';
-            const order = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge', 'greedy', 'slimefriend', 'plasmabeam', 'devildeal', 'shuriken', 'skeletonkey', 'spectre'];
+            const order = ['magnet', 'wings', 'spikes', 'wilkshirianknowledge', 'greedy', 'slimefriend', 'plasmabeam', 'devildeal', 'shuriken', 'skeletonkey', 'spectre', 'mythic_kingslime', 'mythic_desertlion', 'mythic_yeti', 'mythic_lavaworm', 'mythic_crocodile', 'mythic_bear'];
             order.forEach(id => {
                 let count = runItems[id];
                 if (!count) return;
@@ -2871,6 +3544,22 @@
 
         function destroyEnemyByIndex(idx, coinRange) {
             let e = enemies[idx]; if (!e) return;
+            if (e.isBoss) {
+                if ((e.iframe || 0) > 0) return; // long invulnerability window between hits
+                e.hp--; e.iframe = BOSS_IFRAME_FRAMES; e.hitFlash = 24;
+                screenShake = Math.max(screenShake, 10);
+                if (e.hp > 0) { playSFX('enemy_hit'); return; } // survives this hit - not removed yet
+                // Final hit - fall through to the normal removal below with bigger loot.
+                coinRange = [6, 10];
+                if (!bossItemsAwarded[e.bossId]) {
+                    bossItemsAwarded[e.bossId] = true;
+                    grantRoguelikeItem('mythic_' + e.bossId);
+                } else {
+                    // Same boss type killed again this run (themes repeat every 6 levels) -
+                    // no second copy of the mythic item, just extra bonus loot instead.
+                    coinRange = [10, 14];
+                }
+            }
             let range = coinRange || [2,4]; let n = Math.floor(range[0] + Math.random() * (range[1]-range[0]+1));
             if (e.type === 'wanderer' && e.heldCoin) spawnLoot(e.x, e.y, e.heldCoin, (Math.random()-0.5)*18, (Math.random()-0.5)*18);
             for (let i = 0; i < n; i++) spawnLoot(e.x, e.y, rollItemType(level), (Math.random()-0.5)*18, (Math.random()-0.5)*18);
@@ -3078,11 +3767,13 @@
         }
 
         function generateLevel() {
-            items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = [];
+            items = []; enemies = []; trees = []; hives = []; decorations = []; projectiles = []; icicles = []; iceBlocks = [];
             flameParticles = []; leaves = []; splashes = []; powerups = []; chest = null; fishingScene = null; skeletonChests = []; surviveChests = []; skinTrader = null; goldTrader = null; docks = [];
             hexTiles = new Map(); landHexList = []; holeHexList = []; borderHexList = []; fences = [];
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.hazardTimer = 0; player.spikesTimer = 0;
             player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0;
+            player.lionRingCharge = 0; player.lionAimTimer = 0; player.lionAimMax = 0; player.lionAimAngle = 0; player.lionAimTargetAngle = 0;
+            player.lionDashTimer = 0;
             safeGridCache.clear();
             goalUnreachable = false; goalSeen = false;
             levelCoinsCollected = 0; levelCoinsPossible = 0;
@@ -3100,24 +3791,34 @@
             // reset the trail buffer they follow so they don't rush in from a previous level.
             companions = [];
             playerTrail = [];
+            // Mythic: Royal Jelly's summoned homing slimes don't persist across levels either -
+            // they'll be re-summoned fresh by its own recurring timer.
+            royalJellySlimes = [];
             iceFrostedTiles.clear();
             lavaScorchedTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear(); acidTrail = [];
             syncCompanionsToStack();
 
+
             // Rare Survival level type: rolled fresh each level-up (never on level 1, and never
             // twice in a row). If it hits, hand off to its own dedicated generator entirely -
             // it builds a simpler fixed arena instead of the usual procedural blob-chain map.
-            enemyTelegraphs = [];
+            enemyTelegraphs = []; bossTelegraphs = [];
             // Endless Waves: every level (including level 1) is a Survival arena, no rolling.
             // Classic keeps the original rare-random-Survival-level behavior untouched.
             isSurvivalLevel = (gameMode === 'endless') || (level > 1 && !lastLevelWasSurvival && Math.random() < SURVIVAL_LEVEL_CHANCE);
+            isBossGauntletLevel = !isSurvivalLevel && level >= 50;
+            bossGauntletUnlocked = false;
             if (isSurvivalLevel) { generateSurvivalLevel(); return; }
             lastLevelWasSurvival = false;
 
             let scaledLevel = Math.min(20, level);
+            // Level 50+: no countdown timer (see the timeLeft tick in update() and the hidden
+            // timer bar in updateHUD()) and the goal is unlocked purely by clearing every boss
+            // on the map (see the isLocked/win checks below) rather than also needing a coin
+            // quota - fitting since every enemy slot on these stages spawns as a boss.
             MAX_TIME = Math.max(20, 45 - (scaledLevel - 1) * (25 / 19));
             timeLeft = MAX_TIME;
-            goal.required = Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
+            goal.required = isBossGauntletLevel ? 0 : Math.round(Math.min(50, 5 + (scaledLevel - 1) * 2.3)); goal.collected = 0;
             
             currentTheme = themes[(level - 1) % themes.length];
             // Magma, Glacier, and Toxic Sludge each force the whole level to render with one
@@ -3318,8 +4019,37 @@
             let baseSpeed = 1.5 + (scaledLevel * 0.1);
             let shooterCount = 0; let mimicSpawned = false;
             let totalEnemies = Math.floor(scaledLevel * 1.5) + 2;
-            
+
+            // This stage's boss, themed to whichever theme actually ended up active this level
+            // (forced legendary-skin themes included) - see bossDB/bossIdByThemeIndex above.
+            let stageBossId = bossIdByThemeIndex[themes.indexOf(currentTheme)];
+            let stageBossChance = stageBossId ? bossChanceForLevel(level) : 0;
+            // BUG FIX: this used to be rolled independently for every one of up to ~32 enemy
+            // slots below, so by the time a run reached level ~20-30 the map filled with a
+            // dozen+ simultaneous bosses well before the intended level-50 milestone. Below
+            // level 50 at most one slot is allowed to become a boss (still gated by the same
+            // 0%->15%->~100% chance curve, just applied once); level 50+ is the deliberate
+            // "every enemy is a boss" swarm the spec calls for, applied deterministically to
+            // every slot rather than via a per-slot roll.
+            let bossSlotClaimed = false;
+            let forceAllSlotsBoss = level >= 50;
+
             for(let i=0; i < totalEnemies; i++) {
+                let spawnBossThisSlot = stageBossChance > 0 && (forceAllSlotsBoss || (!bossSlotClaimed && Math.random() < stageBossChance));
+                if (spawnBossThisSlot) {
+                    bossSlotClaimed = true;
+                    let bDef = bossDB[stageBossId];
+                    let bPos = getValidSpawn(350, bDef.radius);
+                    let boss = {
+                        x: bPos.x, y: bPos.y, radius: bDef.radius, speed: (baseSpeed + 0.3) * bDef.speedMult,
+                        type: 'boss', bossId: stageBossId, isBoss: true, angle: Math.random() * Math.PI * 2,
+                        hp: BOSS_HITS_REQUIRED, maxHp: BOSS_HITS_REQUIRED, iframe: 0, hitFlash: 0,
+                        state: 'cooldown', stateTimer: 0, animTimer: Math.random() * 1000,
+                        cooldownFrames: 90 + Math.floor(Math.random() * 60)
+                    };
+                    enemies.push(boss); levelEnemiesSpawned++;
+                    continue;
+                }
                 let availableEnemies = ['wanderer'];
                 if (level >= 2) availableEnemies.push('dasher');
                 if (level >= 3 && hives.length > 0) availableEnemies.push('chaser');
@@ -3402,7 +4132,7 @@
             survivalElapsed = 0; survivalWaveNum = 0; survivalNextWaveAt = 2.5;
             survivalPowerupSpawned = false; survivalPowerupAt = 3 + Math.random() * 22; // sometime in the first ~25s
             survivalGoalAnnounced = false;
-            enemyTelegraphs = [];
+            enemyTelegraphs = []; bossTelegraphs = [];
 
             MAX_TIME = SURVIVAL_DURATION; timeLeft = MAX_TIME;
             goal.required = SURVIVAL_DURATION; goal.collected = 0; goal.active = true;
@@ -3758,8 +4488,8 @@
         document.getElementById('level-stat-coin-icon').src = iconDataURL('coin', 20);
         document.getElementById('unlock-star-l').src = iconDataURL('star', 20);
         document.getElementById('unlock-star-r').src = iconDataURL('star', 20);
-        document.getElementById('settings-icon-img').src = iconDataURL('gear', 32);
-        document.getElementById('almanac-icon-img').src = iconDataURL('book', 32);
+        document.getElementById('settings-icon-img').src = iconDataURL('shop', 32);
+        document.getElementById('almanac-icon-img').src = iconDataURL('question', 32);
         document.querySelectorAll('button').forEach(btn => { btn.addEventListener('mousedown', () => playSFX('click')); });
 
         function buildShopUI() {
@@ -5027,6 +5757,30 @@
             else if (tab === 'achievements') { hint.innerText = 'Complete challenges to unlock achievements.'; populateAchievements(); }
         }
 
+        // Info tab (About/Privacy/Terms links) opened from the bottom-right corner icon while
+        // actually playing - see toggleCornerRightIcon.
+        function toggleInfo() {
+            if (gameState === 'playing') { previousState = gameState;
+            gameState = 'paused'; }
+            document.getElementById('info-modal').style.display = 'block';
+            initAudio();
+        }
+
+        // The bottom-right corner icon does double duty: a "?" info button during normal
+        // gameplay, or an achievements trophy (opening the Almanac's Achievements tab) once the
+        // Game Over screen is up - see updateCornerRightIconForGameOver, which flips the icon
+        // itself at the moment the game actually ends.
+        function toggleCornerRightIcon() {
+            if (gameState === 'game_over') toggleAlmanac(); else toggleInfo();
+        }
+
+        // Swaps the bottom-right corner icon's artwork between the "?" info glyph and the
+        // achievements trophy. isGameOver true -> trophy (Game Over screen); false -> "?" (normal
+        // gameplay, restored on every fresh startGame()).
+        function updateCornerRightIconForGameOver(isGameOver) {
+            document.getElementById('almanac-icon-img').src = iconDataURL(isGameOver ? 'trophy' : 'question', 32);
+        }
+
         function toggleAlmanac() {
             // Don't allow Almanac to open on top of Settings - it has to be closed first.
             if (document.getElementById('settings-modal').style.display === 'block') return;
@@ -5046,6 +5800,9 @@
             gameState = 'paused'; }
             document.getElementById('settings-modal').style.display = 'block'; syncSettingsUI(); initAudio();
             document.getElementById('leave-game-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
+            // DEV: skip button only makes sense mid-run (not on the title/game-over screens),
+            // same visibility gate as Leave Game above.
+            document.getElementById('skip-level-btn').style.display = (previousState === 'playing' || previousState === 'level_end') ? 'block' : 'none';
         }
 
         // Records a newly-reached level against whichever mode is currently active, persisting
@@ -5294,8 +6051,13 @@
         function updateHUD() {
             domRefs.levelDisplay.innerText = level;
             domRefs.coinDisplay.innerText = totalCoins;
-            domRefs.timerFill.style.width = Math.max(0, (timeLeft / MAX_TIME) * 100) + "%";
-            if (timeLeft <= 3) domRefs.timerContainer.classList.add('danger'); else domRefs.timerContainer.classList.remove('danger');
+            if (isBossGauntletLevel && !bossGauntletUnlocked) {
+                updateGauntletTimerBar();
+            } else {
+                domRefs.timerContainer.classList.remove('gauntlet-locked', 'gauntlet-unlocked');
+                domRefs.timerFill.style.width = Math.max(0, (timeLeft / MAX_TIME) * 100) + "%";
+                if (timeLeft <= 3) domRefs.timerContainer.classList.add('danger'); else domRefs.timerContainer.classList.remove('danger');
+            }
             if (player.activePowerup) {
                 let pu = powerupTypesById.get(player.activePowerup);
                 domRefs.powerupIndicator.style.display = 'flex';
@@ -5303,6 +6065,23 @@
                 domRefs.puFill.style.width = Math.max(0, (player.powerupTimeLeft / player.powerupDuration) * 100) + '%';
                 domRefs.puFill.style.background = pu.color;
             } else { domRefs.powerupIndicator.style.display = 'none'; }
+        }
+
+        // Level 50+ boss-gauntlet stages have no countdown (see isBossGauntletLevel) - instead
+        // the timer bar itself reports boss status: full and red with a lock icon while any
+        // boss is still alive on the map, switching to a clear "ready" color with the lock gone
+        // once every one of them is defeated. gauntletBarLockedState caches the last written
+        // state so this can be called every frame without forcing a style recalc when nothing
+        // has actually changed (same spirit as updateTimerBarOnly below).
+        let gauntletBarLockedState = null;
+        function updateGauntletTimerBar() {
+            domRefs.timerContainer.classList.remove('danger');
+            domRefs.timerFill.style.width = '100%';
+            let locked = enemies.some(en => en.isBoss);
+            if (locked === gauntletBarLockedState) return;
+            gauntletBarLockedState = locked;
+            domRefs.timerContainer.classList.toggle('gauntlet-locked', locked);
+            domRefs.timerContainer.classList.toggle('gauntlet-unlocked', !locked);
         }
 
         // Cheap per-tick update used while a powerup is running: only touches the one element
@@ -5376,12 +6155,12 @@
         updateGameModeButton();
         document.getElementById('go-shop-btn').addEventListener('click', toggleShop);
         document.getElementById('level-continue-btn').addEventListener('click', nextLevel);
-        document.getElementById('almanac-corner-btn').addEventListener('click', toggleAlmanac);
+        document.getElementById('almanac-corner-btn').addEventListener('click', toggleCornerRightIcon);
         document.getElementById('tab-almanac-enemies').addEventListener('click', () => switchAlmanacTab('enemies'));
         document.getElementById('tab-almanac-items').addEventListener('click', () => switchAlmanacTab('items'));
         document.getElementById('tab-almanac-achievements').addEventListener('click', () => switchAlmanacTab('achievements'));
         document.getElementById('title-settings-btn').addEventListener('click', toggleSettings);
-        document.getElementById('settings-corner-btn').addEventListener('click', toggleSettings);
+        document.getElementById('settings-corner-btn').addEventListener('click', toggleShop);
         document.getElementById('almanac-detail-close-btn').addEventListener('click', () => {
             document.getElementById('almanac-detail-modal').style.display = 'none';
         });
@@ -5410,6 +6189,16 @@
             document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'none');
             resetGame();
             gameState = 'title';
+        });
+        // DEV: instantly clears the current level, no run stats/coins/achievements from it are
+        // recorded (matches nothing-happened-here since destroyEnemyByIndex/goal-collect never
+        // ran), and hands out 3 random roguelike items on top - same roll/grant path a normal
+        // level-up chest uses (rollRoguelikeItem + grantRoguelikeItem), so locked-item filtering,
+        // stack-record tracking, and the level-end "Items Won" summary all just work unmodified.
+        document.getElementById('skip-level-btn').addEventListener('click', () => {
+            document.getElementById('settings-modal').style.display = 'none';
+            for (let i = 0; i < 3; i++) grantRoguelikeItem(rollRoguelikeItem());
+            nextLevel();
         });
         document.getElementById('promo-redeem-btn').addEventListener('click', redeemPromoCode);
         [0, 1, 2, 3].forEach(i => {
@@ -5442,10 +6231,17 @@
             const touch = e.touches ? e.touches[0] : e;
             let dx = touch.clientX - lastX; let dy = touch.clientY - lastY;
             let dir = userSettings.invert ? -1 : 1;
-            player.vx += dx * sensitivity * dir;
-            player.vy += dy * sensitivity * dir;
-            player.jiggleForceX = dx * sensitivity * dir;
-            player.jiggleForceY = dy * sensitivity * dir;
+            // Mythic: Sandstorm Mane (Lion) aim window - the player is held in place
+            // (lionAimTimer tick in update() pins vx/vy to 0), so swipes here redirect the
+            // charging dash's angle instead of moving the player.
+            if (player.lionAimTimer > 0) {
+                if (Math.abs(dx) + Math.abs(dy) > 1) player.lionAimTargetAngle = Math.atan2(dy * dir, dx * dir);
+            } else {
+                player.vx += dx * sensitivity * dir;
+                player.vy += dy * sensitivity * dir;
+                player.jiggleForceX = dx * sensitivity * dir;
+                player.jiggleForceY = dy * sensitivity * dir;
+            }
             lastX = touch.clientX; lastY = touch.clientY; pointerScreenX = touch.clientX; pointerScreenY = touch.clientY;
         }
         function handleEnd() { isDragging = false;
@@ -5466,6 +6262,125 @@
             }
             lastTapTime = now;
         }, { passive: false, capture: true });
+
+        // --- Mythic: Sandstorm Mane (Lion) gesture detection. Tracked independently of the
+        // drag-to-move handlers above so it still works while gameState is 'paused' for one of
+        // the lion's own one-time tutorial popups (normal movement/dragging requires 'playing',
+        // but dismissing those popups shouldn't). A release counts as a "tap" if it moved only a
+        // little and happened quickly (two of those within 350ms is a double tap); a release
+        // that moved further counts as a "swipe" instead. The "Double tap to dash!" tutorial is
+        // dismissed by a double tap (matching the trigger gesture); the "Swipe to change dash
+        // direction!" tutorial is dismissed by a swipe instead (matching that gesture). ---
+        let lionTapStartX = 0, lionTapStartY = 0, lionTapStartTime = 0, lionLastTapTime = 0;
+        let lionDragging = false, lionMoveX = 0, lionMoveY = 0;
+        function lionTapStart(e) {
+            const t = e.touches ? e.touches[0] : e;
+            lionTapStartX = t.clientX; lionTapStartY = t.clientY; lionTapStartTime = Date.now();
+            lionMoveX = t.clientX; lionMoveY = t.clientY;
+            lionDragging = true;
+        }
+        // Live-updates the telegraph while the "Swipe to change dash direction!" tutorial has
+        // the game paused - handleMove above is gated to gameState === 'playing' so it goes
+        // silent during that pause, which otherwise left the telegraph only snapping to the
+        // swipe's direction on release instead of following the drag as it happens.
+        function lionTapMove(e) {
+            if (!lionDragging || lionTutorialPause !== 'aimhalf') return;
+            const t = e.touches ? e.touches[0] : e;
+            let dx = t.clientX - lionMoveX, dy = t.clientY - lionMoveY;
+            let dir = userSettings.invert ? -1 : 1;
+            if (Math.abs(dx) + Math.abs(dy) > 1) {
+                // This runs while gameState is 'paused' for the tutorial popup, so the normal
+                // per-frame easing in update() isn't ticking - set the render angle directly
+                // here (and keep the target in sync so easing doesn't jump once play resumes).
+                player.lionAimAngle = player.lionAimTargetAngle = Math.atan2(dy * dir, dx * dir);
+            }
+            lionMoveX = t.clientX; lionMoveY = t.clientY;
+        }
+        function lionTapEnd(e) {
+            lionDragging = false;
+            if (gameState !== 'playing' && !lionTutorialPause) return;
+            if (e.target && e.target.closest && e.target.closest('button, .inv-item, .shop-tab, .toggle-btn, [onclick]')) return;
+            const t = e.changedTouches ? e.changedTouches[0] : e;
+            let dx = t.clientX - lionTapStartX, dy = t.clientY - lionTapStartY;
+            let moved = Math.hypot(dx, dy);
+            let heldTime = Date.now() - lionTapStartTime;
+            // "Swipe to change dash direction!" is waiting on a swipe, not a tap - use the
+            // swipe's own direction as the redirect, same as a normal in-aim-window swipe would.
+            if (lionTutorialPause === 'aimhalf') {
+                lionLastTapTime = 0;
+                if (moved > 20) {
+                    let dir = userSettings.invert ? -1 : 1;
+                    player.lionAimAngle = player.lionAimTargetAngle = Math.atan2(dy * dir, dx * dir);
+                    dismissLionTutorial();
+                }
+                return;
+            }
+            if (moved > 16 || heldTime > 300) { lionLastTapTime = 0; return; }
+            let now = Date.now();
+            if (now - lionLastTapTime <= 350) {
+                lionLastTapTime = 0;
+                handleLionDoubleTap();
+            } else {
+                lionLastTapTime = now;
+            }
+        }
+        window.addEventListener('mousedown', lionTapStart);
+        window.addEventListener('touchstart', lionTapStart, { passive: true });
+        window.addEventListener('mousemove', lionTapMove);
+        window.addEventListener('touchmove', lionTapMove, { passive: true });
+        window.addEventListener('mouseup', lionTapEnd);
+        window.addEventListener('touchend', lionTapEnd);
+
+        // Starts the Sandstorm Mane aim window: player is frozen and defaults to facing their
+        // current heading, then can swipe (see handleMove) to redirect before the dash fires.
+        function startLionAim() {
+            player.lionAimMax = LION_AIM_FRAMES;
+            player.lionAimTimer = LION_AIM_FRAMES;
+            player.lionAimAngle = (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) ? Math.atan2(player.vy, player.vx) : (player.facing || 0);
+            player.lionAimTargetAngle = player.lionAimAngle;
+            playSFX('bull_charge');
+        }
+
+        // Dismisses whichever lion tutorial popup is currently pausing the game and resumes
+        // play. Dismissing "Double tap to dash!" doubles as the triggering double-tap, so it
+        // also starts the aim window; dismissing "Swipe to change dash direction!" just lets the
+        // aim window (already mid-way through) resume counting down from where it was frozen.
+        function dismissLionTutorial() {
+            let which = lionTutorialPause;
+            lionTutorialPause = null;
+            hideLionTutorial();
+            if (gameState === 'paused') gameState = previousState || 'playing';
+            if (which === 'ringfull') { storage.set('lionRingTutorialSeen', 'true'); startLionAim(); }
+            else if (which === 'aimhalf') { storage.set('lionAimTutorialSeen', 'true'); }
+        }
+
+        // Double-tap handler: dismisses the "Double tap to dash!" popup if it's up (see
+        // dismissLionTutorial), ignores double taps while "Swipe to change dash direction!" is up
+        // (that one only listens for a swipe - see lionTapEnd), otherwise triggers the dash
+        // normally once the ring is full and nothing else lion-related is already in progress.
+        function handleLionDoubleTap() {
+            if (lionTutorialPause === 'ringfull') { dismissLionTutorial(); return; }
+            if (lionTutorialPause) return;
+            if (gameState !== 'playing') return;
+            if ((runItems.mythic_desertlion || 0) <= 0) return;
+            if (player.lionAimTimer > 0 || player.lionDashTimer > 0) return;
+            if ((player.lionRingCharge || 0) < LION_RING_CHARGE_TIME) return;
+            startLionAim();
+        }
+
+        function showLionTutorial(text, subText) {
+            let el = document.getElementById('lion-tutorial-popup');
+            document.getElementById('lion-tutorial-text').textContent = text;
+            document.getElementById('lion-tutorial-sub').textContent = subText || 'Double tap to continue';
+            el.style.display = 'block';
+            requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add('show')));
+        }
+        function hideLionTutorial() {
+            let el = document.getElementById('lion-tutorial-popup');
+            el.classList.remove('show');
+            setTimeout(() => { if (!el.classList.contains('show')) el.style.display = 'none'; }, 300);
+        }
+
 
         // SECTION 7 - GAME LOGIC & PHYSICS
         // Central update loop, physics calculations, AI, and collision.
@@ -5500,10 +6415,18 @@
                     let e = enemies[i];
                     if (dist(player.worldX, player.worldY, e.x, e.y) < pu.radius && Math.abs(normalizeAngle(Math.atan2(e.y - player.worldY, e.x - player.worldX) - facing)) <= Math.PI / 2.1) destroyEnemyByIndex(i, pu.coinDrop);
                 }
+                for (let bi = iceBlocks.length - 1; bi >= 0; bi--) {
+                    let ib = iceBlocks[bi];
+                    if (dist(player.worldX, player.worldY, ib.x, ib.y) < pu.radius + ib.radius && Math.abs(normalizeAngle(Math.atan2(ib.y - player.worldY, ib.x - player.worldX) - facing)) <= Math.PI / 2.1) explodeIceBlockIndex(bi);
+                }
             } else if (pu.mode === 'beam') {
                 let target = getLightningTargetWorld();
                 for (let i = enemies.length - 1; i >= 0; i--) {
                     if (distToSegment(enemies[i].x, enemies[i].y, player.worldX, player.worldY, target.x, target.y) < pu.radius + enemies[i].radius) destroyEnemyByIndex(i, pu.coinDrop);
+                }
+                for (let bi = iceBlocks.length - 1; bi >= 0; bi--) {
+                    let ib = iceBlocks[bi];
+                    if (distToSegment(ib.x, ib.y, player.worldX, player.worldY, target.x, target.y) < pu.radius + ib.radius) explodeIceBlockIndex(bi);
                 }
             } else if (pu.mode === 'nova') {
                 playSFX('ice_nova');
@@ -5525,6 +6448,7 @@
             camera.prevX = camera.x; camera.prevY = camera.y;
             for (let i = 0; i < enemies.length; i++) { enemies[i].prevX = enemies[i].x; enemies[i].prevY = enemies[i].y; }
             for (let i = 0; i < companions.length; i++) { companions[i].prevX = companions[i].x; companions[i].prevY = companions[i].y; }
+            for (let i = 0; i < royalJellySlimes.length; i++) { royalJellySlimes[i].prevX = royalJellySlimes[i].x; royalJellySlimes[i].prevY = royalJellySlimes[i].y; }
 
             manageBeeBuzzing();
 
@@ -5563,6 +6487,57 @@
                         }
                     }
 
+                    // Mythic: Royal Jelly's summoned slimes - unlike Slime Squad companions
+                    // (which trail the player), these never follow the player at all. Each one
+                    // patrols within ROYAL_JELLY_PATROL_RADIUS of its own spawnX/spawnY (the
+                    // nearest non-hazard tile to wherever it was actually summoned), wandering
+                    // to a fresh random point nearby once it arrives or a patrol timer lapses -
+                    // unless an enemy wanders within ROYAL_JELLY_SIGHT_RANGE, in which case it
+                    // breaks off and beelines for the nearest one it can see instead (actually
+                    // killing it is still handled by the mutual-destroy collision check further
+                    // down; this just closes the distance). Any candidate patrol point that
+                    // lands on a hazard is rejected in favor of another attempt, and the
+                    // per-frame step itself - whether patrolling or chasing - is also validated
+                    // so the slime can never wander onto a hazard tile mid-transit; it falls
+                    // back toward its (always-safe) spawn point instead if that would happen.
+                    if (royalJellySlimes.length > 0) {
+                        for (let ji = 0; ji < royalJellySlimes.length; ji++) {
+                            let js = royalJellySlimes[ji];
+                            let nearestE = null, nearestD = ROYAL_JELLY_SIGHT_RANGE;
+                            for (let ei = 0; ei < enemies.length; ei++) {
+                                let e = enemies[ei];
+                                let d = dist(js.x, js.y, e.x, e.y);
+                                if (d < nearestD) { nearestD = d; nearestE = e; }
+                            }
+                            let targetX, targetY, speed;
+                            if (nearestE) {
+                                targetX = nearestE.x; targetY = nearestE.y; speed = 0.09;
+                            } else {
+                                js.patrolTimer = (js.patrolTimer || 0) - 1;
+                                let atTarget = dist(js.x, js.y, js.patrolTargetX, js.patrolTargetY) < 6;
+                                if (atTarget || js.patrolTimer <= 0) {
+                                    let picked = false;
+                                    for (let attempts = 0; attempts < 12 && !picked; attempts++) {
+                                        let a = Math.random() * Math.PI * 2;
+                                        let r = Math.random() * ROYAL_JELLY_PATROL_RADIUS;
+                                        let tx = js.spawnX + Math.cos(a) * r;
+                                        let ty = js.spawnY + Math.sin(a) * r;
+                                        if (isSafe(tx, ty)) { js.patrolTargetX = tx; js.patrolTargetY = ty; picked = true; }
+                                    }
+                                    if (!picked) { js.patrolTargetX = js.spawnX; js.patrolTargetY = js.spawnY; }
+                                    js.patrolTimer = 90 + Math.random() * 60;
+                                }
+                                targetX = js.patrolTargetX; targetY = js.patrolTargetY; speed = 0.05;
+                            }
+                            let nx = js.x + (targetX - js.x) * speed;
+                            let ny = js.y + (targetY - js.y) * speed;
+                            if (isSafe(nx, ny)) { js.x = nx; js.y = ny; }
+                            else { js.patrolTargetX = js.spawnX; js.patrolTargetY = js.spawnY; }
+                            js.vx = js.x - js.prevX;
+                            js.vy = js.y - js.prevY;
+                        }
+                    }
+
                     // Thematic world effects tied to whichever rare skin is currently equipped
                     // (ground-frosting, ember/sludge trails, subtle glitches, etc). See SECTION 6.
                     updateSkinWorldEffects();
@@ -5583,6 +6558,78 @@
                         }
                     }
 
+                    // --- Mythic boss items: recurring attack-mimic procs (see updateMythicItems) ---
+                    updateMythicItems();
+
+                    // --- Mythic: Sandstorm Mane (Lion) - ring charges like Plasma Beam but,
+                    // unlike Plasma Beam, stays full/ready once charged instead of auto-firing.
+                    // handleLionDoubleTap() (bound to the window tap listeners further down)
+                    // is what actually starts the aim window once the ring is full. Charge
+                    // speed scales with stacks; dash distance stays fixed regardless of stacks
+                    // per the item's own short, punchy design. ---
+                    let lionStacks = runItems.mythic_desertlion || 0;
+                    if (lionStacks > 0 && player.lionAimTimer <= 0 && player.lionDashTimer <= 0) {
+                        if ((player.lionRingCharge || 0) < LION_RING_CHARGE_TIME) {
+                            let ringChargeTime = Math.max(1.2, LION_RING_CHARGE_TIME - (lionStacks - 1) * 0.4);
+                            player.lionRingCharge = (player.lionRingCharge || 0) + (1/60) * (LION_RING_CHARGE_TIME / ringChargeTime);
+                            if (player.lionRingCharge >= LION_RING_CHARGE_TIME) {
+                                player.lionRingCharge = LION_RING_CHARGE_TIME;
+                                // First time ever the ring fills: freeze game logic and teach
+                                // the double-tap-to-dash gesture. Dismissing it (see
+                                // handleLionDoubleTap) doubles as the triggering double-tap.
+                                if (!lionTutorialPause && storage.get('lionRingTutorialSeen') !== 'true') {
+                                    lionTutorialPause = 'ringfull';
+                                    showLionTutorial('Double tap to dash!', 'Double tap to continue');
+                                    previousState = gameState; gameState = 'paused';
+                                }
+                            }
+                        }
+                    }
+                    // Aim window: player is held in place (vx/vy pinned to 0 below) and can
+                    // swipe (see handleMove) to redirect lionAimAngle before the dash launches.
+                    if (player.lionAimTimer > 0) {
+                        let wasHalf = (1 - player.lionAimTimer / (player.lionAimMax || 1)) >= 0.5;
+                        player.lionAimTimer--;
+                        player.vx = 0; player.vy = 0;
+                        // Ease the rendered telegraph angle toward the raw swipe target every
+                        // frame (shortest angular path) instead of snapping straight to it on
+                        // each pointer-move event. Touch/mouse move events fire in irregular,
+                        // often coarse bursts, so setting lionAimAngle directly made the
+                        // telegraph visibly jump between angles. This mirrors how the player's
+                        // own velocity eases via `friction` every frame instead of snapping to
+                        // raw swipe deltas, which is what makes the character feel fluid.
+                        let lionAngDiff = Math.atan2(Math.sin(player.lionAimTargetAngle - player.lionAimAngle), Math.cos(player.lionAimTargetAngle - player.lionAimAngle));
+                        player.lionAimAngle += lionAngDiff * 0.35;
+                        let nowHalf = (1 - player.lionAimTimer / (player.lionAimMax || 1)) >= 0.5;
+                        // First time ever the aim window reaches its halfway point: freeze game
+                        // logic and teach the swipe-to-redirect gesture. lionAimTimer is simply
+                        // left sitting at its current (halfway) value while paused, then resumes
+                        // counting down from there once dismissed.
+                        if (!wasHalf && nowHalf && !lionTutorialPause && storage.get('lionAimTutorialSeen') !== 'true') {
+                            lionTutorialPause = 'aimhalf';
+                            showLionTutorial('Swipe to change dash direction!', 'Swipe to continue');
+                            previousState = gameState; gameState = 'paused';
+                        }
+                        if (player.lionAimTimer <= 0) {
+                            player.lionDashAngle = player.lionAimAngle;
+                            player.lionDashTimer = LION_DASH_FRAMES;
+                            player.lionRingCharge = 0;
+                            player.invulnerableTimer = Math.max(player.invulnerableTimer || 0, (LION_DASH_FRAMES / 60) + 0.15);
+                            screenShake = Math.max(screenShake, 8);
+                            playSFX('bull_charge');
+                        }
+                    }
+                    if (player.lionDashTimer > 0) {
+                        player.lionDashTimer--;
+                        player.worldX += Math.cos(player.lionDashAngle) * LION_DASH_SPEED;
+                        player.worldY += Math.sin(player.lionDashAngle) * LION_DASH_SPEED;
+                        player.vx = Math.cos(player.lionDashAngle) * LION_DASH_SPEED; player.vy = Math.sin(player.lionDashAngle) * LION_DASH_SPEED;
+                        for (let li = enemies.length - 1; li >= 0; li--) {
+                            let en = enemies[li];
+                            if (dist(player.worldX, player.worldY, en.x, en.y) < player.radius + en.radius) destroyEnemyByIndex(li, [2,4]);
+                        }
+                    }
+
                     // --- Roguelite: Shuriken item - orbiting blades that deflect bullets and kill enemies ---
                     let shurikenStacks = runItems.shuriken || 0;
                     if (shurikenStacks > 0) {
@@ -5596,6 +6643,7 @@
                                 let e = enemies[j];
                                 if (dist(sx, sy, e.x, e.y) < 11 + e.radius) { destroyEnemyByIndex(j, [1,2]); screenShake = Math.max(screenShake, 5); }
                             }
+                            explodeIceBlockAt(sx, sy, 11);
                             for (let p of projectiles) {
                                 if (!p.deflected && dist(sx, sy, p.x, p.y) < 11 + p.radius) {
                                     let normAngle = Math.atan2(p.y - sy, p.x - sx); let speed = Math.hypot(p.vx, p.vy) * 1.3;
@@ -5613,7 +6661,7 @@
                         player.plasmaTimer = (player.plasmaTimer || 0) + 1/60;
                         if (player.plasmaTimer >= 3) {
                             player.plasmaTimer = 0;
-                            let plasmaRange = (3 + (plasmaStacks - 1)) * HEX_TILE_DIST;
+                            let plasmaRange = (3 + (plasmaStacks - 1) * 0.5) * HEX_TILE_DIST;
                             let targets = [];
                             for (let ei = 0; ei < enemies.length; ei++) {
                                 let e = enemies[ei];
@@ -5631,6 +6679,13 @@
                                 for (let t of targets) {
                                     plasmaBeamFX.push({ x1: player.worldX, y1: player.worldY, x2: t.x, y2: t.y, life: 0.22, maxLife: 0.22 });
                                     destroyEnemyByIndex(t.idx, [1,2]);
+                                }
+                            }
+                            for (let bi = iceBlocks.length - 1; bi >= 0; bi--) {
+                                let ib = iceBlocks[bi];
+                                if (dist(player.worldX, player.worldY, ib.x, ib.y) <= plasmaRange) {
+                                    plasmaBeamFX.push({ x1: player.worldX, y1: player.worldY, x2: ib.x, y2: ib.y, life: 0.22, maxLife: 0.22 });
+                                    explodeIceBlockIndex(bi);
                                 }
                             }
                         }
@@ -5669,11 +6724,24 @@
                         if (player.hazardTimer >= hazardLimit) triggerGameOver('hazard');
                     } else { player.hazardTimer = 0; warnUI.style.display = 'none'; updateHazardVignette(0); }
 
-                    timeLeft -= 1/60;
-                    if (isSurvivalLevel) { if (timeLeft < 0) timeLeft = 0; }
-                    else if (timeLeft <= 0) triggerGameOver('time');
-                    if (Math.floor(timeLeft*60)%10 === 0) updateTimerBarOnly();
-                    updateTimeDangerEffects();
+                    if (!isBossGauntletLevel || bossGauntletUnlocked) {
+                        timeLeft -= 1/60;
+                        if (isSurvivalLevel) { if (timeLeft < 0) timeLeft = 0; }
+                        else if (timeLeft <= 0) triggerGameOver('time');
+                        if (Math.floor(timeLeft*60)%10 === 0) updateTimerBarOnly();
+                        updateTimeDangerEffects();
+                    } else if (!enemies.some(en => en.isBoss)) {
+                        // Last boss just fell - start the countdown fresh from full, and swap
+                        // the bar's visuals back from the locked/red state to the normal timer
+                        // look (handled by the branch above from here on).
+                        bossGauntletUnlocked = true;
+                        timeLeft = MAX_TIME;
+                        domRefs.timerContainer.classList.remove('gauntlet-locked', 'gauntlet-unlocked');
+                        gauntletBarLockedState = null;
+                        updateTimerBarOnly();
+                    } else {
+                        updateGauntletTimerBar();
+                    }
                     if (isSurvivalLevel) updateSurvivalMode();
 
                     
@@ -5863,6 +6931,72 @@
                             if (!e.heldCoin) {
                                 for(let c of items) { if (!c.collected && !c.beingEaten && dist(e.x, e.y, c.x, c.y) < e.radius + c.radius) { c.beingEaten = true; e.heldCoin = c.type; c.collected = true; break; } }
                             }
+                        } else if (e.type === 'boss') {
+                            // Iframe / hit-flash decay - runs every tick regardless of state.
+                            if (e.iframe > 0) e.iframe--;
+                            if (e.hitFlash > 0) e.hitFlash--;
+                            e.animTimer = (e.animTimer || 0) + 1;
+
+                            let bDef = bossDB[e.bossId];
+                            let attacks = bDef.attacks;
+
+                            if (e.state === 'cooldown') {
+                                // Keep a mid-range distance from the player, like the shooter,
+                                // so the fight has room to read telegraphs and dodge.
+                                let targetAngle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                                if (dToPlayer < 260) { e.x -= Math.cos(targetAngle)*e.speed*0.6; e.y -= Math.sin(targetAngle)*e.speed*0.6; }
+                                else if (dToPlayer > 420) { e.x += Math.cos(targetAngle)*e.speed*0.6; e.y += Math.sin(targetAngle)*e.speed*0.6; }
+                                else { e.angle = targetAngle + Math.PI/2; e.x += Math.cos(e.angle)*e.speed*0.3; e.y += Math.sin(e.angle)*e.speed*0.3; }
+                                if (!isSafe(e.x, e.y)) { e.x -= Math.cos(targetAngle)*e.speed; e.y -= Math.sin(targetAngle)*e.speed; }
+
+                                e.stateTimer++;
+                                if (e.stateTimer >= (e.cooldownFrames || 120)) {
+                                    // Pick the next attack randomly rather than cycling through
+                                    // them in a fixed order - if there's more than one option,
+                                    // avoid repeating the just-used attack back-to-back so fights
+                                    // stay varied instead of occasionally feeling stuck.
+                                    if (attacks.length > 1) {
+                                        let nextAttack;
+                                        do { nextAttack = attacks[Math.floor(Math.random() * attacks.length)]; } while (nextAttack === e.currentAttack);
+                                        e.currentAttack = nextAttack;
+                                    } else {
+                                        e.currentAttack = attacks[0];
+                                    }
+                                    e.state = 'telegraph'; e.stateTimer = 0;
+                                }
+                            } else if (e.state === 'telegraph') {
+                                // Hold roughly in place, facing the player, while the tell plays.
+                                e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                                // Dash-type attacks (Sand Pounce, Avalanche Charge, Death Roll,
+                                // Snap Lunge, Charge Swipe) lock their charge direction on the
+                                // very first telegraph frame - rather than only deciding it the
+                                // instant the charge fires - so the warning line drawn below has
+                                // the whole telegraph window to read and dodge sideways instead
+                                // of the boss being able to correct its aim right up to the last
+                                // possible moment.
+                                if (e.currentAttack.dash && e.stateTimer === 0) {
+                                    e.chargeAngle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                                }
+                                e.stateTimer++;
+                                if (e.stateTimer >= e.currentAttack.telegraph) {
+                                    e.currentAttack.exec(e);
+                                    e.state = 'attack'; e.stateTimer = 0;
+                                }
+                            } else if (e.state === 'attack') {
+                                if (e.currentAttack.tick) e.currentAttack.tick(e);
+                                e.stateTimer++;
+                                if (e.stateTimer >= e.currentAttack.duration) {
+                                    e.state = 'cooldown'; e.stateTimer = 0;
+                                    e.cooldownFrames = e.currentAttack.cooldown || 150;
+                                    e.burrowed = false;
+                                }
+                            }
+                            // Bosses never fall into hazard holes/off the map from their own
+                            // movement (unlike the fragile wanderer/dasher) - just steer back.
+                            if (!isSafe(e.x, e.y)) {
+                                let backAngle = Math.atan2(0 - e.y, 0 - e.x);
+                                e.x += Math.cos(backAngle) * e.speed; e.y += Math.sin(backAngle) * e.speed;
+                            }
                         } else {
                             e.x += Math.cos(e.angle)*e.speed; e.y += Math.sin(e.angle)*e.speed;
                             if (Math.random() < 0.03 + (Math.min(20,level)*0.005)) e.angle += (Math.random() - 0.5);
@@ -5902,9 +7036,26 @@
                                     spawnSplash(e.x, e.y);
                                     destroyEnemyByIndex(i, [2,4]);
                                 } else if (!slimesFriendly && player.activePowerup !== 'rampage' && !isPlayerInvulnerable()) {
-            triggerGameOver(e.type);
+            triggerGameOver(e.type === 'boss' ? ('boss_' + e.bossId) : e.type);
                                 }
                             }
+                        }
+                    }
+
+                    // Boss AOE telegraphs (Bounce Slam, Ice Slam, Ground Pound, etc.): count
+                    // down, then resolve into a single hit-check against the player - same
+                    // "instant death unless rampage/invulnerable" convention as every other
+                    // enemy/projectile contact in the game.
+                    for (let i = bossTelegraphs.length - 1; i >= 0; i--) {
+                        let tg = bossTelegraphs[i];
+                        tg.timer--;
+                        if (tg.timer <= 0) {
+                            if (dist(player.worldX, player.worldY, tg.x, tg.y) < player.radius + tg.radius) {
+                                if (player.activePowerup === 'rampage') { /* rampage tanks the slam */ }
+                                else if (isPlayerInvulnerable()) { /* i-frames tank it too */ }
+                                else triggerGameOver('boss_' + tg.bossId);
+                            }
+                            bossTelegraphs.splice(i, 1);
                         }
                     }
 
@@ -5922,12 +7073,39 @@
                         }
                     }
 
+                    // Mythic: Royal Jelly's summoned slimes mutually destroy any enemy they
+                    // touch too - identical rule to companions above, just a separate array.
+                    for (let ji = royalJellySlimes.length - 1; ji >= 0; ji--) {
+                        let js = royalJellySlimes[ji];
+                        for (let ej = enemies.length - 1; ej >= 0; ej--) {
+                            let e = enemies[ej];
+                            if (dist(js.x, js.y, e.x, e.y) < js.radius + e.radius) {
+                                destroyEnemyByIndex(ej, [1,2]);
+                                royalJellySlimes.splice(ji, 1);
+                                screenShake = Math.max(screenShake, 8);
+                                break;
+                            }
+                        }
+                    }
+
+                    // Ice blocks also go off if a companion or Royal Jelly slime bumps into
+                    // one - they're the player's own summons, so this counts as player damage.
+                    // The block is destroyed but the slime itself isn't (unlike touching a live
+                    // enemy) - it's a hazard, not something to trade a companion for.
+                    for (let ci = companions.length - 1; ci >= 0; ci--) { let comp = companions[ci]; explodeIceBlockAt(comp.x, comp.y, comp.radius); }
+                    for (let ji = royalJellySlimes.length - 1; ji >= 0; ji--) { let js = royalJellySlimes[ji]; explodeIceBlockAt(js.x, js.y, js.radius); }
+
                     // Dupe Shop item: Spectre. Each stack raises how much the pass-through
                     // speed boost multiplies velocity by - "slight" at 1 stack, more at higher
                     // stacks. Decays back to normal on its own via the existing friction applied
                     // to player.vx/vy every frame, so no separate cooldown bookkeeping is needed.
                     let spectreStacks = runItems.spectre || 0;
                     let spectreBoost = spectreStacks > 0 ? 1.06 + (spectreStacks - 1) * 0.03 : 0;
+                    // The Lion dash barrels straight through trees/fences the same way Spectre's
+                    // pass-through does below - it's a short invincible charge, getting shoved
+                    // sideways by a tree mid-dash would feel terrible and undercut the "kills
+                    // everything in your path" promise.
+                    let lionDashing = player.lionDashTimer > 0;
 
                     let nearTreesPlayer = getNearbyTrees(player.worldX, player.worldY);
                     for (let ti = 0; ti < nearTreesPlayer.length; ti++) {
@@ -5936,7 +7114,7 @@
                         let collisionDist = player.radius * 0.4 + t.radius * 0.5;
                         let distSq = dx*dx + dy*dy;
                         if (distSq < collisionDist*collisionDist) {
-                            if (spectreBoost > 0) { player.vx *= spectreBoost; player.vy *= spectreBoost; continue; }
+                            if (spectreBoost > 0 || lionDashing) { if (spectreBoost > 0) { player.vx *= spectreBoost; player.vy *= spectreBoost; } continue; }
                             let d = Math.sqrt(distSq);
                             let overlap = collisionDist - d; let angle = Math.atan2(dy, dx);
                             player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
@@ -5954,14 +7132,14 @@
                             else if (player.color === 'sparkle' && !t.blossomed) { t.blossomed = true; playSFX('coin', 0.5); }
                         }
                     }
-                    if (spectreBoost > 0) {
+                    if (spectreBoost > 0 || lionDashing) {
                         // Fences have no equivalent to getNearbyTrees' pre-filtered candidate
                         // list, so detect "would this fence have blocked me" the same way
                         // resolveFenceCollision itself would (its return only differs from the
                         // input when a push happened) rather than duplicating its internal grid
                         // lookup just to get a boolean.
                         let wouldPush = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4, false);
-                        if (wouldPush.x !== player.worldX || wouldPush.y !== player.worldY) { player.vx *= spectreBoost; player.vy *= spectreBoost; }
+                        if (wouldPush.x !== player.worldX || wouldPush.y !== player.worldY) { if (spectreBoost > 0) { player.vx *= spectreBoost; player.vy *= spectreBoost; } }
                     } else {
                         let pushed = resolveFenceCollision(player.worldX, player.worldY, player.radius * 0.4, player.color === 'gold');
                         if (pushed.x !== player.worldX || pushed.y !== player.worldY) {
@@ -5979,7 +7157,7 @@
                             player.worldX += Math.cos(angle) * overlap; player.worldY += Math.sin(angle) * overlap; player.vx *= 0.6; player.vy *= 0.6;
                         }
                     }
-                    if (goal.active && goal.collected >= goal.required && dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius - 10) {
+                    if (goal.active && goal.collected >= goal.required && !enemies.some(en => en.isBoss) && dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius - 10) {
                         gameState = 'level_end';
                         recordLevelReached();
                         // Survive stages' reward now comes from the two chests spawned flanking
@@ -6007,6 +7185,19 @@
                             let comp = companions[j];
                             if (dist(p.x, p.y, comp.x, comp.y) < p.radius + comp.radius) {
                                 companions.splice(j, 1); // Slime dies
+                                projectiles.splice(i, 1); // Projectile eliminated
+                                playSFX('enemy_hit');
+                                hitObstacle = true;
+                                break;
+                            }
+                        }
+                        if (hitObstacle) continue;
+                        // Mythic: Royal Jelly's summoned slimes die to enemy projectiles too,
+                        // same rule as companions above.
+                        for (let j = royalJellySlimes.length - 1; j >= 0; j--) {
+                            let js = royalJellySlimes[j];
+                            if (dist(p.x, p.y, js.x, js.y) < p.radius + js.radius) {
+                                royalJellySlimes.splice(j, 1); // Slime dies
                                 projectiles.splice(i, 1); // Projectile eliminated
                                 playSFX('enemy_hit');
                                 hitObstacle = true;
@@ -6046,12 +7237,13 @@
                             screenShake = Math.max(screenShake, 5);
                         } else if (isPlayerInvulnerable()) {
                             spawnSplash(p.x, p.y); projectiles.splice(i, 1); continue;
-                        } else triggerGameOver('shooter');
+                        } else triggerGameOver(p.bossId ? ('boss_' + p.bossId) : 'shooter');
                     }
                     if (p.deflected) {
                         for (let j = enemies.length - 1; j >= 0; j--) {
                             if (dist(p.x, p.y, enemies[j].x, enemies[j].y) < p.radius + enemies[j].radius) { destroyEnemyByIndex(j, [1,2]); projectiles.splice(i, 1); break; }
                         }
+                        explodeIceBlockAt(p.x, p.y, p.radius);
                     }
                 }
             }
@@ -6062,8 +7254,20 @@
                 ic.x += ic.vx; ic.y += ic.vy; ic.traveled += Math.hypot(ic.vx, ic.vy);
                 if (gameState === 'playing') {
                     for (let j = enemies.length - 1; j >= 0; j--) { if (dist(ic.x, ic.y, enemies[j].x, enemies[j].y) < ic.radius + enemies[j].radius) destroyEnemyByIndex(j, [2,4]); }
+                    explodeIceBlockAt(ic.x, ic.y, ic.radius);
                 }
                 if (ic.traveled > ic.maxRange) icicles.splice(i, 1);
+            }
+
+            // Yeti's Avalanche Charge trail: stationary blocks of ice that sit harmlessly
+            // until damaged - by the player walking into one directly (here), or by any of the
+            // player's attacks (shuriken/plasma beam/icicles/powerups/companions/deflected
+            // bullets - see the explodeIceBlockAt/explodeIceBlockIndex calls throughout this
+            // file). Either way it bursts into an outward ring of bullets.
+            for (let i = iceBlocks.length - 1; i >= 0; i--) {
+                let ib = iceBlocks[i];
+                if (!isNearScreen(ib.x, ib.y)) { iceBlocks.splice(i, 1); continue; }
+                if (gameState === 'playing' && dist(player.worldX, player.worldY, ib.x, ib.y) < player.radius + ib.radius) explodeIceBlockIndex(i);
             }
 
             for (let i = flameParticles.length - 1; i >= 0; i--) { let f = flameParticles[i];
@@ -7557,6 +8761,59 @@
                 ctx.restore();
             }
 
+            // Boss attack telegraphs: same flat ground-decal treatment, but they grow to full
+            // size over their countdown (rather than pulsing at a fixed size) so their radius
+            // reads as "this is exactly the area that will hurt you".
+            if (bossTelegraphs.length) {
+                ctx.save();
+                let blinkT2 = Date.now();
+                let isOnebit2 = player.color === 'onebit';
+                for (let i = 0; i < bossTelegraphs.length; i++) {
+                    let tg = bossTelegraphs[i];
+                    let tx = tg.x + tiltX, ty = tg.y + tiltY;
+                    if (!isOnScreen(tx, ty, cullBuffer)) continue;
+                    let progress = 1 - Math.max(0, tg.timer) / tg.duration;
+                    let blinkPhase = 0.5 + 0.5 * Math.sin(blinkT2 / 70);
+                    ctx.globalAlpha = 0.25 + 0.35 * blinkPhase;
+                    ctx.fillStyle = isOnebit2 ? '#ffffff' : '#ff1e3c';
+                    ctx.beginPath(); ctx.arc(tx, ty, tg.radius * (0.15 + progress * 0.85), 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 0.9;
+                    ctx.lineWidth = 4; ctx.strokeStyle = isOnebit2 ? '#000000' : '#ff0000';
+                    ctx.beginPath(); ctx.arc(tx, ty, tg.radius, 0, Math.PI * 2); ctx.stroke();
+                }
+                ctx.restore();
+            }
+
+            // Boss dash-charge telegraphs: a warning line down the exact path a charging boss
+            // is about to dash along (Sand Pounce, Avalanche Charge, Death Roll, Snap Lunge,
+            // Charge Swipe - see the `dash` flag on their bossDB attack defs). The direction is
+            // locked in on the first telegraph frame (see the boss update loop above) rather
+            // than tracked live, so this line shows exactly where the charge will go with the
+            // full telegraph window to dodge sideways out of it.
+            let dashTelegraphBosses = enemies.filter(e => e.type === 'boss' && e.state === 'telegraph' && e.currentAttack && e.currentAttack.dash);
+            if (dashTelegraphBosses.length) {
+                ctx.save();
+                let isOnebit3 = player.color === 'onebit';
+                let blinkPhase3 = 0.5 + 0.5 * Math.sin(Date.now() / 70);
+                for (let i = 0; i < dashTelegraphBosses.length; i++) {
+                    let e = dashTelegraphBosses[i];
+                    let ex = e.x + tiltX, ey = e.y + tiltY;
+                    if (!isOnScreen(ex, ey, cullBuffer * 3)) continue;
+                    let progress = e.stateTimer / e.currentAttack.telegraph;
+                    let len = 900;
+                    let ex2 = ex + Math.cos(e.chargeAngle) * len, ey2 = ey + Math.sin(e.chargeAngle) * len;
+                    ctx.globalAlpha = 0.15 + 0.35 * blinkPhase3 * (0.3 + progress * 0.7);
+                    ctx.strokeStyle = isOnebit3 ? '#ffffff' : '#ff1e3c';
+                    ctx.lineWidth = e.radius * 0.55;
+                    ctx.lineCap = 'round';
+                    ctx.setLineDash([20, 16]);
+                    ctx.lineDashOffset = -Date.now() / 25;
+                    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(ex2, ey2); ctx.stroke();
+                }
+                ctx.setLineDash([]);
+                ctx.restore();
+            }
+
             rqCount = 0;
             // PERF: was a full trees.length scan checking isOnScreen on every tree every frame
             // (100-300+ trees). Reuses the same treeGrid built for physics collision to narrow
@@ -7572,6 +8829,7 @@
             for (let i = 0; i < enemies.length; i++) { let e = enemies[i]; if (isOnScreen(e.x + tiltX, e.y + tiltY, cullBuffer)) pushRQ('enemy', e, e.y + (e.radius || 0)); }
             for (let i = 0; i < items.length; i++) { let c = items[i]; if (!c.collected && isOnScreen(c.x + tiltX, c.y + tiltY, cullBuffer)) pushRQ(c.type, c, c.y + (c.radius || 0)); }
             for (let i = 0; i < projectiles.length; i++) { let p = projectiles[i]; if (isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('projectile', p, p.y + (p.radius || 0)); }
+            for (let i = 0; i < iceBlocks.length; i++) { let ib = iceBlocks[i]; if (isOnScreen(ib.x + tiltX, ib.y + tiltY, cullBuffer)) pushRQ('iceblock', ib, ib.y + (ib.radius || 0)); }
             for (let i = 0; i < icicles.length; i++) { let ic = icicles[i]; if (isOnScreen(ic.x + tiltX, ic.y + tiltY, cullBuffer)) pushRQ('icicle', ic, ic.y + (ic.radius || 0)); }
             for (let i = 0; i < flameParticles.length; i++) { let f = flameParticles[i]; if (player.color === 'corrupted' && f.source === 'firecone') continue; if (isOnScreen(f.x + tiltX, f.y + tiltY, cullBuffer)) pushRQ('flame', f, f.y + (f.radius || 0)); }
             for (let i = 0; i < leaves.length; i++) { let l = leaves[i]; if (isOnScreen(l.x + tiltX, l.y + tiltY, cullBuffer)) pushRQ('leaf', l, l.y + (l.radius || 0)); }
@@ -7579,6 +8837,7 @@
             for (let i = 0; i < acidTrail.length; i++) { let a = acidTrail[i]; if (isOnScreen(a.x + tiltX, a.y + tiltY, cullBuffer)) pushRQ('acid', a, a.y - a.radius); }
             for (let i = 0; i < powerups.length; i++) { let p = powerups[i]; if (!p.collected && isOnScreen(p.x + tiltX, p.y + tiltY, cullBuffer)) pushRQ('powerup', p, p.y + (p.radius || 0)); }
             for (let i = 0; i < companions.length; i++) { let cs = companions[i]; if (isOnScreen(cs.x + tiltX, cs.y + tiltY, cullBuffer)) pushRQ('companion', cs, cs.y + (cs.radius || 0)); }
+            for (let i = 0; i < royalJellySlimes.length; i++) { let js = royalJellySlimes[i]; if (isOnScreen(js.x + tiltX, js.y + tiltY, cullBuffer)) pushRQ('companion', js, js.y + (js.radius || 0)); }
             if (chest && isOnScreen(chest.x + tiltX, chest.y + tiltY, cullBuffer)) pushRQ('chest', chest, chest.y + (chest.radius || 0));
             for (let i = 0; i < skeletonChests.length; i++) { let sc = skeletonChests[i]; if (isOnScreen(sc.x + tiltX, sc.y + tiltY, cullBuffer)) pushRQ('skeletonchest', sc, sc.y + (sc.radius || 0)); }
             for (let i = 0; i < surviveChests.length; i++) { let sv = surviveChests[i]; if (isOnScreen(sv.x + tiltX, sv.y + tiltY, cullBuffer)) pushRQ('chest', sv, sv.y + (sv.radius || 0)); }
@@ -7593,7 +8852,13 @@
             if (goal.active && !goalSeen && isOnScreen(goal.x + tiltX, goal.y + tiltY, cullBuffer)) goalSeen = true;
 
             if (goal.active) {
-                let isLocked = goal.collected < goal.required; let pulse = isLocked ? 0 : Math.sin(Date.now() / 150) * 8;
+                let bossesRemaining = enemies.reduce((n, en) => n + (en.isBoss ? 1 : 0), 0);
+                let coinsLocked = goal.collected < goal.required;
+                let isLocked = coinsLocked || bossesRemaining > 0; let pulse = isLocked ? 0 : Math.sin(Date.now() / 150) * 8;
+                // Once the coin quota is met (or there wasn't one, e.g. boss-gauntlet stages),
+                // a still-locked goal is being held by bosses alone - show how many are left
+                // instead of a stale/misleading "0/0"-style coin readout.
+                let lockLabel = coinsLocked ? `${goal.collected}/${goal.required}` : `${bossesRemaining} left`;
                 ctx.save(); ctx.translate(goal.x, goal.y);
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.4)'; ctx.beginPath(); ctx.ellipse(0, 15, goal.radius, goal.radius * 0.5, 0, 0, Math.PI*2); ctx.fill();
                 if (player.color === 'glitch') {
@@ -7605,7 +8870,7 @@
                     ctx.save(); ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.78, 0, Math.PI*2); ctx.clip();
                     ctx.fillStyle = isLocked ? '#222' : '#0078d7'; ctx.fillRect(-goal.radius, -goal.radius, goal.radius*2, goal.radius*2);
                     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                    if (isLocked) { ctx.font = 'bold 12px monospace'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 0); }
+                    if (isLocked) { ctx.font = 'bold 12px monospace'; ctx.fillText(`${lockLabel}`, 0, 0); }
                     else {
                         ctx.font = 'bold 22px sans-serif'; ctx.fillText(':(', 0, -goal.radius*0.28);
                         ctx.font = '7px monospace';
@@ -7625,7 +8890,7 @@
                     ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.7, 0, Math.PI*2); ctx.fillStyle = paper; ctx.fill();
                     ctx.lineWidth = 2; ctx.strokeStyle = ink; ctx.stroke();
                     ctx.fillStyle = ink; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                    if (isLocked) { ctx.font = 'bold 14px monospace'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 0); }
+                    if (isLocked) { ctx.font = 'bold 14px monospace'; ctx.fillText(`${lockLabel}`, 0, 0); }
                     else { ctx.font = 'bold 20px monospace'; ctx.fillText('GOAL', 0, 0); }
                 } else {
                     ctx.beginPath(); ctx.arc(0, 0, goal.radius + pulse + 10, 0, Math.PI*2); ctx.fillStyle = isLocked ? 'rgba(136, 136, 136, 0.2)' : 'rgba(255, 207, 51, 0.3)'; ctx.fill();
@@ -7633,7 +8898,7 @@
                     ctx.lineWidth = 4; ctx.strokeStyle = isLocked ? '#888' : '#fff'; ctx.stroke();
                     ctx.beginPath(); ctx.arc(0, 0, goal.radius * 0.7, 0, Math.PI*2); ctx.fillStyle = isLocked ? '#444' : '#f1c40f'; ctx.fill();
                     ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                    if (isLocked) { drawPixelIcon('lock', ctx, 0, -8, 26); ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${goal.collected}/${goal.required}`, 0, 15); } 
+                    if (isLocked) { drawPixelIcon('lock', ctx, 0, -8, 26); ctx.font = 'bold 14px sans-serif'; ctx.fillText(`${lockLabel}`, 0, 15); } 
                     else { ctx.font = 'bold 20px sans-serif'; ctx.fillText('GOAL', 0, 0); }
                 }
                 ctx.restore();
@@ -8045,6 +9310,27 @@
                         ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(p.x-2, p.y-2, p.radius*0.4, 0, Math.PI*2); ctx.fill();
                     }
                 }
+                else if (item.type === 'iceblock') {
+                    // Yeti's Avalanche Charge trail hazard: a stationary block of ice, harmless
+                    // until the player touches it (see the iceBlocks collision code in
+                    // update()), at which point it's removed and bursts into a bullet ring.
+                    let ib = item.obj;
+                    if (player.color === 'corrupted') { window.LegendaryStageEffects.corrupted.drawHitboxCircle(ctx, ib.x, ib.y, ib.radius, '#4fa3c7', 'ICE'); }
+                    else {
+                        ctx.save(); ctx.translate(ib.x, ib.y);
+                        ctx.fillStyle = 'rgba(191, 232, 245, 0.9)';
+                        ctx.strokeStyle = '#4fa3c7'; ctx.lineWidth = 2;
+                        ctx.beginPath();
+                        ctx.moveTo(-ib.radius, -ib.radius*0.6); ctx.lineTo(-ib.radius*0.6, -ib.radius);
+                        ctx.lineTo(ib.radius*0.6, -ib.radius); ctx.lineTo(ib.radius, -ib.radius*0.6);
+                        ctx.lineTo(ib.radius, ib.radius*0.6); ctx.lineTo(ib.radius*0.6, ib.radius);
+                        ctx.lineTo(-ib.radius*0.6, ib.radius); ctx.lineTo(-ib.radius, ib.radius*0.6);
+                        ctx.closePath(); ctx.fill(); ctx.stroke();
+                        ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1.5;
+                        ctx.beginPath(); ctx.moveTo(-ib.radius*0.4, -ib.radius*0.5); ctx.lineTo(ib.radius*0.3, ib.radius*0.55); ctx.stroke();
+                        ctx.restore();
+                    }
+                }
                 else if (item.type === 'icicle') {
                     let ic = item.obj;
                     // Corrupted Data: the player's own projectiles (icicles) render as their
@@ -8058,13 +9344,24 @@
                     // being recreated from scratch per-icicle per-frame (a burst item like
                     // Spikes can have 10+ alive at once); building it once and reusing the same
                     // CanvasGradient object is free and visually identical.
-                    if (!icicleGradientCache) {
-                        icicleGradientCache = ctx.createLinearGradient(-14, 0, 10, 0);
-                        icicleGradientCache.addColorStop(0, 'rgba(127,219,255,0)'); icicleGradientCache.addColorStop(1, '#e8fbff');
+                    let icGrad;
+                    if (ic.tint) {
+                        if (!mythicIcicleGradientCache[ic.tint]) {
+                            let g = ctx.createLinearGradient(-14, 0, 10, 0);
+                            g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, ic.tint);
+                            mythicIcicleGradientCache[ic.tint] = g;
+                        }
+                        icGrad = mythicIcicleGradientCache[ic.tint];
+                    } else {
+                        if (!icicleGradientCache) {
+                            icicleGradientCache = ctx.createLinearGradient(-14, 0, 10, 0);
+                            icicleGradientCache.addColorStop(0, 'rgba(127,219,255,0)'); icicleGradientCache.addColorStop(1, '#e8fbff');
+                        }
+                        icGrad = icicleGradientCache;
                     }
-                    ctx.fillStyle = icicleGradientCache;
+                    ctx.fillStyle = icGrad;
                     ctx.beginPath(); ctx.moveTo(-14, -3); ctx.lineTo(8, -1.5); ctx.lineTo(12, 0); ctx.lineTo(8, 1.5); ctx.lineTo(-14, 3); ctx.closePath(); ctx.fill();
-                    ctx.strokeStyle = '#0a2e44'; ctx.lineWidth = 0.6; ctx.stroke(); ctx.restore();
+                    ctx.strokeStyle = ic.tint ? 'rgba(0,0,0,0.55)' : '#0a2e44'; ctx.lineWidth = 0.6; ctx.stroke(); ctx.restore();
                     }
                 }
                 else if (item.type === 'flame') {
@@ -8121,7 +9418,9 @@
                     // Toxic Sludge: same radioactive glow overlay as enemies above, layered
                     // behind whatever skin the companion is already wearing.
                     if (cs.irradiated) drawRadioactiveGlow(ccx, ccy, cs.radius);
-                    drawCharacterModel(ccx, ccy, cs.vx || 0, cs.vy || 0, cs.radius, cs.colorId, false, null);
+                    // Mythic: Royal Jelly's summoned slimes wear the crown to mark them as
+                    // King Slime's own - regular Slime Squad companions stay bare-headed.
+                    drawCharacterModel(ccx, ccy, cs.vx || 0, cs.vy || 0, cs.radius, cs.colorId, false, cs.isRoyalJelly ? 'crown' : null);
                     // Toxic Sludge: tint the companion's own body sickly green too, same as
                     // enemies above, on top of whatever skin it's already wearing.
                     if (cs.irradiated) drawIrradiatedTint(ccx, ccy, cs.radius);
@@ -8157,6 +9456,43 @@
                         ctx.beginPath(); ctx.arc(0, 0, p.radius + 10 + shieldPulse, 0, Math.PI*2); ctx.stroke();
                         ctx.globalAlpha = 0.18;
                         ctx.fillStyle = '#fff6d0'; ctx.beginPath(); ctx.arc(0, 0, p.radius + 10 + shieldPulse, 0, Math.PI*2); ctx.fill();
+                        ctx.restore();
+                    }
+                    // Mythic: Sandstorm Mane (Lion) - a red ring (drawn a bit further out than
+                    // Plasma Beam's pink one so the two never overlap) fills as the dash
+                    // charges, then stays full/pulsing once ready instead of draining on its
+                    // own - double-tapping is what actually spends it (see
+                    // handleLionDoubleTap). While the aim window is active, a rectangle
+                    // telegraphs the exact dash path and hitbox width, fading in from
+                    // transparent to solid red as the hold-in-place moment runs out.
+                    let lionStacksDraw = runItems.mythic_desertlion || 0;
+                    if (lionStacksDraw > 0 && p.lionAimTimer <= 0 && p.lionDashTimer <= 0) {
+                        let lionChargeT = Math.min(1, (p.lionRingCharge || 0) / LION_RING_CHARGE_TIME);
+                        ctx.save();
+                        ctx.translate(pdrawX, pdrawY);
+                        ctx.strokeStyle = 'rgba(255, 30, 60, 0.3)'; ctx.lineWidth = 3;
+                        ctx.beginPath(); ctx.arc(0, 0, p.radius + 24, 0, Math.PI*2); ctx.stroke();
+                        ctx.strokeStyle = '#ff1e3c'; ctx.lineWidth = 3; ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.arc(0, 0, p.radius + 24, -Math.PI/2, -Math.PI/2 + lionChargeT * Math.PI * 2); ctx.stroke();
+                        if (lionChargeT >= 1) {
+                            ctx.globalAlpha = 0.5 + 0.5 * Math.sin(Date.now() / 150);
+                            ctx.lineWidth = 5;
+                            ctx.beginPath(); ctx.arc(0, 0, p.radius + 24, 0, Math.PI*2); ctx.stroke();
+                        }
+                        ctx.restore();
+                    }
+                    if (p.lionAimTimer > 0) {
+                        let aimProgress = 1 - (p.lionAimTimer / (p.lionAimMax || 1));
+                        let hw = p.radius;
+                        ctx.save();
+                        ctx.translate(pdrawX, pdrawY);
+                        ctx.rotate(p.lionAimAngle || 0);
+                        ctx.globalAlpha = aimProgress * 0.65;
+                        ctx.fillStyle = '#ff1e3c';
+                        ctx.fillRect(0, -hw, LION_DASH_DISTANCE, hw * 2);
+                        ctx.globalAlpha = Math.min(1, aimProgress + 0.3);
+                        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+                        ctx.strokeRect(0, -hw, LION_DASH_DISTANCE, hw * 2);
                         ctx.restore();
                     }
                     if (p.activePowerup === 'lightning') {
@@ -8251,9 +9587,10 @@
                 drawCharacterModel(pScreenX, pScreenY, player.vx, player.vy, player.radius, player.color, Math.abs(player.jiggleForceX) + Math.abs(player.jiggleForceY) > 0, player.hat);
             }
 
-            if (gameState === 'playing' && goal.active && timeLeft <= MAX_TIME / 2) {
+            if (gameState === 'playing' && goal.active && (isBossGauntletLevel || timeLeft <= MAX_TIME / 2)) {
                 const screenBuffer = 50;
                 if (goal.x < camera.x - screenBuffer || goal.x > camera.x + canvas.width + screenBuffer || goal.y < camera.y - screenBuffer || goal.y > camera.y + canvas.height + screenBuffer) {
+                    let goalLocked = goal.collected < goal.required || enemies.some(en => en.isBoss);
                     let angle = Math.atan2(goal.y - player.worldY, goal.x - player.worldX);
                     let radius = Math.min(canvas.width / 2, canvas.height / 2) - 40;
                     ctx.save();
@@ -8261,7 +9598,7 @@
                     if (player.color === 'glitch') {
                         // Glitch: the off-screen goal pointer renders as a classic OS mouse
                         // cursor, tip aimed toward the goal, instead of the usual arrowhead.
-                        ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#fff'; ctx.strokeStyle = '#000';
+                        ctx.fillStyle = goalLocked ? '#999999' : '#fff'; ctx.strokeStyle = '#000';
                         ctx.lineWidth = 2; ctx.lineJoin = 'round';
                         ctx.beginPath();
                         ctx.moveTo(19, 0); ctx.lineTo(-9, -9); ctx.lineTo(-4, -3); ctx.lineTo(-15, -3);
@@ -8272,10 +9609,33 @@
                         ctx.lineWidth = 3;
                         ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 15); ctx.lineTo(-5, 0); ctx.lineTo(-15, -15); ctx.closePath(); ctx.fill(); ctx.stroke();
                     } else {
-                        ctx.fillStyle = goal.collected < goal.required ? '#999999' : '#ffcf33'; ctx.strokeStyle = goal.collected < goal.required ? '#666666' : '#d4a017';
+                        ctx.fillStyle = goalLocked ? '#999999' : '#ffcf33'; ctx.strokeStyle = goalLocked ? '#666666' : '#d4a017';
                         ctx.lineWidth = 3;
                         ctx.beginPath(); ctx.moveTo(20, 0); ctx.lineTo(-15, 15); ctx.lineTo(-5, 0); ctx.lineTo(-15, -15); ctx.closePath(); ctx.fill(); ctx.stroke();
                     }
+                    ctx.restore();
+                }
+            }
+
+            // Boss off-screen pointers: a smaller red arrow per living boss currently off
+            // camera, so the player can always tell where an active threat is even while it's
+            // out of view - unlike the single yellow goal arrow above, these aren't gated on
+            // time remaining at all, since a boss can be spawned (and needs hunting down) on
+            // any level with one, timer or not. Multiple bosses (boss-gauntlet stages) each get
+            // their own arrow.
+            if (gameState === 'playing') {
+                const screenBuffer = 50;
+                for (let bi = 0; bi < enemies.length; bi++) {
+                    let be = enemies[bi];
+                    if (!be.isBoss) continue;
+                    if (be.x >= camera.x - screenBuffer && be.x <= camera.x + canvas.width + screenBuffer && be.y >= camera.y - screenBuffer && be.y <= camera.y + canvas.height + screenBuffer) continue;
+                    let angle = Math.atan2(be.y - player.worldY, be.x - player.worldX);
+                    let radius = Math.min(canvas.width / 2, canvas.height / 2) - 40;
+                    ctx.save();
+                    ctx.translate(canvas.width / 2 + Math.cos(angle) * radius, canvas.height / 2 + Math.sin(angle) * radius); ctx.rotate(angle);
+                    ctx.fillStyle = '#ff1e3c'; ctx.strokeStyle = '#7a0010';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.moveTo(13, 0); ctx.lineTo(-10, 10); ctx.lineTo(-3, 0); ctx.lineTo(-10, -10); ctx.closePath(); ctx.fill(); ctx.stroke();
                     ctx.restore();
                 }
             }
@@ -8306,6 +9666,7 @@
             document.getElementById('title-screen').style.display = 'none';
             document.getElementById('ui-layer').style.display = 'block';
             document.querySelectorAll('.corner-icon').forEach(el => el.style.display = 'flex');
+            updateCornerRightIconForGameOver(false);
             gameState = 'playing'; camera.x = player.worldX - canvas.width / 2;
             camera.y = player.worldY - canvas.height / 2;
             camera.prevX = camera.x; camera.prevY = camera.y;
@@ -8331,15 +9692,18 @@
             level = 1;
             score = 0; player.worldX = 0; player.worldY = 0; player.prevWorldX = 0; player.prevWorldY = 0; player.vx = 0; player.vy = 0; player.hazardTimer = 0;
             player.activePowerup = null; player.powerupDuration = 0; player.powerupTimeLeft = 0; player.spikesTimer = 0;
-            projectiles = []; icicles = []; flameParticles = [];
+            projectiles = []; icicles = []; flameParticles = []; iceBlocks = [];
             splashes = []; leaves = []; screenShake = 0; hives = [];
-            runItems = {}; companions = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
-            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0; player.spectreBoostTimer = 0;
+            runItems = {}; bossItemsAwarded = {}; companions = []; royalJellySlimes = []; playerTrail = []; shurikenSpin = 0; skeletonChests = []; plasmaBeamFX = [];
+            player.plasmaTimer = 0; player.invulnerableTimer = 0; player.wilkshirianTimer = 0; player.spectreBoostTimer = 0; player.mythicTimers = {};
+            player.lionRingCharge = 0; player.lionAimTimer = 0; player.lionAimMax = 0; player.lionAimAngle = 0; player.lionAimTargetAngle = 0;
+            player.lionDashTimer = 0;
+            if (lionTutorialPause) { lionTutorialPause = null; let ltp = document.getElementById('lion-tutorial-popup'); if (ltp) { ltp.classList.remove('show'); ltp.style.display = 'none'; } }
             devilDealUsed = 0;
             iceFrostedTiles.clear();
             lavaScorchedTiles.clear(); fairyBloomTiles.clear(); goldenTiles.clear(); goldenHazardTiles.clear(); acidTrail = [];
             shootingStars = []; shootingStarTimer = 0;
-            isSurvivalLevel = false; lastLevelWasSurvival = false; enemyTelegraphs = [];
+            isSurvivalLevel = false; isBossGauntletLevel = false; bossGauntletUnlocked = false; lastLevelWasSurvival = false; enemyTelegraphs = []; bossTelegraphs = [];
             goalUnreachable = false; goalSeen = false;
             levelCoinsCollected = 0; levelCoinsPossible = 0;
             levelEnemiesKilled = 0; levelEnemiesSpawned = 0;
@@ -8385,8 +9749,9 @@
             document.getElementById('ui-layer').style.display = 'none'; document.getElementById('hazard-warning').style.display = 'none';
             clearTimeout(surviveAnnounceTimeout);
             if (domRefs.surviveAnnouncement) { domRefs.surviveAnnouncement.classList.remove('show'); domRefs.surviveAnnouncement.style.display = 'none'; }
-            // Almanac and Settings corner icons are intentionally left visible here so the player can
-            // still check what killed them or adjust settings from the Game Over screen.
+            // Shop and Achievements corner icons are intentionally left visible here so the player
+            // can still check what they've unlocked or hop into the Shop from the Game Over screen.
+            updateCornerRightIconForGameOver(true);
             document.getElementById('game-over-screen').style.display = 'flex';
             lastCountdownSecond = -1;
             setMusicDanger(false);

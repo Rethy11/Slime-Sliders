@@ -24,8 +24,7 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent; }
         html, body { user-select: none !important; -webkit-user-select: none !important; height: 100%; background-color: var(--bg-color); }
-        body { background-color: var(--bg-color); overflow-x: hidden; overflow-y: scroll; scrollbar-width: none; -ms-overflow-style: none; font-family: 'Press Start 2P', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; transition: background-color 0.5s; }
-        body::-webkit-scrollbar { display: none; }
+        body { background-color: var(--bg-color); overflow: hidden; font-family: 'Press Start 2P', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; touch-action: none; transition: background-color 0.5s; }
         canvas { display: block; }
         canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
         .icon-img { width: 1em; height: 1em; vertical-align: middle; image-rendering: pixelated; }
@@ -548,7 +547,6 @@
 
 </head>
 <body>
-    <div id="scroll-runway" style="height: 1px; margin-bottom: -1px;" aria-hidden="true"></div>
     <div id="title-screen">
         <div class="menu-header">
             <h1>SLIME SLIDERS</h1>
@@ -4496,18 +4494,6 @@
             displayCtx.imageSmoothingEnabled = false;
         }
         window.addEventListener('resize', resize); resize();
-        // iOS 26 Safari only composites real page content under the translucent status bar
-        // when the document has an active non-zero scroll position - the #scroll-runway spacer
-        // (1px, margin-collapsed so nothing visually shifts) exists purely to give it that room.
-        // touch-action:none above still blocks the player from ever scrolling this by touch.
-        // Standalone/PWA mode has no toolbar to consume this scroll - the page would genuinely
-        // shift instead - and it already gets real edge-to-edge content for free via
-        // viewport-fit=cover with no scroll trick needed, so this only runs in a browser tab.
-        const isStandaloneApp = window.navigator.standalone === true || window.matchMedia('(display-mode: standalone)').matches;
-        if (!isStandaloneApp) {
-            window.scrollTo(0, 1);
-            window.addEventListener('resize', () => window.scrollTo(0, 1));
-        }
         document.addEventListener('visibilitychange', () => {
             if (document.hidden) { flushCoinsIfDirty(); pauseMusicForVisibility(); }
             else { resumeMusicForVisibility(); }

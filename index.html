@@ -62,7 +62,7 @@
            blink, since this is a one-shot announcement rather than an ongoing status. */
         #survive-announcement { position: absolute; top: 42%; left: 50%; transform: translate(-50%, -50%) scale(0.6); display: none; opacity: 0; background: rgba(0, 0, 0, 0.75); color: #ff2e4d; padding: 18px 38px; border-radius: 16px; border: 3px solid #ff2e4d; font-size: 2rem; font-weight: bold; text-shadow: 0 0 10px #000; z-index: 15; pointer-events: none; text-align: center; transition: opacity 0.4s ease, transform 0.4s ease; }
         #survive-announcement.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-        /* Sandstorm Mane (Lion mythic item) one-time dash tutorial popups - "Double tap to
+        /* Sandstorm Horns (Minotaur mythic item) one-time dash tutorial popups - "Double tap to
            dash!" the first time the ring ever fills, and "Swipe to change dash direction!"
            the first time the aim window ever reaches its halfway point. Both pause game logic
            (see lionTutorialPause). "Double tap to dash!" is dismissed by double-tapping;
@@ -792,6 +792,35 @@
 
         function bossBobOffset(e) { return Math.sin((e.animTimer || 0) / 18) * (e.radius * 0.06); }
 
+        // Draws one curved bull horn rooted at (sx,sy), sweeping outward/up and curling
+        // slightly inward at the tip. dir = -1 for the rear horn, 1 for the front horn (each
+        // silhouette places one on either side of the skull - see desertlion's Minotaur
+        // rework below). Deliberately big and chunky so it reads clearly as the boss's
+        // signature "crown" even at the small in-game boss radius, not just zoomed in.
+        // Relies on the global shadeHex(hex, amt) helper (defined further down, alongside
+        // the fishing-scene figures) for the gradient's base color; both are available by
+        // the time this ever actually runs, since bosses aren't drawn until well after every
+        // <script> block on the page has loaded.
+        function drawHorn(ctx, sx, sy, dir, r, baseColor, tipColor) {
+            ctx.beginPath();
+            ctx.moveTo(sx - dir * r * 0.1, sy + r * 0.08);
+            ctx.quadraticCurveTo(sx + dir * r * 0.08, sy - r * 0.4, sx + dir * r * 0.5, sy - r * 0.72);
+            ctx.quadraticCurveTo(sx + dir * r * 0.8, sy - r * 0.95, sx + dir * r * 0.7, sy - r * 1.18);
+            ctx.quadraticCurveTo(sx + dir * r * 0.6, sy - r * 1.02, sx + dir * r * 0.32, sy - r * 0.68);
+            ctx.quadraticCurveTo(sx + dir * r * 0.02, sy - r * 0.36, sx + dir * r * 0.12, sy - r * 0.02);
+            ctx.closePath();
+            let grad = ctx.createLinearGradient(sx, sy, sx + dir * r * 0.7, sy - r * 1.18);
+            grad.addColorStop(0, baseColor); grad.addColorStop(0.55, baseColor); grad.addColorStop(1, tipColor);
+            ctx.fillStyle = grad;
+            ctx.fill();
+            ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = r * 0.035; ctx.stroke();
+            // one ridge line for texture, visible up close without muddying the silhouette
+            ctx.strokeStyle = 'rgba(0,0,0,0.18)'; ctx.lineWidth = r * 0.025;
+            ctx.beginPath();
+            ctx.moveTo(sx + dir * r * 0.14, sy - r * 0.12); ctx.lineTo(sx + dir * r * 0.4, sy - r * 0.58);
+            ctx.stroke();
+        }
+
         function drawBossHPPips(ctx, e) {
             let n = e.maxHp || 3; let spacing = 16;
             let startX = -((n - 1) * spacing) / 2;
@@ -944,59 +973,791 @@
                     }
                 }
             },
+            // Desert boss: a Minotaur. (Kept the 'desertlion' key/bossId so save data, item
+            // unlocks, and the bestiary entry all still line up - only the look changed.)
             desertlion: (ctx, r, def, e) => {
-                ctx.fillStyle = def.crownColor; // mane
-                ctx.beginPath(); ctx.arc(0, 0, r * 1.05, 0, Math.PI * 2); ctx.fill();
+                // Facial expression: a brief pained wince while in its post-hit hitFlash
+                // window (see destroyEnemyByIndex - that's a short, readable 24-frame beat,
+                // unlike the much longer BOSS_IFRAME_FRAMES invulnerability window), an open
+                // bellow mid-attack, a gritted snarl while winding one up, otherwise calm.
+                let expr = 'idle';
+                if ((e.hitFlash || 0) > 0) expr = 'hurt';
+                else if (e.state === 'attack') expr = 'attack';
+                else if (e.state === 'telegraph') expr = 'telegraph';
+
+                let bodyLight = shadeHex(def.bodyColor, 0.18);
+                let bodyDark = def.darkColor;
+                let hornBase = shadeHex(def.crownColor, 0.15); // crownColor = the horns now, not a mane
+                let hornTip = shadeHex(def.darkColor, -0.55);
+
+                // Body: broad muscular shoulders/chest, lightly shaded for some form.
                 ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.arc(0, 0, r * 0.72, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(-r * 0.06, r * 0.22, r * 0.92, r * 0.72, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = bodyDark; ctx.globalAlpha = 0.55;
+                ctx.beginPath(); ctx.ellipse(-r * 0.42, r * 0.2, r * 0.4, r * 0.5, 0.25, 0, Math.PI * 2); ctx.fill(); // far shoulder in shadow
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = bodyLight; ctx.globalAlpha = 0.5;
+                ctx.beginPath(); ctx.ellipse(r * 0.4, r * 0.05, r * 0.32, r * 0.4, -0.2, 0, Math.PI * 2); ctx.fill(); // near shoulder highlight
+                ctx.globalAlpha = 1;
+                ctx.fillStyle = bodyDark; // chest fur fringe
+                ctx.beginPath();
+                for (let i = -1; i <= 1; i++) {
+                    let cx = i * r * 0.13;
+                    ctx.moveTo(cx - r * 0.07, r * 0.1); ctx.lineTo(cx + r * 0.07, r * 0.1); ctx.lineTo(cx, r * 0.32);
+                }
+                ctx.fill();
+
+                // Head.
+                let hx = r * 0.1, hy = -r * 0.32, hr = r * 0.6;
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.arc(hx, hy, hr, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = bodyDark; ctx.globalAlpha = 0.28;
+                ctx.beginPath(); ctx.arc(hx - hr * 0.25, hy + hr * 0.3, hr * 0.7, 0, Math.PI * 2); ctx.fill();
+                ctx.globalAlpha = 1;
+
+                // Ears, tucked behind the horns.
+                ctx.fillStyle = bodyDark;
+                ctx.beginPath(); ctx.ellipse(hx - hr * 0.85, hy - hr * 0.15, r * 0.16, r * 0.24, -0.6, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(hx + hr * 0.55, hy - hr * 0.75, r * 0.15, r * 0.22, 0.5, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = shadeHex(bodyDark, -0.3);
+                ctx.beginPath(); ctx.ellipse(hx - hr * 0.85, hy - hr * 0.15, r * 0.08, r * 0.13, -0.6, 0, Math.PI * 2); ctx.fill();
+
+                // Horns - the boss's signature "crown".
+                drawHorn(ctx, hx - hr * 0.35, hy - hr * 0.55, -1, r, hornBase, hornTip);
+                drawHorn(ctx, hx + hr * 0.35, hy - hr * 0.6, 1, r, hornBase, hornTip);
+
+                // Forehead fur tuft between the horns.
+                ctx.fillStyle = bodyDark;
+                ctx.beginPath(); ctx.ellipse(hx + hr * 0.05, hy - hr * 0.55, r * 0.14, r * 0.1, 0.2, 0, Math.PI * 2); ctx.fill();
+
+                // Snout / muzzle, with nostrils and a nose ring.
+                let sx = hx + hr * 0.85, sy = hy + hr * 0.28;
                 ctx.fillStyle = def.darkColor;
-                ctx.beginPath(); ctx.ellipse(r * 0.35, r * 0.2, r * 0.28, r * 0.2, 0, 0, Math.PI * 2); ctx.fill(); // snout
-                ctx.fillStyle = '#1a1206';
-                ctx.beginPath(); ctx.arc(-r * 0.18, -r * 0.1, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.22, -r * 0.1, r * 0.1, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(sx, sy, r * 0.36, r * 0.27, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = shadeHex(def.darkColor, 0.12);
+                ctx.beginPath(); ctx.ellipse(sx - r * 0.05, sy - r * 0.08, r * 0.24, r * 0.15, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#1a0e05';
+                ctx.beginPath();
+                ctx.ellipse(sx + r * 0.14, sy - r * 0.09, r * 0.05, r * 0.08, 0.4, 0, Math.PI * 2);
+                ctx.ellipse(sx + r * 0.14, sy + r * 0.11, r * 0.05, r * 0.08, -0.4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = '#f4d35e'; ctx.lineWidth = r * 0.045;
+                ctx.beginPath(); ctx.arc(sx + r * 0.05, sy + r * 0.24, r * 0.09, 0.15, Math.PI - 0.15); ctx.stroke();
+                ctx.strokeStyle = 'rgba(0,0,0,0.25)'; ctx.lineWidth = r * 0.015;
+                ctx.beginPath(); ctx.arc(sx + r * 0.05, sy + r * 0.24, r * 0.09, 0.15, Math.PI - 0.15); ctx.stroke();
+
+                // Face: brow + eyes + mouth, all driven by `expr` above.
+                let ex1 = hx - hr * 0.28, ex2 = hx + hr * 0.42, ey = hy - hr * 0.02;
+                let eyeR = r * 0.13;
+                ctx.lineCap = 'round';
+                if (expr === 'hurt') {
+                    // Eyes squeezed shut, brows raised in a wince, small pained "o" mouth.
+                    ctx.strokeStyle = '#1a0e05'; ctx.lineWidth = r * 0.045;
+                    [ex1, ex2].forEach(ex => {
+                        ctx.beginPath();
+                        ctx.moveTo(ex - eyeR, ey + eyeR * 0.4); ctx.lineTo(ex, ey - eyeR * 0.5); ctx.lineTo(ex + eyeR, ey + eyeR * 0.4);
+                        ctx.stroke();
+                    });
+                    ctx.strokeStyle = shadeHex(def.darkColor, -0.2); ctx.lineWidth = r * 0.05;
+                    ctx.beginPath(); ctx.moveTo(ex1 - eyeR * 1.1, ey - eyeR * 1.6); ctx.lineTo(ex1 + eyeR * 0.6, ey - eyeR * 2.2); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(ex2 - eyeR * 0.6, ey - eyeR * 2.2); ctx.lineTo(ex2 + eyeR * 1.1, ey - eyeR * 1.6); ctx.stroke();
+                    ctx.fillStyle = '#1a0e05';
+                    ctx.beginPath(); ctx.ellipse(sx - r * 0.32, sy + r * 0.3, r * 0.06, r * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (expr === 'attack') {
+                    // Wide bellowing mouth with bared teeth, eyes narrowed and furious.
+                    ctx.fillStyle = '#2a1608';
+                    [ex1, ex2].forEach(ex => { ctx.beginPath(); ctx.ellipse(ex, ey, eyeR * 1.05, eyeR * 0.55, 0, 0, Math.PI * 2); ctx.fill(); });
+                    ctx.fillStyle = '#ffffff';
+                    ctx.beginPath(); ctx.arc(ex1 + eyeR * 0.3, ey, eyeR * 0.28, 0, Math.PI * 2); ctx.arc(ex2 + eyeR * 0.3, ey, eyeR * 0.28, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = shadeHex(def.darkColor, -0.3); ctx.lineWidth = r * 0.06;
+                    ctx.beginPath(); ctx.moveTo(ex1 - eyeR * 1.3, ey - eyeR * 0.3); ctx.lineTo(ex1 + eyeR * 1.1, ey - eyeR * 1.5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(ex2 - eyeR * 1.1, ey - eyeR * 1.5); ctx.lineTo(ex2 + eyeR * 1.3, ey - eyeR * 0.3); ctx.stroke();
+                    let mx = sx - r * 0.28, my = sy + r * 0.32;
+                    ctx.fillStyle = '#3a0a0a';
+                    ctx.beginPath(); ctx.ellipse(mx, my, r * 0.16, r * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#fff8e8';
+                    ctx.beginPath();
+                    ctx.moveTo(mx - r * 0.14, my - r * 0.06); ctx.lineTo(mx - r * 0.08, my); ctx.lineTo(mx - r * 0.02, my - r * 0.06);
+                    ctx.lineTo(mx + r * 0.04, my); ctx.lineTo(mx + r * 0.1, my - r * 0.06); ctx.lineTo(mx + r * 0.14, my);
+                    ctx.lineTo(mx + r * 0.1, my + r * 0.11); ctx.lineTo(mx + r * 0.02, my + r * 0.05); ctx.lineTo(mx - r * 0.06, my + r * 0.11);
+                    ctx.lineTo(mx - r * 0.14, my - r * 0.02);
+                    ctx.closePath(); ctx.fill();
+                } else if (expr === 'telegraph') {
+                    // Gritted snarl: narrowed eyes, brows angled down, one tusk bared.
+                    ctx.fillStyle = '#2a1608';
+                    [ex1, ex2].forEach(ex => { ctx.beginPath(); ctx.ellipse(ex, ey + eyeR * 0.15, eyeR * 0.9, eyeR * 0.45, 0, 0, Math.PI * 2); ctx.fill(); });
+                    ctx.strokeStyle = shadeHex(def.darkColor, -0.3); ctx.lineWidth = r * 0.055;
+                    ctx.beginPath(); ctx.moveTo(ex1 - eyeR * 1.2, ey - eyeR * 0.6); ctx.lineTo(ex1 + eyeR, ey - eyeR * 1.5); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(ex2 - eyeR, ey - eyeR * 1.5); ctx.lineTo(ex2 + eyeR * 1.2, ey - eyeR * 0.6); ctx.stroke();
+                    let mx = sx - r * 0.26, my = sy + r * 0.3;
+                    ctx.strokeStyle = '#2a1608'; ctx.lineWidth = r * 0.04;
+                    ctx.beginPath(); ctx.moveTo(mx - r * 0.14, my); ctx.quadraticCurveTo(mx, my + r * 0.08, mx + r * 0.16, my - r * 0.03); ctx.stroke();
+                    ctx.fillStyle = '#fff8e8';
+                    ctx.beginPath(); ctx.moveTo(mx + r * 0.08, my - r * 0.01); ctx.lineTo(mx + r * 0.12, my + r * 0.09); ctx.lineTo(mx + r * 0.15, my - r * 0.02); ctx.closePath(); ctx.fill();
+                } else {
+                    // Idle: calm but heavy-lidded, faint downturned brow - menacing at rest.
+                    ctx.fillStyle = '#2a1608';
+                    [ex1, ex2].forEach(ex => { ctx.beginPath(); ctx.ellipse(ex, ey, eyeR * 0.85, eyeR * 0.6, 0, 0, Math.PI * 2); ctx.fill(); });
+                    ctx.fillStyle = '#ffffff'; ctx.globalAlpha = 0.85;
+                    ctx.beginPath(); ctx.arc(ex1 + eyeR * 0.25, ey - eyeR * 0.15, eyeR * 0.22, 0, Math.PI * 2); ctx.arc(ex2 + eyeR * 0.25, ey - eyeR * 0.15, eyeR * 0.22, 0, Math.PI * 2); ctx.fill();
+                    ctx.globalAlpha = 1;
+                    ctx.strokeStyle = shadeHex(def.darkColor, -0.15); ctx.lineWidth = r * 0.045;
+                    ctx.beginPath(); ctx.moveTo(ex1 - eyeR * 1.1, ey - eyeR * 0.5); ctx.lineTo(ex1 + eyeR * 0.9, ey - eyeR * 1.0); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(ex2 - eyeR * 0.9, ey - eyeR * 1.0); ctx.lineTo(ex2 + eyeR * 1.1, ey - eyeR * 0.5); ctx.stroke();
+                }
             },
             yeti: (ctx, r, def, e) => {
-                ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.ellipse(0, 0, r * 0.85, r, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = def.darkColor;
-                ctx.beginPath(); ctx.ellipse(0, r * 0.7, r * 0.6, r * 0.25, 0, 0, Math.PI * 2); ctx.fill(); // feet shadowline
-                // shaggy tufts
-                ctx.fillStyle = def.crownColor;
-                for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * r * 0.3, -r * 0.75, r * 0.18, 0, Math.PI * 2); ctx.fill(); }
-                ctx.fillStyle = '#123';
-                ctx.beginPath(); ctx.arc(-r * 0.22, -r * 0.05, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.22, -r * 0.05, r * 0.1, 0, Math.PI * 2); ctx.fill();
+                // Same expression pattern as kingslime: hurt beats whatever it was doing, then
+                // its own windup/attack frames (the attack sub-expression varies by which of
+                // its three attacks is actually playing - see bossDB.yeti.attacks), then a
+                // calm idle default.
+                let hurt = (e.hitFlash || 0) > 0;
+                let winding = e.state === 'telegraph';
+                let attacking = e.state === 'attack';
+                let atkName = (attacking && e.currentAttack) ? e.currentAttack.name : null;
+                let breathing = atkName === 'Frost Breath';
+                let weary = !hurt && !winding && !attacking && e.hp === 1;
+                let blink = !hurt && !winding && !attacking && (((e.animTimer || 0) % 170) > 161);
+
+                // Paws swing with the pose: gathered up on the windup, driven down/out on the swing.
+                let pawY = r * 0.16, pawSpread = 1.0;
+                if (winding) { pawY = -r * 0.06; pawSpread = 0.9; }
+                else if (attacking) { pawY = breathing ? r * 0.14 : r * 0.34; pawSpread = breathing ? 1.0 : 1.1; }
+                else if (hurt) { pawY = r * 0.2; pawSpread = 1.05; }
+
+                let wob = Math.sin((e.animTimer || 0) / 16) * r * 0.015;
+
+                // ---- Torso: gradient-shaded for volume instead of a flat fill. ----
+                ctx.beginPath(); ctx.ellipse(0, r * 0.1 + wob * 0.3, r * 0.94, r * 0.84, 0, 0, Math.PI * 2);
+                let bodyGrad = ctx.createRadialGradient(-r * 0.3, -r * 0.34, r * 0.08, -r * 0.04, r * 0.06, r * 1.2);
+                bodyGrad.addColorStop(0, '#ffffff'); bodyGrad.addColorStop(0.38, def.bodyColor); bodyGrad.addColorStop(1, def.darkColor);
+                ctx.fillStyle = bodyGrad; ctx.fill();
+                ctx.lineWidth = Math.max(1.5, r * 0.04); ctx.strokeStyle = def.darkColor; ctx.stroke();
+
+                // Stubby feet shading, low on the body.
+                ctx.fillStyle = 'rgba(0,0,0,0.13)';
+                [-0.36, 0.36].forEach(fx => { ctx.beginPath(); ctx.ellipse(r * fx, r * 0.72, r * 0.26, r * 0.16, 0, 0, Math.PI * 2); ctx.fill(); });
+
+                // ---- Paws: chunky mitten shapes that poke past the torso silhouette, with a
+                // cuff and claws, and shift pose with the attack state above. ----
+                [-1, 1].forEach(s => {
+                    let px = s * r * 0.92 * pawSpread, py = pawY;
+                    ctx.fillStyle = def.bodyColor;
+                    ctx.beginPath(); ctx.ellipse(px, py, r * 0.24, r * 0.28, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = def.darkColor;
+                    ctx.beginPath(); ctx.ellipse(px, py - r * 0.14, r * 0.22, r * 0.09, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#6f8f9e'; ctx.lineWidth = Math.max(1.2, r * 0.025); ctx.lineCap = 'round';
+                    [-1, 0, 1].forEach(c => { ctx.beginPath(); ctx.moveTo(px + c * r * 0.08, py + r * 0.2); ctx.lineTo(px + c * r * 0.08, py + r * 0.32); ctx.stroke(); });
+                });
+
+                // ---- Shaggy fur collar framing the sides of the head/shoulders, left clear on
+                // top for the crown: layered shadow + highlight tufts. ----
+                let tufts = [[-0.88, -0.05, 0.19], [-0.9, -0.28, 0.2], [-0.82, -0.5, 0.2], [-0.6, -0.66, 0.19],
+                             [0.88, -0.05, 0.19], [0.9, -0.28, 0.2], [0.82, -0.5, 0.2], [0.6, -0.66, 0.19]];
+                tufts.forEach(t => { ctx.fillStyle = def.darkColor; ctx.beginPath(); ctx.arc(r * t[0] + r * 0.02, r * t[1] + r * 0.03, r * t[2] * 1.05, 0, Math.PI * 2); ctx.fill(); });
+                tufts.forEach(t => { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(r * t[0], r * t[1], r * t[2], 0, Math.PI * 2); ctx.fill(); });
+
+                // Muzzle patch.
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.beginPath(); ctx.ellipse(0, r * 0.24, r * 0.36, r * 0.24, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Blush.
+                ctx.fillStyle = 'rgba(255,110,140,0.22)';
+                [-1, 1].forEach(s => { ctx.beginPath(); ctx.ellipse(s * r * 0.56, r * 0.14, r * 0.12, r * 0.07, 0, 0, Math.PI * 2); ctx.fill(); });
+
+                // ---- Crown: same proven zigzag as kingslime's (keeps the tip clear of the HP
+                // pips through the attack-pose stretch), re-themed to icicle points with
+                // ice-crystal gems instead of gold and rubies. ----
+                ctx.fillStyle = '#bfe9ff';
+                ctx.fillRect(-r * 0.5, -r * 0.6, r * 1.0, r * 0.08);
+                let crownGrad = ctx.createLinearGradient(-r * 0.5, -r * 1.3, r * 0.5, -r * 0.55);
+                crownGrad.addColorStop(0, '#ffffff'); crownGrad.addColorStop(0.5, def.crownColor); crownGrad.addColorStop(1, '#4a7f9e');
+                ctx.fillStyle = crownGrad;
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.5, -r * 0.62); ctx.lineTo(r * 0.5, -r * 0.62);
+                ctx.lineTo(r * 0.62, -r * 1.02); ctx.lineTo(r * 0.24, -r * 0.78);
+                ctx.lineTo(0, -r * 1.3); ctx.lineTo(-r * 0.24, -r * 0.78);
+                ctx.lineTo(-r * 0.62, -r * 1.02);
+                ctx.closePath(); ctx.lineJoin = 'round'; ctx.fill();
+                ctx.lineWidth = Math.max(1.5, r * 0.035); ctx.strokeStyle = '#4a7f9e'; ctx.stroke();
+                ctx.fillStyle = '#dff3ff';
+                ctx.fillRect(-r * 0.5, -r * 0.68, r * 1.0, r * 0.12);
+                ctx.strokeRect(-r * 0.5, -r * 0.68, r * 1.0, r * 0.12);
+                ctx.fillStyle = '#bdeeff'; ctx.strokeStyle = '#7fc9ea'; ctx.lineWidth = Math.max(1, r * 0.02);
+                ctx.beginPath(); ctx.moveTo(0, -r * 1.24); ctx.lineTo(r * 0.075, -r * 1.16); ctx.lineTo(0, -r * 1.08); ctx.lineTo(-r * 0.075, -r * 1.16); ctx.closePath(); ctx.fill(); ctx.stroke();
+                ctx.fillStyle = '#7fd0ff';
+                [-1, 1].forEach(s => {
+                    let cx = s * r * 0.62, cy = -r * 0.95;
+                    ctx.beginPath(); ctx.moveTo(cx, cy - r * 0.05); ctx.lineTo(cx + r * 0.045, cy); ctx.lineTo(cx, cy + r * 0.05); ctx.lineTo(cx - r * 0.045, cy); ctx.closePath(); ctx.fill();
+                });
+                if (Math.sin((e.animTimer || 0) / 16) > 0.75) {
+                    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                    ctx.beginPath(); ctx.arc(-r * 0.03, -r * 1.22, r * 0.025, 0, Math.PI * 2); ctx.fill();
+                }
+
+                // ---- Face. ----
+                let eyeY = -r * 0.12, eyeDX = r * 0.32;
+                if (hurt) {
+                    // Dazed: scrunched X eyes, a small wobbly mouth, a couple of jarred-loose ice chips.
+                    ctx.strokeStyle = '#123a48'; ctx.lineWidth = Math.max(2, r * 0.055); ctx.lineCap = 'round';
+                    [-1, 1].forEach(s => {
+                        let ex = s * eyeDX;
+                        ctx.beginPath(); ctx.moveTo(ex - r * 0.11, eyeY - r * 0.11); ctx.lineTo(ex + r * 0.11, eyeY + r * 0.11); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(ex + r * 0.11, eyeY - r * 0.11); ctx.lineTo(ex - r * 0.11, eyeY + r * 0.11); ctx.stroke();
+                    });
+                    ctx.fillStyle = '#2a5064';
+                    ctx.beginPath(); ctx.ellipse(0, r * 0.28, r * 0.08, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = 'rgba(190,235,255,0.9)'; ctx.lineWidth = Math.max(1.2, r * 0.03); ctx.lineCap = 'round';
+                    [[r * 0.6, -r * 0.35], [-r * 0.62, -r * 0.15]].forEach(p => {
+                        ctx.beginPath(); ctx.moveTo(p[0] - r * 0.045, p[1]); ctx.lineTo(p[0] + r * 0.045, p[1]); ctx.moveTo(p[0], p[1] - r * 0.045); ctx.lineTo(p[0], p[1] + r * 0.045); ctx.stroke();
+                    });
+                } else if (attacking) {
+                    // Mid-attack: sharp brows and narrowed eyes always; the mouth differs by
+                    // which attack is actually playing.
+                    ctx.fillStyle = '#123a48';
+                    ctx.beginPath(); ctx.ellipse(-eyeDX, eyeY, r * 0.095, r * 0.05, 0, 0, Math.PI * 2); ctx.ellipse(eyeDX, eyeY, r * 0.095, r * 0.05, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#f4fbff'; ctx.lineWidth = Math.max(2, r * 0.065); ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(-eyeDX - r * 0.17, eyeY - r * 0.2); ctx.lineTo(-eyeDX + r * 0.12, eyeY - r * 0.09); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(eyeDX + r * 0.17, eyeY - r * 0.2); ctx.lineTo(eyeDX - r * 0.12, eyeY - r * 0.09); ctx.stroke();
+                    if (breathing) {
+                        // Frost Breath: a rounder exhale, with a little cloud of mist drifting off it.
+                        ctx.fillStyle = '#2a5064';
+                        ctx.beginPath(); ctx.ellipse(0, r * 0.34, r * 0.14, r * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+                        let mt = (e.animTimer || 0) / 10;
+                        ctx.fillStyle = 'rgba(220,245,255,0.55)';
+                        [0, 1, 2].forEach(i => {
+                            let p = ((mt + i * 6) % 18) / 18;
+                            ctx.beginPath(); ctx.arc(0, r * 0.5 + p * r * 0.5, r * (0.08 + p * 0.1), 0, Math.PI * 2); ctx.fill();
+                        });
+                    } else {
+                        // Ice Slam / Avalanche Charge: full roar, bared tusks.
+                        ctx.fillStyle = '#2a5064';
+                        ctx.beginPath(); ctx.ellipse(0, r * 0.32, r * 0.24, r * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = '#f4fbff';
+                        [-1, 1].forEach(s => { ctx.beginPath(); ctx.moveTo(s * r * 0.16, r * 0.15); ctx.lineTo(s * r * 0.06, r * 0.36); ctx.lineTo(s * r * 0.24, r * 0.24); ctx.closePath(); ctx.fill(); });
+                    }
+                } else if (winding) {
+                    // Winding up: narrowed, gritted, readying whichever attack comes next.
+                    ctx.fillStyle = '#123a48';
+                    ctx.beginPath(); ctx.ellipse(-eyeDX, eyeY, r * 0.1, r * 0.04, 0, 0, Math.PI * 2); ctx.ellipse(eyeDX, eyeY, r * 0.1, r * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = '#f4fbff'; ctx.lineWidth = Math.max(2, r * 0.055); ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(-eyeDX - r * 0.15, eyeY - r * 0.15); ctx.lineTo(-eyeDX + r * 0.1, eyeY - r * 0.06); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(eyeDX + r * 0.15, eyeY - r * 0.15); ctx.lineTo(eyeDX - r * 0.1, eyeY - r * 0.06); ctx.stroke();
+                    ctx.strokeStyle = '#2a5064'; ctx.lineWidth = Math.max(2, r * 0.04);
+                    ctx.beginPath(); ctx.moveTo(-r * 0.14, r * 0.3); ctx.lineTo(r * 0.14, r * 0.3); ctx.stroke();
+                } else {
+                    // Calm default: round content eyes with a highlight, tusks, and a gentle
+                    // smile, with an occasional blink; droops when down to its last hit.
+                    if (blink) {
+                        ctx.strokeStyle = '#123a48'; ctx.lineWidth = Math.max(2, r * 0.04); ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.moveTo(-eyeDX - r * 0.1, eyeY); ctx.lineTo(-eyeDX + r * 0.1, eyeY); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(eyeDX - r * 0.1, eyeY); ctx.lineTo(eyeDX + r * 0.1, eyeY); ctx.stroke();
+                    } else if (weary) {
+                        ctx.fillStyle = '#123a48';
+                        ctx.beginPath(); ctx.arc(-eyeDX, eyeY, r * 0.11, 0, Math.PI * 2); ctx.arc(eyeDX, eyeY, r * 0.11, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = def.bodyColor;
+                        ctx.beginPath(); ctx.rect(-eyeDX - r * 0.13, eyeY - r * 0.16, r * 0.26, r * 0.1); ctx.rect(eyeDX - r * 0.13, eyeY - r * 0.16, r * 0.26, r * 0.1); ctx.fill();
+                    } else {
+                        ctx.fillStyle = '#123a48';
+                        ctx.beginPath(); ctx.arc(-eyeDX, eyeY, r * 0.11, 0, Math.PI * 2); ctx.arc(eyeDX, eyeY, r * 0.11, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = '#fff';
+                        ctx.beginPath(); ctx.arc(-eyeDX + r * 0.035, eyeY - r * 0.035, r * 0.035, 0, Math.PI * 2); ctx.arc(eyeDX + r * 0.035, eyeY - r * 0.035, r * 0.035, 0, Math.PI * 2); ctx.fill();
+                    }
+                    if (weary) {
+                        // Down to its last hit - shivering, droopy-browed.
+                        ctx.strokeStyle = '#123a48'; ctx.lineWidth = Math.max(1.5, r * 0.035); ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.moveTo(-r * 0.09, r * 0.3); ctx.lineTo(-r * 0.03, r * 0.34); ctx.lineTo(r * 0.03, r * 0.3); ctx.lineTo(r * 0.09, r * 0.34); ctx.stroke();
+                        ctx.strokeStyle = '#123a48'; ctx.lineWidth = Math.max(1.3, r * 0.03); ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.moveTo(-eyeDX - r * 0.12, eyeY - r * 0.2); ctx.lineTo(-eyeDX + r * 0.08, eyeY - r * 0.16); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(eyeDX + r * 0.12, eyeY - r * 0.2); ctx.lineTo(eyeDX - r * 0.08, eyeY - r * 0.16); ctx.stroke();
+                    } else {
+                        ctx.strokeStyle = '#123a48'; ctx.lineWidth = Math.max(2, r * 0.045); ctx.lineCap = 'round';
+                        ctx.beginPath(); ctx.arc(0, r * 0.22, r * 0.14, 0.15 * Math.PI, 0.85 * Math.PI); ctx.stroke();
+                        ctx.fillStyle = '#f4fbff';
+                        [-1, 1].forEach(s => { ctx.beginPath(); ctx.moveTo(s * r * 0.13, r * 0.32); ctx.lineTo(s * r * 0.05, r * 0.44); ctx.lineTo(s * r * 0.19, r * 0.38); ctx.closePath(); ctx.fill(); });
+                    }
+                }
             },
             lavaworm: (ctx, r, def, e) => {
-                // segmented worm body, 3 rounded segments trailing behind the head
-                ctx.fillStyle = def.darkColor;
-                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-r * (0.55 + i * 0.55), 0, r * (0.65 - i * 0.08), 0, Math.PI * 2); ctx.fill(); }
-                ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.arc(0, 0, r * 0.75, 0, Math.PI * 2); ctx.fill();
+                // Molten rock-worm: shaded/gradient segments with glowing magma seams,
+                // a jeweled crown, and a face that reacts to attacking vs. getting hit.
+                let t = (e.animTimer || 0);
+                let hurting = (e.hitFlash || 0) > 0;
+                let telegraphing = e.state === 'telegraph';
+                let attacking = e.state === 'attack';
+                let aggro = telegraphing || attacking;
+
+                let hot = '#ffd27a';
+                let mid = def.bodyColor;
+                let rock = def.darkColor;
+                let crackGlow = '#fff2b0';
+                let rim = 'rgba(35,8,2,0.6)';
+
+                // Trailing rock segments, drawn back-to-front, each with its own
+                // gradient shading, a glowing seam, and a small obsidian dorsal spike.
+                let segCount = 4;
+                let segR = [0.60, 0.50, 0.41, 0.33];
+                let segX = [];
+                let cx = -r * 0.66;
+                for (let i = 0; i < segCount; i++) {
+                    segX.push(cx);
+                    if (i < segCount - 1) cx -= (segR[i] + segR[i + 1]) * r * 0.78;
+                }
+                for (let i = segCount - 1; i >= 0; i--) {
+                    let sr = segR[i] * r;
+                    let sx = segX[i];
+                    let sway = Math.sin(t / 14 - i * 0.9) * r * 0.035;
+
+                    let g = ctx.createRadialGradient(sx - sr * 0.3, sway - sr * 0.35, sr * 0.1, sx, sway, sr);
+                    g.addColorStop(0, mid); g.addColorStop(1, rock);
+                    ctx.fillStyle = g;
+                    ctx.beginPath(); ctx.arc(sx, sway, sr, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(1, sr * 0.06); ctx.stroke();
+
+                    ctx.strokeStyle = crackGlow;
+                    ctx.lineWidth = Math.max(1.5, sr * 0.1);
+                    ctx.globalAlpha = 0.5;
+                    ctx.beginPath(); ctx.arc(sx, sway, sr * 0.66, 0.5, 2.7); ctx.stroke();
+                    ctx.globalAlpha = 1;
+
+                    ctx.fillStyle = '#3a1204';
+                    ctx.beginPath();
+                    ctx.moveTo(sx - sr * 0.22, sway - sr * 0.7);
+                    ctx.lineTo(sx, sway - sr * 1.12);
+                    ctx.lineTo(sx + sr * 0.22, sway - sr * 0.7);
+                    ctx.closePath(); ctx.fill();
+                    ctx.strokeStyle = 'rgba(255,207,74,0.55)'; ctx.lineWidth = Math.max(0.8, sr * 0.05); ctx.stroke();
+                }
+
+                // Head, with a soft highlight/shadow gradient and a glowing crack.
+                let hr = r * 0.8;
+                let hg = ctx.createRadialGradient(-hr * 0.25, -hr * 0.35, hr * 0.15, 0, 0, hr * 1.05);
+                hg.addColorStop(0, hot); hg.addColorStop(0.55, mid); hg.addColorStop(1, rock);
+                ctx.fillStyle = hg;
+                ctx.beginPath(); ctx.ellipse(0, 0, hr, hr * 0.86, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = rim; ctx.lineWidth = hr * 0.035; ctx.stroke();
+
+                ctx.save();
+                ctx.shadowColor = crackGlow; ctx.shadowBlur = hr * 0.15;
+                ctx.strokeStyle = crackGlow;
+                ctx.lineWidth = hr * 0.06;
+                ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+                ctx.globalAlpha = 0.75;
+                ctx.beginPath();
+                ctx.moveTo(-hr * 0.52, hr * 0.12); ctx.lineTo(-hr * 0.18, -hr * 0.14);
+                ctx.lineTo(hr * 0.02, hr * 0.04); ctx.lineTo(hr * 0.4, -hr * 0.32);
+                ctx.stroke();
+                ctx.restore();
+
+                // Jeweled molten crown.
+                ctx.save();
+                ctx.shadowColor = 'rgba(255,170,50,0.9)'; ctx.shadowBlur = hr * 0.32;
+                let cBaseY = -hr * 0.6;
                 ctx.fillStyle = def.crownColor;
-                for (let i = 0; i < 3; i++) { ctx.beginPath(); ctx.arc(-r * (0.4 + i * 0.5), 0, r * 0.14, 0, Math.PI * 2); ctx.fill(); }
-                ctx.fillStyle = '#3a0d02';
-                ctx.beginPath(); ctx.arc(-r * 0.2, -r * 0.12, r * 0.1, 0, Math.PI * 2); ctx.arc(r * 0.2, -r * 0.12, r * 0.1, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-hr * 0.48, cBaseY);
+                ctx.lineTo(-hr * 0.42, cBaseY - hr * 0.36);
+                ctx.lineTo(-hr * 0.22, cBaseY - hr * 0.08);
+                ctx.lineTo(-hr * 0.13, cBaseY - hr * 0.58);
+                ctx.lineTo(0, cBaseY - hr * 0.1);
+                ctx.lineTo(hr * 0.13, cBaseY - hr * 0.58);
+                ctx.lineTo(hr * 0.22, cBaseY - hr * 0.08);
+                ctx.lineTo(hr * 0.42, cBaseY - hr * 0.36);
+                ctx.lineTo(hr * 0.48, cBaseY);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = '#6b3a08'; ctx.lineWidth = hr * 0.04; ctx.stroke();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#c98a1f';
+                ctx.fillRect(-hr * 0.48, cBaseY - hr * 0.02, hr * 0.96, hr * 0.15);
+                ctx.strokeStyle = '#6b3a08'; ctx.lineWidth = hr * 0.025;
+                ctx.strokeRect(-hr * 0.48, cBaseY - hr * 0.02, hr * 0.96, hr * 0.15);
+                ctx.shadowColor = 'rgba(255,60,30,0.9)'; ctx.shadowBlur = hr * 0.2;
+                ctx.fillStyle = '#ff3b30';
+                ctx.beginPath(); ctx.arc(0, cBaseY + hr * 0.05, hr * 0.09, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffe9a8';
+                ctx.beginPath(); ctx.arc(-hr * 0.3, cBaseY + hr * 0.05, hr * 0.045, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(hr * 0.3, cBaseY + hr * 0.05, hr * 0.045, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+
+                // Face: expression swaps between a content idle look, an angry
+                // roar while telegraphing/attacking, and a wince right after being hit.
+                let eyeY = -hr * 0.06;
+                let eyeXOff = hr * 0.32;
+                let mouthY = hr * 0.4;
+
+                if (hurting) {
+                    ctx.strokeStyle = rock; ctx.lineWidth = hr * 0.055; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(-eyeXOff - hr * 0.14, eyeY - hr * 0.16); ctx.lineTo(-eyeXOff + hr * 0.1, eyeY - hr * 0.27); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(eyeXOff + hr * 0.14, eyeY - hr * 0.16); ctx.lineTo(eyeXOff - hr * 0.1, eyeY - hr * 0.27); ctx.stroke();
+                    [-eyeXOff, eyeXOff].forEach(ex => {
+                        ctx.beginPath(); ctx.moveTo(ex - hr * 0.14, eyeY + hr * 0.04);
+                        ctx.quadraticCurveTo(ex, eyeY - hr * 0.1, ex + hr * 0.14, eyeY + hr * 0.04);
+                        ctx.stroke();
+                    });
+                    ctx.fillStyle = '#5a1206';
+                    ctx.beginPath(); ctx.ellipse(0, mouthY - hr * 0.02, hr * 0.1, hr * 0.13, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (aggro) {
+                    ctx.fillStyle = '#2a0a02';
+                    ctx.beginPath();
+                    ctx.moveTo(-eyeXOff - hr * 0.2, eyeY - hr * 0.24); ctx.lineTo(-eyeXOff + hr * 0.17, eyeY - hr * 0.03); ctx.lineTo(-eyeXOff - hr * 0.17, eyeY - hr * 0.01);
+                    ctx.closePath(); ctx.fill();
+                    ctx.beginPath();
+                    ctx.moveTo(eyeXOff + hr * 0.2, eyeY - hr * 0.24); ctx.lineTo(eyeXOff - hr * 0.17, eyeY - hr * 0.03); ctx.lineTo(eyeXOff + hr * 0.17, eyeY - hr * 0.01);
+                    ctx.closePath(); ctx.fill();
+                    [-eyeXOff, eyeXOff].forEach(ex => {
+                        ctx.save();
+                        ctx.shadowColor = '#fff6d8'; ctx.shadowBlur = hr * 0.14;
+                        ctx.fillStyle = '#fff6d8';
+                        ctx.beginPath(); ctx.ellipse(ex, eyeY + hr * 0.03, hr * 0.14, hr * 0.065, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                        ctx.fillStyle = '#2a0902';
+                        ctx.beginPath(); ctx.ellipse(ex, eyeY + hr * 0.03, hr * 0.055, hr * 0.055, 0, 0, Math.PI * 2); ctx.fill();
+                    });
+                    let openAmt = telegraphing ? 0.5 : 1;
+                    ctx.save();
+                    ctx.translate(0, mouthY);
+                    ctx.scale(1, Math.max(0.25, openAmt));
+                    let mg = ctx.createRadialGradient(0, 0, hr * 0.02, 0, 0, hr * 0.32);
+                    mg.addColorStop(0, '#fff6c9'); mg.addColorStop(0.5, '#ff9a2e'); mg.addColorStop(1, '#7a1c04');
+                    ctx.fillStyle = mg;
+                    ctx.beginPath(); ctx.ellipse(0, 0, hr * 0.3, hr * 0.26, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#fff8e6';
+                    for (let i = -1; i <= 1; i += 2) {
+                        ctx.beginPath(); ctx.moveTo(i * hr * 0.18, -hr * 0.2); ctx.lineTo(i * hr * 0.1, -hr * 0.06); ctx.lineTo(i * hr * 0.24, -hr * 0.06); ctx.closePath(); ctx.fill();
+                        ctx.beginPath(); ctx.moveTo(i * hr * 0.18, hr * 0.2); ctx.lineTo(i * hr * 0.1, hr * 0.06); ctx.lineTo(i * hr * 0.24, hr * 0.06); ctx.closePath(); ctx.fill();
+                    }
+                    ctx.restore();
+
+                    if (attacking) {
+                        for (let i = 0; i < 4; i++) {
+                            let a = -0.9 + i * 0.6 + Math.sin(t * 0.3 + i) * 0.15;
+                            let d = hr * (0.4 + 0.12 * ((t + i * 7) % 6));
+                            ctx.globalAlpha = 0.7 - (d / (hr * 1.1));
+                            ctx.fillStyle = i % 2 === 0 ? hot : crackGlow;
+                            ctx.beginPath(); ctx.arc(Math.cos(a) * d, mouthY + Math.sin(a) * d * 0.4, hr * 0.03, 0, Math.PI * 2); ctx.fill();
+                        }
+                        ctx.globalAlpha = 1;
+                    }
+                } else {
+                    let blinkPhase = t % 180;
+                    let blink = blinkPhase < 6 ? 0.12 : 1;
+                    [-eyeXOff, eyeXOff].forEach(ex => {
+                        ctx.save();
+                        ctx.translate(ex, eyeY);
+                        ctx.scale(1, blink);
+                        ctx.fillStyle = '#2a0902';
+                        ctx.beginPath(); ctx.ellipse(0, 0, hr * 0.16, hr * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.save();
+                        ctx.shadowColor = hot; ctx.shadowBlur = hr * 0.12;
+                        ctx.fillStyle = hot;
+                        ctx.beginPath(); ctx.ellipse(0, 0, hr * 0.08, hr * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+                        ctx.restore();
+                        ctx.restore();
+                    });
+                    ctx.strokeStyle = rock; ctx.lineWidth = hr * 0.05; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(-hr * 0.16, mouthY); ctx.quadraticCurveTo(0, mouthY + hr * 0.06, hr * 0.16, mouthY); ctx.stroke();
+
+                    let emberCount = 3;
+                    for (let i = 0; i < emberCount; i++) {
+                        let seed = i * 47.3;
+                        let phase = ((t * 0.9 + seed * 10) % 90) / 90;
+                        let ex2 = Math.sin(seed) * hr * 0.55;
+                        let ey2 = hr * 0.35 - phase * hr * 1.5;
+                        let ealpha = (1 - phase) * 0.75;
+                        let esize = hr * (0.03 + 0.015 * Math.sin(seed + t * 0.1));
+                        ctx.globalAlpha = ealpha;
+                        ctx.fillStyle = i % 2 === 0 ? hot : crackGlow;
+                        ctx.beginPath(); ctx.arc(ex2, ey2, esize, 0, Math.PI * 2); ctx.fill();
+                    }
+                    ctx.globalAlpha = 1;
+                }
             },
             crocodile: (ctx, r, def, e) => {
+                // Expression priority: a brief hit-flash flinch beats an attack snarl beats a
+                // telegraph narrow-eyed wind-up beats the default calm look - see hitFlash and
+                // the attack/telegraph states set by the boss update loop.
+                let hurt = (e.hitFlash || 0) > 0;
+                let attacking = e.state === 'attack';
+                let winding = e.state === 'telegraph';
+                // The jaw hinges open through the wind-up and snaps fully open mid-attack,
+                // then shuts the instant the attack resolves, so the bite itself reads as
+                // the jaw closing on you.
+                let jawOpen = hurt ? 0 : attacking ? 1 : winding ? 0.35 : 0;
+                let scute = def.darkColor;
+
+                // Tail - a tapered wedge trailing off the back of the body.
                 ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.ellipse(-r * 0.1, 0, r * 0.85, r * 0.55, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = def.darkColor;
-                ctx.beginPath(); ctx.ellipse(r * 0.55, 0, r * 0.4, r * 0.22, 0, 0, Math.PI * 2); ctx.fill(); // snout
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.7, -r * 0.24);
+                ctx.quadraticCurveTo(-r * 1.15, -r * 0.1, -r * 1.4, 0);
+                ctx.quadraticCurveTo(-r * 1.15, r * 0.1, -r * 0.7, r * 0.24);
+                ctx.closePath(); ctx.fill();
+                ctx.fillStyle = scute;
+                for (let i = 0; i < 3; i++) {
+                    let tx = -r * (0.8 + i * 0.2);
+                    ctx.beginPath(); ctx.moveTo(tx - r * 0.05, -r * 0.06); ctx.lineTo(tx, -r * 0.22); ctx.lineTo(tx + r * 0.05, -r * 0.06); ctx.closePath(); ctx.fill();
+                }
+
+                // Stubby legs peeking out from under the body.
+                ctx.fillStyle = scute;
+                ctx.beginPath(); ctx.ellipse(-r * 0.3, r * 0.42, r * 0.2, r * 0.12, 0.4, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(r * 0.1, r * 0.44, r * 0.2, r * 0.12, -0.25, 0, Math.PI * 2); ctx.fill();
+
+                // Main body.
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.ellipse(-r * 0.15, 0, r * 0.78, r * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Pale underbelly plates.
+                ctx.fillStyle = 'rgba(255,255,255,0.16)';
+                ctx.beginPath(); ctx.ellipse(-r * 0.1, r * 0.2, r * 0.5, r * 0.16, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Back scutes - a jagged armor ridge down the spine (replaces the old plain dots).
+                ctx.fillStyle = scute;
+                for (let i = -2; i <= 2; i++) {
+                    let bx = i * r * 0.2 - r * 0.28;
+                    ctx.beginPath();
+                    ctx.moveTo(bx - r * 0.08, -r * 0.3);
+                    ctx.lineTo(bx, -r * 0.48);
+                    ctx.lineTo(bx + r * 0.08, -r * 0.3);
+                    ctx.closePath(); ctx.fill();
+                }
+
+                // Snout - a long tapered wedge with a rounded tip.
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath();
+                ctx.moveTo(r * 0.2, -r * 0.26);
+                ctx.quadraticCurveTo(r * 0.8, -r * 0.22, r * 1.02, -r * 0.05);
+                ctx.quadraticCurveTo(r * 0.8, r * 0.14, r * 0.2, r * 0.2);
+                ctx.closePath(); ctx.fill();
+
+                // Nostril bumps at the very tip.
+                ctx.fillStyle = scute;
+                ctx.beginPath(); ctx.arc(r * 0.94, -r * 0.1, r * 0.045, 0, Math.PI * 2); ctx.arc(r * 0.94, r * 0.02, r * 0.045, 0, Math.PI * 2); ctx.fill();
+
+                // Upper-jaw snaggle teeth - visible along the top edge of the snout even
+                // with the mouth shut.
+                ctx.fillStyle = '#eef2d8';
+                for (let i = 0; i < 4; i++) {
+                    let tx = r * (0.35 + i * 0.16);
+                    ctx.beginPath(); ctx.moveTo(tx, -r * 0.16); ctx.lineTo(tx + r * 0.05, -r * 0.02); ctx.lineTo(tx - r * 0.05, -r * 0.02); ctx.closePath(); ctx.fill();
+                }
+
+                // Lower jaw - hinges open through the telegraph/attack (jawOpen), or draws
+                // as a simple closed-mouth line otherwise.
+                if (jawOpen > 0) {
+                    let drop = jawOpen * r * 0.32;
+                    ctx.fillStyle = '#7a1e1e';
+                    ctx.beginPath();
+                    ctx.moveTo(r * 0.22, r * 0.02);
+                    ctx.lineTo(r * 0.95, r * 0);
+                    ctx.lineTo(r * 0.85, r * (0.1 + drop));
+                    ctx.lineTo(r * 0.22, r * (0.15 + drop * 0.6));
+                    ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = def.bodyColor;
+                    ctx.beginPath();
+                    ctx.moveTo(r * 0.2, r * (0.15 + drop * 0.6));
+                    ctx.quadraticCurveTo(r * 0.6, r * (0.22 + drop), r * 0.85, r * (0.12 + drop));
+                    ctx.lineTo(r * 0.85, r * (0.2 + drop));
+                    ctx.quadraticCurveTo(r * 0.55, r * (0.32 + drop), r * 0.2, r * (0.26 + drop * 0.6));
+                    ctx.closePath(); ctx.fill();
+                    ctx.fillStyle = '#eef2d8';
+                    for (let i = 0; i < 3; i++) {
+                        let tx = r * (0.38 + i * 0.18);
+                        let ty = r * (0.16 + drop * 0.85);
+                        ctx.beginPath(); ctx.moveTo(tx - r * 0.04, ty); ctx.lineTo(tx + r * 0.04, ty); ctx.lineTo(tx, ty - r * 0.09); ctx.closePath(); ctx.fill();
+                    }
+                } else {
+                    ctx.strokeStyle = def.darkColor; ctx.lineWidth = Math.max(1.5, r * 0.04);
+                    ctx.beginPath(); ctx.moveTo(r * 0.22, r * 0.03); ctx.quadraticCurveTo(r * 0.7, r * 0.1, r * 0.95, r * 0.02); ctx.stroke();
+                }
+
+                // Eye ridges + eyes - the expression changes with state (idle / winding /
+                // attacking / hurt).
+                for (let ex of [r * 0.18, r * 0.4]) {
+                    ctx.fillStyle = def.bodyColor;
+                    ctx.beginPath(); ctx.arc(ex, -r * 0.28, r * 0.13, 0, Math.PI * 2); ctx.fill();
+                    if (hurt) {
+                        ctx.strokeStyle = '#0e1503'; ctx.lineWidth = Math.max(1.5, r * 0.045);
+                        ctx.beginPath(); ctx.moveTo(ex - r * 0.09, -r * 0.24); ctx.lineTo(ex, -r * 0.32); ctx.lineTo(ex + r * 0.09, -r * 0.24); ctx.stroke();
+                    } else if (winding) {
+                        ctx.fillStyle = '#0e1503';
+                        ctx.beginPath(); ctx.ellipse(ex, -r * 0.28, r * 0.09, r * 0.03, 0, 0, Math.PI * 2); ctx.fill();
+                    } else if (attacking) {
+                        ctx.fillStyle = '#0e1503';
+                        ctx.beginPath(); ctx.arc(ex, -r * 0.28, r * 0.1, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = '#c8d67a';
+                        ctx.beginPath(); ctx.arc(ex, -r * 0.28, r * 0.045, 0, Math.PI * 2); ctx.fill();
+                    } else {
+                        ctx.fillStyle = '#0e1503';
+                        ctx.beginPath(); ctx.arc(ex, -r * 0.28, r * 0.08, 0, Math.PI * 2); ctx.fill();
+                        ctx.fillStyle = '#c8d67a';
+                        ctx.beginPath(); ctx.arc(ex + r * 0.015, -r * 0.3, r * 0.03, 0, Math.PI * 2); ctx.fill();
+                    }
+                }
+
+                // Crown - a small tarnished-gold circlet resting on the brow, just behind
+                // the eyes.
+                ctx.save();
+                ctx.translate(-r * 0.05, -r * 0.46);
                 ctx.fillStyle = def.crownColor;
-                for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.arc(i * r * 0.28, -r * 0.42, r * 0.08, 0, Math.PI * 2); ctx.fill(); } // back ridges
-                ctx.fillStyle = '#0e1503';
-                ctx.beginPath(); ctx.arc(r * 0.2, -r * 0.28, r * 0.09, 0, Math.PI * 2); ctx.arc(r * 0.42, -r * 0.2, r * 0.07, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(-r * 0.24, r * 0.1);
+                ctx.lineTo(-r * 0.24, -r * 0.02);
+                ctx.lineTo(-r * 0.13, -r * 0.16);
+                ctx.lineTo(-r * 0.01, -r * 0.03);
+                ctx.lineTo(r * 0.11, -r * 0.18);
+                ctx.lineTo(r * 0.22, -r * 0.02);
+                ctx.lineTo(r * 0.22, r * 0.1);
+                ctx.closePath();
+                ctx.fill();
+                ctx.lineWidth = Math.max(1, r * 0.025);
+                ctx.strokeStyle = def.darkColor;
+                ctx.stroke();
+                ctx.fillStyle = '#8fe0a0';
+                ctx.beginPath(); ctx.arc(-r * 0.01, -r * 0.02, r * 0.035, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
             },
             bear: (ctx, r, def, e) => {
+                let hurt = (e.hitFlash || 0) > 0;
+                let roar = e.state === 'attack';
+                let snarl = e.state === 'telegraph';
+                let aggro = roar || snarl;
+                let bodyLight = shadeHex(def.bodyColor, 0.24);
+                let bodyDeep = shadeHex(def.bodyColor, -0.22);
+                let earInner = shadeHex(def.darkColor, 0.35);
+                let ink = '#1a0f08';
+
+                // Torso: haunches + a big-shouldered chest hump, classic bear silhouette
                 ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.ellipse(0, 0, r * 0.85, r * 0.95, 0, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = def.darkColor;
-                ctx.beginPath(); ctx.arc(0, r * 0.25, r * 0.32, 0, Math.PI * 2); ctx.fill(); // snout
+                ctx.beginPath(); ctx.ellipse(0, r * 0.34, r * 0.78, r * 0.6, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(0, -r * 0.06, r * 0.6, r * 0.48, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Fur shading + belly patch, clipped to the torso so nothing spills past the outline
+                ctx.save();
+                ctx.beginPath();
+                ctx.ellipse(0, r * 0.34, r * 0.78, r * 0.6, 0, 0, Math.PI * 2);
+                ctx.ellipse(0, -r * 0.06, r * 0.6, r * 0.48, 0, 0, Math.PI * 2);
+                ctx.clip();
+                ctx.fillStyle = bodyDeep;
+                ctx.beginPath(); ctx.ellipse(r * 0.4, r * 0.16, r * 0.34, r * 0.58, 0.3, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = bodyLight;
+                ctx.beginPath(); ctx.ellipse(-r * 0.02, r * 0.42, r * 0.36, r * 0.3, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.restore();
+
+                // Arms: reared up with claws bared while telegraphing/attacking, relaxed otherwise
+                let armL = aggro ? { sx: -r * 0.5, sy: -r * 0.15, px: -r * 0.85, py: -r * 0.72 }
+                                 : { sx: -r * 0.5, sy: r * 0.05, px: -r * 0.78, py: r * 0.35 };
+                let armR = aggro ? { sx: r * 0.5, sy: -r * 0.15, px: r * 0.9, py: -r * 0.76 }
+                                 : { sx: r * 0.5, sy: r * 0.02, px: r * 0.82, py: r * 0.3 };
+                [armL, armR].forEach(arm => {
+                    ctx.strokeStyle = def.bodyColor; ctx.lineWidth = r * 0.32; ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(arm.sx, arm.sy); ctx.lineTo(arm.px, arm.py); ctx.stroke();
+                    ctx.fillStyle = bodyDeep;
+                    ctx.beginPath(); ctx.arc(arm.px, arm.py, r * 0.17, 0, Math.PI * 2); ctx.fill();
+                    let dirAngle = Math.atan2(arm.py - arm.sy, arm.px - arm.sx);
+                    ctx.strokeStyle = '#f5ead0'; ctx.lineWidth = Math.max(1, r * 0.045); ctx.lineCap = 'round';
+                    for (let i = -1; i <= 1; i++) {
+                        let a = dirAngle + i * 0.4;
+                        ctx.beginPath();
+                        ctx.moveTo(arm.px + Math.cos(a) * r * 0.08, arm.py + Math.sin(a) * r * 0.08);
+                        ctx.lineTo(arm.px + Math.cos(a) * r * 0.3, arm.py + Math.sin(a) * r * 0.3);
+                        ctx.stroke();
+                    }
+                });
+
+                // Head - tips back slightly on a hit
+                let headX = r * 0.04, headY = -r * 0.58;
+                ctx.save();
+                ctx.translate(headX, headY);
+                if (hurt) ctx.rotate(-0.14);
+                let hx = 0, hy = 0;
+
                 ctx.fillStyle = def.bodyColor;
-                ctx.beginPath(); ctx.arc(-r * 0.6, -r * 0.6, r * 0.28, 0, Math.PI * 2); ctx.arc(r * 0.6, -r * 0.6, r * 0.28, 0, Math.PI * 2); ctx.fill(); // ears
+                ctx.beginPath(); ctx.arc(hx, hy, r * 0.46, 0, Math.PI * 2); ctx.fill();
+
+                // Ears
+                ctx.fillStyle = def.bodyColor;
+                ctx.beginPath(); ctx.arc(hx - r * 0.32, hy - r * 0.36, r * 0.19, 0, Math.PI * 2); ctx.arc(hx + r * 0.32, hy - r * 0.36, r * 0.19, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = earInner;
+                ctx.beginPath(); ctx.arc(hx - r * 0.32, hy - r * 0.36, r * 0.095, 0, Math.PI * 2); ctx.arc(hx + r * 0.32, hy - r * 0.36, r * 0.095, 0, Math.PI * 2); ctx.fill();
+
+                // Crown, worn between the ears
+                let bandBottom = hy - r * 0.28, bandTop = hy - r * 0.42, hw = r * 0.38;
                 ctx.fillStyle = def.crownColor;
-                ctx.beginPath(); ctx.arc(-r * 0.6, -r * 0.6, r * 0.14, 0, Math.PI * 2); ctx.arc(r * 0.6, -r * 0.6, r * 0.14, 0, Math.PI * 2); ctx.fill();
-                ctx.fillStyle = '#1a0f08';
-                ctx.beginPath(); ctx.arc(-r * 0.24, -r * 0.15, r * 0.09, 0, Math.PI * 2); ctx.arc(r * 0.24, -r * 0.15, r * 0.09, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath();
+                ctx.moveTo(hx - hw, bandBottom);
+                ctx.lineTo(hx - hw, bandTop - r * 0.16);
+                ctx.lineTo(hx - hw * 0.5, bandTop - r * 0.02);
+                ctx.lineTo(hx, bandTop - r * 0.3);
+                ctx.lineTo(hx + hw * 0.5, bandTop - r * 0.02);
+                ctx.lineTo(hx + hw, bandTop - r * 0.16);
+                ctx.lineTo(hx + hw, bandBottom);
+                ctx.closePath(); ctx.fill();
+                ctx.strokeStyle = shadeHex(def.crownColor, -0.4); ctx.lineWidth = Math.max(1, r * 0.032); ctx.lineJoin = 'round'; ctx.stroke();
+                ctx.fillStyle = shadeHex(def.crownColor, 0.35);
+                [[-hw, bandTop - r * 0.16], [0, bandTop - r * 0.3], [hw, bandTop - r * 0.16]].forEach(([px, py]) => {
+                    ctx.beginPath(); ctx.arc(hx + px, py, r * 0.045, 0, Math.PI * 2); ctx.fill();
+                });
+                ctx.fillStyle = '#c81e39';
+                ctx.beginPath(); ctx.arc(hx, (bandTop + bandBottom) / 2 + r * 0.02, r * 0.065, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.55)';
+                ctx.beginPath(); ctx.arc(hx - r * 0.02, (bandTop + bandBottom) / 2, r * 0.02, 0, Math.PI * 2); ctx.fill();
+
+                // Muzzle + nose
+                ctx.fillStyle = bodyLight;
+                ctx.beginPath(); ctx.ellipse(hx, hy + r * 0.24, r * 0.3, r * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = ink;
+                ctx.beginPath(); ctx.ellipse(hx, hy + r * 0.14, r * 0.095, r * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+
+                // Expression - reacts to being hurt, and to winding up / unleashing an attack
+                if (hurt) {
+                    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.lineCap = 'round';
+                    [-1, 1].forEach(s => {
+                        ctx.beginPath();
+                        ctx.moveTo(hx + s * r * 0.24 - r * 0.09, hy - r * 0.02);
+                        ctx.quadraticCurveTo(hx + s * r * 0.24, hy + r * 0.07, hx + s * r * 0.24 + r * 0.09, hy - r * 0.02);
+                        ctx.stroke();
+                    });
+                    ctx.fillStyle = ink;
+                    ctx.beginPath(); ctx.ellipse(hx, hy + r * 0.32, r * 0.08, r * 0.1, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (roar) {
+                    ctx.fillStyle = ink;
+                    ctx.beginPath(); ctx.arc(hx - r * 0.2, hy - r * 0.05, r * 0.07, 0, Math.PI * 2); ctx.arc(hx + r * 0.24, hy - r * 0.05, r * 0.07, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.5, r * 0.05); ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(hx - r * 0.34, hy - r * 0.22); ctx.lineTo(hx - r * 0.12, hy - r * 0.13); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(hx + r * 0.38, hy - r * 0.22); ctx.lineTo(hx + r * 0.16, hy - r * 0.13); ctx.stroke();
+                    ctx.fillStyle = '#2b0f0a';
+                    ctx.beginPath(); ctx.ellipse(hx + r * 0.02, hy + r * 0.38, r * 0.2, r * 0.19, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = '#fdf6e3';
+                    for (let i = -1; i <= 1; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(hx + i * r * 0.13, hy + r * 0.24);
+                        ctx.lineTo(hx + i * r * 0.13 - r * 0.04, hy + r * 0.33);
+                        ctx.lineTo(hx + i * r * 0.13 + r * 0.04, hy + r * 0.33);
+                        ctx.closePath(); ctx.fill();
+                    }
+                    ctx.fillStyle = '#ff8fa3';
+                    ctx.beginPath(); ctx.ellipse(hx, hy + r * 0.46, r * 0.11, r * 0.07, 0, 0, Math.PI * 2); ctx.fill();
+                } else if (snarl) {
+                    ctx.fillStyle = ink;
+                    ctx.beginPath(); ctx.ellipse(hx - r * 0.2, hy - r * 0.03, r * 0.08, r * 0.04, 0, 0, Math.PI * 2); ctx.ellipse(hx + r * 0.24, hy - r * 0.03, r * 0.08, r * 0.04, 0, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.5, r * 0.045); ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(hx - r * 0.32, hy - r * 0.18); ctx.lineTo(hx - r * 0.13, hy - r * 0.12); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(hx + r * 0.36, hy - r * 0.18); ctx.lineTo(hx + r * 0.17, hy - r * 0.12); ctx.stroke();
+                    ctx.beginPath(); ctx.moveTo(hx - r * 0.14, hy + r * 0.28); ctx.quadraticCurveTo(hx, hy + r * 0.34, hx + r * 0.18, hy + r * 0.24); ctx.stroke();
+                    ctx.fillStyle = '#fdf6e3';
+                    ctx.beginPath(); ctx.moveTo(hx - r * 0.08, hy + r * 0.26); ctx.lineTo(hx - r * 0.12, hy + r * 0.34); ctx.lineTo(hx - r * 0.02, hy + r * 0.3); ctx.closePath(); ctx.fill();
+                } else {
+                    ctx.fillStyle = ink;
+                    ctx.beginPath(); ctx.arc(hx - r * 0.2, hy - r * 0.03, r * 0.075, 0, Math.PI * 2); ctx.arc(hx + r * 0.24, hy - r * 0.03, r * 0.075, 0, Math.PI * 2); ctx.fill();
+                    ctx.fillStyle = 'rgba(255,255,255,0.65)';
+                    ctx.beginPath(); ctx.arc(hx - r * 0.23, hy - r * 0.06, r * 0.02, 0, Math.PI * 2); ctx.arc(hx + r * 0.21, hy - r * 0.06, r * 0.02, 0, Math.PI * 2); ctx.fill();
+                    ctx.strokeStyle = ink; ctx.lineWidth = Math.max(1.5, r * 0.045); ctx.lineCap = 'round';
+                    ctx.beginPath(); ctx.moveTo(hx - r * 0.1, hy + r * 0.3); ctx.quadraticCurveTo(hx + r * 0.02, hy + r * 0.34, hx + r * 0.14, hy + r * 0.28); ctx.stroke();
+                }
+
+                ctx.restore();
             }
         };
 
@@ -1030,7 +1791,19 @@
             let facingRight = Math.cos(e.angle || 0) >= 0;
             if (!facingRight) ctx.scale(-1, 1);
 
-            if (e.iframe > 0 && e.hp > 0) ctx.globalAlpha = 0.55 + 0.25 * Math.sin((e.iframe || 0) * 0.6);
+            if (e.iframe > 0 && e.hp > 0) {
+                ctx.globalAlpha = 0.55 + 0.25 * Math.sin((e.iframe || 0) * 0.6);
+            } else if (e.currentAttack && e.currentAttack.isAmbush) {
+                // Swamp Ambush: sink out of sight through the telegraph (submerging), then
+                // pop back into view over the first few attack frames (resurfacing at the
+                // new spot exec() teleported it to).
+                if (e.state === 'telegraph') {
+                    let t = e.stateTimer / e.currentAttack.telegraph;
+                    ctx.globalAlpha = Math.max(0.12, 1 - t * 0.9);
+                } else if (e.state === 'attack' && e.stateTimer < 10) {
+                    ctx.globalAlpha = 0.15 + 0.85 * Math.min(1, e.stateTimer / 8);
+                }
+            }
 
             let silhouette = bossSilhouettes[e.bossId];
             if (silhouette) silhouette(ctx, e.radius, def, e);
@@ -1693,7 +2466,7 @@
         // Roguelite: Plasma Beam item - transient zap-line visuals, one per target hit, each
         // {x1,y1,x2,y2,life}. Purely cosmetic bookkeeping, faded out and removed in update().
         let plasmaBeamFX = [];
-        // Mythic: Sandstorm Mane (Lion) - which one-time dash tutorial (if any) currently has
+        // Mythic: Sandstorm Horns (Minotaur) - which one-time dash tutorial (if any) currently has
         // game logic paused: null, 'ringfull' ("Double tap to dash!") or 'aimhalf' ("Swipe to
         // change dash direction!"). See handleLionDoubleTap/showLionTutorial and the ring-fill
         // and aim-timer ticks in update().
@@ -1793,8 +2566,8 @@
             // bosses included, on contact) plus a bit of extra utility beyond just the attack.
             mythic_kingslime: { id: 'mythic_kingslime', rarity: 'mythic', bossId: 'kingslime', name: 'Royal Jelly',
                 desc: 'Periodically summons two angry gacha slimes at your sides, mimicking King Slime\'s own Slime Split - they home in on the nearest enemy and attack.' },
-            mythic_desertlion: { id: 'mythic_desertlion', rarity: 'mythic', bossId: 'desertlion', name: 'Sandstorm Mane',
-                desc: 'Charges up a ring, then stays ready - double tap to plant yourself in place, swipe to aim, and unleash a short invincible Sand Pounce dash that kills every enemy in your path.' },
+            mythic_desertlion: { id: 'mythic_desertlion', rarity: 'mythic', bossId: 'desertlion', name: 'Sandstorm Horns',
+                desc: 'Charges up a ring, then stays ready - double tap to plant yourself in place, swipe to aim, and unleash a short invincible Sand Charge dash that kills every enemy in your path.' },
             mythic_yeti: { id: 'mythic_yeti', rarity: 'mythic', bossId: 'yeti', name: 'Frostbound Horn',
                 desc: 'Periodically unleashes the Yeti\'s own Frost Breath - a spray of many icicle shards toward wherever you\'re heading.' },
             mythic_lavaworm: { id: 'mythic_lavaworm', rarity: 'mythic', bossId: 'lavaworm', name: 'Molten Core',
@@ -2052,10 +2825,10 @@
             hopper:   { name: 'Frog', desc: 'Targets a fly and jumps high to catch it. Apparently can’t swim.' },
             mimic:    { name: 'Chest Mimic', desc: 'Curiosity killed the… Slime?' },
             boss_kingslime:  { name: 'King Slime',   desc: 'The bloated ruler of the forest. Splits itself into lesser slimes when angered. 3 hits to topple.' },
-            boss_desertlion: { name: 'Desert Lion',  desc: 'A great maned beast of the dunes. Roars a shockwave and pounces like a sandstorm. 3 hits to topple.' },
+            boss_desertlion: { name: 'Desert Minotaur',  desc: 'A hulking, horned brute of the dunes. Bellows a shockwave and charges like a sandstorm. 3 hits to topple.' },
             boss_yeti:       { name: 'Yeti',         desc: 'A towering ice-beast of the frozen peaks. Slams the ground and breathes killing frost. 3 hits to topple.' },
             boss_lavaworm:   { name: 'Lava Worm',    desc: 'Burrows through molten rock, erupting in showers of magma. 3 hits to topple.' },
-            boss_crocodile:  { name: 'Crocodile',    desc: 'An ancient swamp predator. Death-rolls and snaps with a bone-crushing bite. 3 hits to topple.' },
+            boss_crocodile:  { name: 'Crocodile',    desc: 'An ancient, crowned swamp predator. Death-rolls through the water, ambushes from hidden pools, and snaps with a bone-crushing bite. 3 hits to topple.' },
             boss_bear:       { name: 'Bear',         desc: 'A hulking woodland brute. Pounds the earth and swipes with claws like falling branches. 3 hits to topple.' }
         };
 
@@ -2102,7 +2875,7 @@
         }
         // Yeti's Avalanche Charge trail hazard (iceBlocks): besides bursting when the player
         // walks into one directly, it should also go off if the player damages it any other
-        // way - shuriken, plasma beam, icicles, powerups, companions, the Lion dash, etc.
+        // way - shuriken, plasma beam, icicles, powerups, companions, the Minotaur dash, etc.
         // Every one of those call sites hits this same helper instead of duplicating the
         // burst logic. Checks every block in hitRadius (not just the first) so a wide-area
         // attack can pop more than one at once.
@@ -2147,14 +2920,14 @@
                 ]
             },
             desertlion: {
-                themeIndex: 1, radius: 42, speedMult: 1.05, name: 'Desert Lion',
-                bodyColor: '#d9a441', darkColor: '#8a5a1e', crownColor: '#6b3f16',
+                themeIndex: 1, radius: 42, speedMult: 1.05, name: 'Desert Minotaur',
+                bodyColor: '#d9a441', darkColor: '#8a5a1e', crownColor: '#e8dcc0',
                 attacks: [
-                    { // Sand Pounce - fast charge toward the player, dasher-style. Direction is
+                    { // Sand Charge - fast charge toward the player, dasher-style. Direction is
                       // locked in and telegraphed the instant the wind-up starts (see the dash
                       // flag handling in the boss telegraph-state update / draw code) rather
                       // than only decided the instant it fires.
-                        name: 'Sand Pounce', telegraph: 65, duration: 55, cooldown: 150, dash: true,
+                        name: 'Sand Charge', telegraph: 65, duration: 55, cooldown: 150, dash: true,
                         exec: (e) => { playSFX('bull_charge'); },
                         tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 3.2; e.y += Math.sin(e.chargeAngle) * e.speed * 3.2; }
                     },
@@ -2162,8 +2935,8 @@
                         name: 'Roar Shockwave', telegraph: 75, duration: 20, cooldown: 170,
                         exec: (e) => { playSFX('lightning'); bossFireRadial(e, 10, 3.6, 7); screenShake = Math.max(screenShake, 8); }
                     },
-                    { // Sandstorm Claws - quick 3-swipe fan of close-range shots
-                        name: 'Sandstorm Claws', telegraph: 50, duration: 30, cooldown: 130,
+                    { // Sandstorm Fists - quick 3-swipe fan of close-range shots
+                        name: 'Sandstorm Fists', telegraph: 50, duration: 30, cooldown: 130,
                         exec: (e) => { e._clawTicks = 3; },
                         tick: (e) => { if (e._clawTicks > 0 && e.stateTimer % 10 === 0) { bossFireAimedSpread(e, 3, 0.8, 5, 8); e._clawTicks--; playSFX('enemy_hit'); } }
                     }
@@ -2214,22 +2987,76 @@
             },
             crocodile: {
                 themeIndex: 4, radius: 44, speedMult: 0.85, name: 'Crocodile',
-                bodyColor: '#5a7a2e', darkColor: '#33471a', crownColor: '#dfe6b0',
+                // crownColor is the actual gold of his crown now (see the crocodile
+                // silhouette below) - the back-armor scutes reuse darkColor instead.
+                bodyColor: '#5a7a2e', darkColor: '#33471a', crownColor: '#d4af37',
+                // The Crocodile alone gets a 4th attack, Swamp Ambush, built specifically
+                // around non-sky hazard tiles (see nearestHazardTile) - every other boss
+                // still has exactly 3. Death Roll also leans on hazard tiles when one's
+                // close by. See the isAmbush/lockChargeAngle hooks consumed in the main
+                // boss update loop, and the isOffMapSky exceptions that let this boss alone
+                // stand on a hazard tile instead of being steered back off it.
                 attacks: [
-                    { // Tail Sweep - a 180 degree sweeping arc of projectiles
-                        name: 'Tail Sweep', telegraph: 65, duration: 35, cooldown: 150,
-                        exec: (e) => { e._sweepStep = 0; e._sweepBase = Math.atan2(player.worldY - e.y, player.worldX - e.x) - Math.PI / 2; },
-                        tick: (e) => { if (e.stateTimer % 6 === 0 && e._sweepStep <= 6) { let a = e._sweepBase + (e._sweepStep / 6) * Math.PI; projectiles.push({ x: e.x, y: e.y, vx: Math.cos(a) * 4, vy: Math.sin(a) * 4, radius: 8, bossId: e.bossId }); e._sweepStep++; } }
+                    { // Tail Sweep - a real melee tail-whip: the tail arcs through a wide
+                      // swing right around the boss's own body, hitting anything caught in
+                      // its reach, rather than flinging projectiles off across the screen.
+                        name: 'Tail Sweep', telegraph: 55, duration: 55, cooldown: 150,
+                        exec: (e) => { e._sweepBase = e.angle - Math.PI * 0.7; e._sweepStep = 0; playSFX('enemy_hit'); },
+                        tick: (e) => {
+                            if (e._sweepStep <= 6 && e.stateTimer % 6 === 0) {
+                                let a = e._sweepBase + (e._sweepStep / 6) * Math.PI * 1.4;
+                                let reach = e.radius * 1.6;
+                                bossTelegraphAoe(e, e.x + Math.cos(a) * reach, e.y + Math.sin(a) * reach, e.radius * 0.7, 10);
+                                e._sweepStep++;
+                            }
+                        }
                     },
-                    { // Death Roll - short charge that ends in a full-ring burst
+                    { // Death Roll - real crocodiles death-roll best in water: the charge
+                      // bends toward the nearest patch of swamp water if one's close by
+                      // (locked in at the very first telegraph frame via lockChargeAngle,
+                      // same fairness window as any other charge), and the roll's ending
+                      // burst is bigger and splashier landing in water than stuck on dry land.
                         name: 'Death Roll', telegraph: 60, duration: 45, cooldown: 170, dash: true,
+                        lockChargeAngle: (e) => {
+                            let wet = nearestHazardTile(e.x, e.y, 300);
+                            e._rollWet = !!wet;
+                            return wet ? Math.atan2(wet.y - e.y, wet.x - e.x) : Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                        },
                         exec: (e) => { playSFX('bull_charge'); },
-                        tick: (e) => { if (e.stateTimer < 30) { e.x += Math.cos(e.chargeAngle) * e.speed * 2.6; e.y += Math.sin(e.chargeAngle) * e.speed * 2.6; } if (e.stateTimer === 30) { bossFireRadial(e, 8, 3.4, 8); screenShake = Math.max(screenShake, 8); playSFX('lightning'); } }
+                        tick: (e) => {
+                            if (e.stateTimer < 30) { e.x += Math.cos(e.chargeAngle) * e.speed * 2.6; e.y += Math.sin(e.chargeAngle) * e.speed * 2.6; }
+                            if (e.stateTimer === 30) {
+                                if (e._rollWet) { spawnSplash(e.x, e.y); bossFireRadial(e, 10, 3.8, 8); screenShake = Math.max(screenShake, 11); }
+                                else { bossFireRadial(e, 7, 3.2, 7); screenShake = Math.max(screenShake, 8); }
+                                playSFX('lightning');
+                            }
+                        }
                     },
-                    { // Snap Lunge - quick short dash bite with a brief AOE at the mouth
-                        name: 'Snap Lunge', telegraph: 45, duration: 20, cooldown: 120, dash: true,
-                        exec: (e) => { bossTelegraphAoe(e, e.x + Math.cos(e.chargeAngle) * 70, e.y + Math.sin(e.chargeAngle) * 70, 55, 20); },
+                    { // Bone-Crushing Bite (formerly Snap Lunge) - a quick dash forward with
+                      // the jaws snapping shut in an AOE right at the snout, matching this
+                      // boss's own bestiary line: "snaps with a bone-crushing bite".
+                        name: 'Bone-Crushing Bite', telegraph: 45, duration: 20, cooldown: 120, dash: true,
+                        exec: (e) => { bossTelegraphAoe(e, e.x + Math.cos(e.chargeAngle) * 70, e.y + Math.sin(e.chargeAngle) * 70, 55, 20); playSFX('enemy_hit'); },
                         tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 1.6; e.y += Math.sin(e.chargeAngle) * e.speed * 1.6; }
+                    },
+                    { // Swamp Ambush - submerges into the nearest hazard pool near the
+                      // player and erupts back out right on top of it: the boss's signature
+                      // use of non-sky hazard tiles. isAmbush drives the sink/resurface fade
+                      // in drawBossGeneric. Falls back to a quick lurking snap in place, with
+                      // no teleport, on a level with no hazard tiles in reach.
+                        name: 'Swamp Ambush', telegraph: 65, duration: 26, cooldown: 190, isAmbush: true,
+                        exec: (e) => {
+                            let spot = nearestHazardTile(player.worldX, player.worldY, 650);
+                            if (spot) {
+                                e.x = spot.x; e.y = spot.y;
+                                spawnSplash(e.x, e.y);
+                                bossTelegraphAoe(e, e.x, e.y, e.radius * 1.5, 20);
+                                bossFireRadial(e, 8, 3.2, 7);
+                            } else {
+                                bossTelegraphAoe(e, player.worldX, player.worldY, e.radius * 1.2, 20);
+                            }
+                            playSFX('enemy_hit'); screenShake = Math.max(screenShake, 9);
+                        }
                     }
                 ]
             },
@@ -3058,6 +3885,15 @@
             return !!tile && tile.type === 'land';
         }
 
+        // True only for the open sky beyond the map's edge (no tile at all) - unlike isSafe,
+        // this does NOT count a non-sky hazard hole as unsafe. Used to let the Crocodile boss
+        // prowl and submerge in water/lava/ice pools (see the boss safety-net exceptions in the
+        // update loop) while still never letting it drift off the map entirely.
+        function isOffMapSky(x, y) {
+            let h = pixelToAxial(x, y);
+            return !hexTiles.get(hexKey(h.q, h.r));
+        }
+
         // Finds the closest land-tile center to (x,y) - used to anchor things that must never
         // sit over a hazard/hole (e.g. Royal Jelly's patrol slimes) to solid ground even when
         // summoned from a spot that happens to be over a hazard. Falls back to (x,y) itself in
@@ -3071,6 +3907,21 @@
                 if (d < bestD) { bestD = d; best = t; }
             }
             return best ? { x: best.x, y: best.y } : { x, y };
+        }
+
+        // Finds the closest non-sky hazard hole (water/lava/ice, never the outer sky) to
+        // (x,y), within maxDist if given. Used by the Crocodile boss to bend its Death Roll
+        // toward nearby swamp water and to pick where its Swamp Ambush resurfaces. Returns
+        // null if the level has no hazard tiles within range (or at all), so callers always
+        // need a fallback for that case.
+        function nearestHazardTile(x, y, maxDist) {
+            let best = null, bestD = maxDist || Infinity;
+            for (let i = 0; i < holeHexList.length; i++) {
+                let t = holeHexList[i];
+                let d = dist(x, y, t.x, t.y);
+                if (d < bestD) { bestD = d; best = t; }
+            }
+            return best;
         }
 
         // Docks now double as safe ground: their deck juts out over a hazard hole (see
@@ -3185,7 +4036,7 @@
         // boss's own attack, plus one small utility effect beyond just damage. Ticked from a
         // per-id counter on `player.mythicTimers` (reset in resetGame's player fields reset).
         // ==========================================
-        // Lion mythic item (Sandstorm Mane) timing. Unlike the other mythic items this one
+        // Minotaur mythic item (Sandstorm Horns) timing. Unlike the other mythic items this one
         // isn't a recurring auto-fire proc: a ring around the player fills over
         // LION_RING_CHARGE_TIME seconds (like Plasma Beam) and then just stays full/ready
         // instead of firing on its own. Double-tapping while ready starts a short
@@ -3231,7 +4082,7 @@
                     playSFX('enemy_hit');
                 }
             },
-            // mythic_desertlion (Sandstorm Mane) intentionally has no entry here - it's not a
+            // mythic_desertlion (Sandstorm Horns) intentionally has no entry here - it's not a
             // recurring auto-fire proc like the others. Its ring-charge/aim/dash logic is
             // ticked directly in update() and triggered by handleLionDoubleTap().
             mythic_yeti: {
@@ -6359,7 +7210,7 @@
             const touch = e.touches ? e.touches[0] : e;
             let dx = touch.clientX - lastX; let dy = touch.clientY - lastY;
             let dir = userSettings.invert ? -1 : 1;
-            // Mythic: Sandstorm Mane (Lion) aim window - the player is held in place
+            // Mythic: Sandstorm Horns (Minotaur) aim window - the player is held in place
             // (lionAimTimer tick in update() pins vx/vy to 0), so swipes here redirect the
             // charging dash's angle instead of moving the player.
             if (player.lionAimTimer > 0) {
@@ -6391,9 +7242,9 @@
             lastTapTime = now;
         }, { passive: false, capture: true });
 
-        // --- Mythic: Sandstorm Mane (Lion) gesture detection. Tracked independently of the
+        // --- Mythic: Sandstorm Horns (Minotaur) gesture detection. Tracked independently of the
         // drag-to-move handlers above so it still works while gameState is 'paused' for one of
-        // the lion's own one-time tutorial popups (normal movement/dragging requires 'playing',
+        // the Minotaur's own one-time tutorial popups (normal movement/dragging requires 'playing',
         // but dismissing those popups shouldn't). A release counts as a "tap" if it moved only a
         // little and happened quickly (two of those within 350ms is a double tap); a release
         // that moved further counts as a "swipe" instead. The "Double tap to dash!" tutorial is
@@ -6459,7 +7310,7 @@
         window.addEventListener('mouseup', lionTapEnd);
         window.addEventListener('touchend', lionTapEnd);
 
-        // Starts the Sandstorm Mane aim window: player is frozen and defaults to facing their
+        // Starts the Sandstorm Horns aim window: player is frozen and defaults to facing their
         // current heading, then can swipe (see handleMove) to redirect before the dash fires.
         function startLionAim() {
             player.lionAimMax = LION_AIM_FRAMES;
@@ -6469,7 +7320,7 @@
             playSFX('bull_charge');
         }
 
-        // Dismisses whichever lion tutorial popup is currently pausing the game and resumes
+        // Dismisses whichever Minotaur dash tutorial popup is currently pausing the game and resumes
         // play. Dismissing "Double tap to dash!" doubles as the triggering double-tap, so it
         // also starts the aim window; dismissing "Swipe to change dash direction!" just lets the
         // aim window (already mid-way through) resume counting down from where it was frozen.
@@ -6485,7 +7336,7 @@
         // Double-tap handler: dismisses the "Double tap to dash!" popup if it's up (see
         // dismissLionTutorial), ignores double taps while "Swipe to change dash direction!" is up
         // (that one only listens for a swipe - see lionTapEnd), otherwise triggers the dash
-        // normally once the ring is full and nothing else lion-related is already in progress.
+        // normally once the ring is full and nothing else dash-related is already in progress.
         function handleLionDoubleTap() {
             if (lionTutorialPause === 'ringfull') { dismissLionTutorial(); return; }
             if (lionTutorialPause) return;
@@ -6689,7 +7540,7 @@
                     // --- Mythic boss items: recurring attack-mimic procs (see updateMythicItems) ---
                     updateMythicItems();
 
-                    // --- Mythic: Sandstorm Mane (Lion) - ring charges like Plasma Beam but,
+                    // --- Mythic: Sandstorm Horns (Minotaur) - ring charges like Plasma Beam but,
                     // unlike Plasma Beam, stays full/ready once charged instead of auto-firing.
                     // handleLionDoubleTap() (bound to the window tap listeners further down)
                     // is what actually starts the aim window once the ring is full. Charge
@@ -7075,7 +7926,11 @@
                                 if (dToPlayer < 260) { e.x -= Math.cos(targetAngle)*e.speed*0.6; e.y -= Math.sin(targetAngle)*e.speed*0.6; }
                                 else if (dToPlayer > 420) { e.x += Math.cos(targetAngle)*e.speed*0.6; e.y += Math.sin(targetAngle)*e.speed*0.6; }
                                 else { e.angle = targetAngle + Math.PI/2; e.x += Math.cos(e.angle)*e.speed*0.3; e.y += Math.sin(e.angle)*e.speed*0.3; }
-                                if (!isSafe(e.x, e.y)) { e.x -= Math.cos(targetAngle)*e.speed; e.y -= Math.sin(targetAngle)*e.speed; }
+                                // The Crocodile is exempt from the land-only rule below (it's a
+                                // swamp predator, at home in non-sky hazard tiles) - it only gets
+                                // steered back here if it's drifted into the actual off-map sky.
+                                let offLimits = (e.bossId === 'crocodile') ? isOffMapSky(e.x, e.y) : !isSafe(e.x, e.y);
+                                if (offLimits) { e.x -= Math.cos(targetAngle)*e.speed; e.y -= Math.sin(targetAngle)*e.speed; }
 
                                 e.stateTimer++;
                                 if (e.stateTimer >= (e.cooldownFrames || 120)) {
@@ -7095,16 +7950,23 @@
                             } else if (e.state === 'telegraph') {
                                 // Hold roughly in place, facing the player, while the tell plays.
                                 e.angle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
-                                // Dash-type attacks (Sand Pounce, Avalanche Charge, Death Roll,
-                                // Snap Lunge, Charge Swipe) lock their charge direction on the
-                                // very first telegraph frame - rather than only deciding it the
+                                // Dash-type attacks (Sand Charge, Avalanche Charge, Death Roll,
+                                // Bone-Crushing Bite, Charge Swipe) lock their charge direction on
+                                // the very first telegraph frame - rather than only deciding it the
                                 // instant the charge fires - so the warning line drawn below has
                                 // the whole telegraph window to read and dodge sideways instead
                                 // of the boss being able to correct its aim right up to the last
-                                // possible moment.
+                                // possible moment. An attack can override the default "aim at the
+                                // player" lock with its own lockChargeAngle(e) - e.g. Death Roll
+                                // bends toward nearby swamp water instead - while still only ever
+                                // deciding it once, at this same frame-0 fairness window.
                                 if (e.currentAttack.dash && e.stateTimer === 0) {
-                                    e.chargeAngle = Math.atan2(player.worldY - e.y, player.worldX - e.x);
+                                    e.chargeAngle = e.currentAttack.lockChargeAngle ? e.currentAttack.lockChargeAngle(e) : Math.atan2(player.worldY - e.y, player.worldX - e.x);
                                 }
+                                // Swamp Ambush: a splash right as the boss starts sinking out of
+                                // sight, matched by the fade-out drawn in drawBossGeneric and the
+                                // resurfacing splash exec() fires later at the new spot.
+                                if (e.currentAttack.isAmbush && e.stateTimer === 0) { spawnSplash(e.x, e.y); }
                                 e.stateTimer++;
                                 if (e.stateTimer >= e.currentAttack.telegraph) {
                                     e.currentAttack.exec(e);
@@ -7121,7 +7983,12 @@
                             }
                             // Bosses never fall into hazard holes/off the map from their own
                             // movement (unlike the fragile wanderer/dasher) - just steer back.
-                            if (!isSafe(e.x, e.y)) {
+                            // Exception: the Crocodile is a swamp predator and is allowed to
+                            // prowl and submerge in non-sky hazard tiles (see Death Roll/Swamp
+                            // Ambush above) - it's only steered back if it drifts into the open
+                            // sky beyond the map's edge instead.
+                            let strandedOffLimits = (e.bossId === 'crocodile') ? isOffMapSky(e.x, e.y) : !isSafe(e.x, e.y);
+                            if (strandedOffLimits) {
                                 let backAngle = Math.atan2(0 - e.y, 0 - e.x);
                                 e.x += Math.cos(backAngle) * e.speed; e.y += Math.sin(backAngle) * e.speed;
                             }
@@ -7229,7 +8096,7 @@
                     // to player.vx/vy every frame, so no separate cooldown bookkeeping is needed.
                     let spectreStacks = runItems.spectre || 0;
                     let spectreBoost = spectreStacks > 0 ? 1.06 + (spectreStacks - 1) * 0.03 : 0;
-                    // The Lion dash barrels straight through trees/fences the same way Spectre's
+                    // The Minotaur dash barrels straight through trees/fences the same way Spectre's
                     // pass-through does below - it's a short invincible charge, getting shoved
                     // sideways by a tree mid-dash would feel terrible and undercut the "kills
                     // everything in your path" promise.
@@ -8913,8 +9780,8 @@
             }
 
             // Boss dash-charge telegraphs: a warning line down the exact path a charging boss
-            // is about to dash along (Sand Pounce, Avalanche Charge, Death Roll, Snap Lunge,
-            // Charge Swipe - see the `dash` flag on their bossDB attack defs). The direction is
+            // is about to dash along (Sand Charge, Avalanche Charge, Death Roll, Bone-Crushing
+            // Bite, Charge Swipe - see the `dash` flag on their bossDB attack defs). The direction is
             // locked in on the first telegraph frame (see the boss update loop above) rather
             // than tracked live, so this line shows exactly where the charge will go with the
             // full telegraph window to dodge sideways out of it.
@@ -9586,7 +10453,7 @@
                         ctx.fillStyle = '#fff6d0'; ctx.beginPath(); ctx.arc(0, 0, p.radius + 10 + shieldPulse, 0, Math.PI*2); ctx.fill();
                         ctx.restore();
                     }
-                    // Mythic: Sandstorm Mane (Lion) - a red ring (drawn a bit further out than
+                    // Mythic: Sandstorm Horns (Minotaur) - a red ring (drawn a bit further out than
                     // Plasma Beam's pink one so the two never overlap) fills as the dash
                     // charges, then stays full/pulsing once ready instead of draining on its
                     // own - double-tapping is what actually spends it (see

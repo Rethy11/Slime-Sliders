@@ -5794,6 +5794,10 @@
         // else - restored on every fresh startGame() and left in place through Game Over).
         function updateCornerRightIconForTitle(isTitle) {
             document.getElementById('almanac-icon-img').src = iconDataURL(isTitle ? 'question' : 'trophy', 32);
+            // The red notif dot belongs to the Almanac/trophy state only - it has nothing to do
+            // with the title screen's "?" info button, so re-run the dot check whenever the
+            // icon flips (it self-hides via the isTitle guard in updateAlmanacNotifDots).
+            updateAlmanacNotifDots();
         }
 
         function toggleAlmanac() {
@@ -9901,7 +9905,10 @@
             if (enemiesDot) enemiesDot.classList.toggle('show', enemiesNew);
             if (itemsDot) itemsDot.classList.toggle('show', itemsNew);
             if (achievementsDot) achievementsDot.classList.toggle('show', achievementsNew);
-            if (cornerDot) cornerDot.classList.toggle('show', enemiesNew || itemsNew || achievementsNew);
+            // gameState === 'title' means the corner icon is currently the "?" info button,
+            // not the Almanac trophy, so the dot must stay hidden there regardless of whether
+            // there's unseen Almanac content - it'll reappear once the icon flips back.
+            if (cornerDot) cornerDot.classList.toggle('show', gameState !== 'title' && (enemiesNew || itemsNew || achievementsNew));
         }
 
 

@@ -89,10 +89,16 @@
             },
             { // Bone-Crushing Bite (formerly Snap Lunge) - a quick dash forward with
               // the jaws snapping shut in an AOE right at the snout, matching this
-              // boss's own bestiary line: "snaps with a bone-crushing bite".
+              // boss's own bestiary line: "snaps with a bone-crushing bite". The AOE
+              // is telegraphed once in exec() at a fixed point 70px ahead of the
+              // boss's *starting* position - tick() only advances the boss for the
+              // first few frames of the dash (roughly that same 70px, at this
+              // attack's speed) rather than for the attack's full duration, so the
+              // boss's body doesn't keep sliding forward past where the bite AOE
+              // (and the open jaws) actually are.
                 name: 'Bone-Crushing Bite', telegraph: 45, duration: 20, cooldown: 120, dash: true,
                 exec: (e) => { bossTelegraphAoe(e, e.x + Math.cos(e.chargeAngle) * 70, e.y + Math.sin(e.chargeAngle) * 70, 55, 20); playSFX('enemy_hit'); },
-                tick: (e) => { e.x += Math.cos(e.chargeAngle) * e.speed * 1.6; e.y += Math.sin(e.chargeAngle) * e.speed * 1.6; }
+                tick: (e) => { if (e.stateTimer < 8) { e.x += Math.cos(e.chargeAngle) * e.speed * 1.6; e.y += Math.sin(e.chargeAngle) * e.speed * 1.6; } }
             },
             { // Swamp Ambush - submerges into the nearest hazard pool near the
               // player and erupts back out right on top of it: the boss's signature
@@ -189,8 +195,16 @@
 
         // Lower jaw - hinges open through the telegraph/attack (jawOpen), or draws
         // as a simple closed-mouth line otherwise.
+        //
+        // `drop` is a plain fraction of r (0 .. ~0.32), NOT pre-multiplied by r -
+        // every use below already wraps it in `r * (const + drop)` alongside all the
+        // other fractional geometry constants. (Previously this was `jawOpen * r *
+        // 0.32`, which got multiplied by r a *second* time at every use site below,
+        // scaling the jaw drop with r² instead of r - on this boss's radius of 44
+        // that blew the open jaw out to several hundred pixels, reading as the mouth
+        // opening "infinitely" far down. Keeping it unitless here is the fix.)
         if (jawOpen > 0) {
-            let drop = jawOpen * r * 0.32;
+            let drop = jawOpen * 0.32;
             ctx.fillStyle = '#7a1e1e';
             ctx.beginPath();
             ctx.moveTo(r * 0.22, r * 0.02);

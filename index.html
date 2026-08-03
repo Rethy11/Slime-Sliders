@@ -10,8 +10,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Slime Sliders</title>
+
+    <!-- Open Graph / social link previews. og-image.PNG lives alongside index.html in the
+         rethy11.github.io/Slime-Sliders GitHub Pages repo, so it's referenced by its absolute
+         GitHub Pages URL (relative paths aren't reliably resolved by link-preview crawlers). -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Slime Sliders">
+    <meta property="og:description" content="Swipe to slide, swerve past hazards, and gobble your way to the goal — one squishy level at a time.">
+    <meta property="og:url" content="https://rethy11.github.io/Slime-Sliders/">
+    <meta property="og:image" content="https://rethy11.github.io/Slime-Sliders/og-image.PNG">
+    <meta property="og:image:alt" content="Slime Sliders">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Slime Sliders">
+    <meta name="twitter:description" content="Swipe to slide, swerve past hazards, and gobble your way to the goal — one squishy level at a time.">
+    <meta name="twitter:image" content="https://rethy11.github.io/Slime-Sliders/og-image.PNG">
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <!-- Space Grotesk (weight 600) is pulled in solely for the ported developer/studio splash
+         below - its credit line uses this exact typeface, unaltered, to match the studio's
+         other titles. Everything else on this page still uses Press Start 2P. -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Space+Grotesk:wght@600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="themes/legendary-onebit.css">
     <link rel="stylesheet" href="themes/legendary-corrupted.css">
 
@@ -28,7 +47,138 @@
         canvas { display: block; }
         canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
         .icon-img { width: 1em; height: 1em; vertical-align: middle; image-rendering: pixelated; }
-        
+
+        /* ===================== boot overlay — a one-time, first-run splash that sits on top of
+           everything (including the regular title screen below, which is left completely
+           untouched and is already sitting ready underneath). Tapping fades this to black,
+           swaps in a static "PLASTICINE GAMES" studio splash - exact palette, typography,
+           timing and SFX ported unaltered from the studio's other titles - plays a blink +
+           glitch-out beat, then fades away to reveal the regular title screen. ===================== */
+        .boot-screen{
+            position:fixed; inset:0; z-index:10000;
+            display:flex; flex-direction:column; align-items:center; justify-content:center;
+            background:
+              radial-gradient(ellipse at 30% -10%, rgba(255,255,255,0.06) 0%, transparent 55%),
+              rgba(10, 22, 14, 0.6);
+            backdrop-filter: blur(2px);
+            text-align:center;
+            padding:20px;
+            cursor:pointer;
+            opacity:1;
+            transition:opacity 0.6s ease;
+            border:none;
+            margin:0;
+            font-family:'Press Start 2P', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color:#fff;
+            -webkit-appearance:none;
+            appearance:none;
+            touch-action:none;
+            overflow:hidden;
+            width:100%;
+        }
+        .boot-screen.hide{ opacity:0; pointer-events:none; }
+
+        .boot-face{ display:flex; flex-direction:column; align-items:center; }
+        .boot-face h1{
+            font-size: clamp(1.3rem, 7vh, 2rem); margin:0; letter-spacing:1px; line-height:1.4;
+            text-shadow: 0 4px 0 rgba(0,0,0,0.5);
+            color:#fff;
+        }
+        .boot-face .boot-tag{
+            color:#cfe9d1; font-size:0.6rem; line-height:1.8;
+            margin:16px auto 0; max-width:290px;
+            text-shadow: 0 2px 0 rgba(0,0,0,0.5);
+        }
+        .boot-face .boot-tap{
+            margin-top:min(8vh, 56px);
+            color:var(--accent);
+            font-size:0.6rem;
+            letter-spacing:0.12em;
+            text-transform:uppercase;
+            animation:bootPulseTap 1.8s ease-in-out infinite;
+        }
+        @keyframes bootPulseTap{ 0%,100%{opacity:0.35;} 50%{opacity:1;} }
+
+        /* ---------- studio splash: exact palette/type/animation/timing of the Plasticine Games
+           bumper, ported unaltered - shared studio branding, not this game's own visual
+           identity, so it's dropped in wholesale rather than reskinned. ---------- */
+        .studio-face{
+            display:none;
+            flex-direction:column; align-items:center; justify-content:center;
+        }
+        .boot-screen.scene-studio{
+            background:
+              radial-gradient(circle at 18% 8%, rgba(232,163,61,0.10), transparent 45%),
+              radial-gradient(circle at 85% 92%, rgba(127,181,158,0.08), transparent 40%),
+              #201a2c;
+            backdrop-filter:none;
+        }
+        .boot-screen.scene-studio .boot-face{ display:none; }
+        .boot-screen.scene-studio .studio-face{ display:flex; }
+
+        .studio-face .eyes{ display:flex; justify-content:center; gap:8px; margin-bottom:10px; }
+        .studio-face .eyes span{
+            width:11px; height:11px; border-radius:50%;
+            background:#e8a33d;
+            box-shadow:0 0 10px rgba(232,163,61,0.7);
+        }
+        .studio-face .eyes.blink-once span{ animation:studioBlinkOnce 0.5s ease-in-out; }
+        .studio-face .eyes.blink-once span:nth-child(2){ animation-delay:0.15s; }
+        @keyframes studioBlinkOnce{ 0%,55%,100%{transform:scaleY(1);} 78%{transform:scaleY(0.12);} }
+
+        .studio-credit{
+            opacity:0;
+            margin-top:16px;
+            font-family:'Space Grotesk', sans-serif;
+            font-weight:600;
+            font-size:0.7rem;
+            letter-spacing:0.42em;
+            text-transform:uppercase;
+            color:#b7aecb;
+            transition:opacity 0.4s ease;
+        }
+        .studio-credit.show{ opacity:1; }
+
+        .studio-face .eyes.glitch-out,
+        .studio-credit.glitch-out{ animation:studioGlitchFade 0.7s steps(1) forwards; }
+        @keyframes studioGlitchFade{
+            0%{opacity:1; transform:translate(0,0) skew(0deg,0deg) scaleX(1); filter:none;}
+            5%{opacity:0.15; transform:translate(-7px,2px) skew(-6deg,0deg) scaleX(1.1); filter:hue-rotate(50deg) saturate(3);}
+            9%{opacity:1; transform:translate(5px,-3px) skew(4deg,1deg) scaleX(0.94); filter:none;}
+            13%{opacity:0.25; transform:translate(-4px,0) scaleX(1.12); filter:invert(0.2);}
+            18%{opacity:0.05; transform:translate(3px,3px); filter:none;}
+            23%{opacity:0.9; transform:translate(6px,1px) skew(-3deg,0deg); filter:hue-rotate(-40deg);}
+            28%{opacity:0.2; transform:translate(-8px,-2px) scaleX(0.9); filter:none;}
+            34%{opacity:0.8; transform:translate(2px,3px) skew(5deg,0deg); filter:saturate(4);}
+            40%{opacity:0.1; transform:translate(-3px,0); filter:none;}
+            47%{opacity:0.7; transform:translate(4px,-1px) scaleX(1.08); filter:invert(0.15);}
+            53%{opacity:0.03; transform:translate(-6px,2px); filter:none;}
+            60%{opacity:0.6; transform:translate(3px,0) skew(-4deg,0deg); filter:hue-rotate(70deg);}
+            67%{opacity:0.12; transform:translate(-2px,1px); filter:none;}
+            74%{opacity:0.45; transform:translate(5px,-2px) scaleX(0.95); filter:none;}
+            82%{opacity:0.06; transform:translate(-1px,1px); filter:invert(0.3);}
+            90%{opacity:0.25; transform:translate(1px,0); filter:none;}
+            96%{opacity:0.02; transform:translate(0,0);}
+            100%{opacity:0; transform:translate(0,0) skew(0deg,0deg) scaleX(1); filter:none;}
+        }
+
+        /* fade-to-black / fade-from-black transition layer between the two scenes */
+        .boot-blackout{
+            position:absolute; inset:0; z-index:2;
+            background:#000;
+            opacity:0;
+            pointer-events:none;
+            transition:opacity 0.45s ease;
+        }
+        .boot-blackout.show{ opacity:1; }
+
+        @media (prefers-reduced-motion: reduce){
+            .boot-face .boot-tap{ animation:none !important; }
+            .studio-face .eyes.blink-once span,
+            .studio-face .eyes.glitch-out,
+            .studio-credit.glitch-out{ animation:none !important; }
+        }
+
         #title-screen, #game-over-screen { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 30, 20, 0.7); backdrop-filter: blur(4px); display: flex; flex-direction: column; justify-content: flex-start; align-items: center; z-index: 20; color: white; text-align: center; padding-bottom: 90px; }
         .menu-header { padding-top: 8vh; }
         .menu-buttons { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
@@ -547,7 +697,23 @@
 
 </head>
 <body>
-    <div id="title-screen">
+    <!-- One-time boot overlay: tap fades to black, then the ported (unaltered) developer
+         splash plays, then fades away to reveal the regular title screen below, which this
+         overlay does not modify in any way. -->
+    <button type="button" class="boot-screen" id="bootScreen" aria-label="Tap to play">
+        <div class="boot-face" id="bootFace">
+            <h1>SLIME SLIDERS</h1>
+            <p class="boot-tag">Swipe to slide, swerve past hazards, and gobble your way to the goal &mdash; one squishy level at a time.</p>
+            <div class="boot-tap">tap to begin</div>
+        </div>
+        <div class="studio-face" id="studioFace">
+            <div class="eyes" id="studioEyes"><span></span><span></span></div>
+            <div class="studio-credit" id="studioCredit">PLASTICINE GAMES</div>
+        </div>
+        <div class="boot-blackout" id="bootBlackout"></div>
+    </button>
+
+    <div id="title-screen" style="display:none;">
         <div class="menu-header">
             <h1>SLIME SLIDERS</h1>
             <p>Swipe to move. Collect coins to unlock the Goal!</p>
@@ -2051,6 +2217,13 @@
         let audioGraphReady = false;
         let musicGainMaster, gainNormal, gainFast, sfxGainBus;
 
+        // Kept muted (silently playing, so nothing about unlocking/starting it changes) from the
+        // very first tap until the boot overlay's developer splash finishes and the title screen
+        // is revealed - see revealBootMusic(), called from dismissBootScreen(). Music itself still
+        // starts on the tap (setupAudioGraph/play() below), same as before, so autoplay unlocking
+        // is unaffected; only the audible fade-in is delayed.
+        let bootMusicHeld = true;
+
         // Background music: one file per theme/level track, same order as `themes`/level index.
         const musicFiles = ['audio/forest.mp3', 'audio/desert.mp3', 'audio/snow.mp3', 'audio/volcano.mp3', 'audio/swamp.mp3', 'audio/autumn.mp3'];
         // Matching "final ten seconds" danger stinger per track. These are separate, pre-made
@@ -2097,7 +2270,7 @@
             musicGainMaster.connect(actx.destination);
 
             gainNormal = actx.createGain();
-            gainNormal.gain.value = 1;
+            gainNormal.gain.value = bootMusicHeld ? 0 : 1;
             gainNormal.connect(musicGainMaster);
 
             gainFast = actx.createGain();
@@ -2112,6 +2285,20 @@
             sfxGainBus.connect(actx.destination);
 
             audioGraphReady = true;
+        }
+
+        // Fades music audibly in once the boot overlay's developer splash is done (called from
+        // dismissBootScreen). Music has been playing silently since the initial tap the whole
+        // time - this just ramps gainNormal up from 0, same node setMusicDanger already ramps
+        // for its own crossfade, so it stays consistent with whatever danger-state gain it should
+        // land on rather than assuming 1.
+        function revealBootMusic() {
+            if (!bootMusicHeld) return;
+            bootMusicHeld = false;
+            if (!audioGraphReady) return;
+            let now = actx.currentTime;
+            gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(gainNormal.gain.value, now);
+            gainNormal.gain.linearRampToValueAtTime(musicDangerActive ? 0 : 1, now + 0.5);
         }
 
         // Loads the normal track and starts it immediately; loads (but does not play) its
@@ -2132,7 +2319,7 @@
             dangerFadeToken++;
             if (audioGraphReady) {
                 let now = actx.currentTime;
-                gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(1, now);
+                gainNormal.gain.cancelScheduledValues(now); gainNormal.gain.setValueAtTime(bootMusicHeld ? 0 : 1, now);
                 gainFast.gain.cancelScheduledValues(now); gainFast.gain.setValueAtTime(0, now);
                 musicPlayerFast.pause();
                 musicPlayerNormal.play().catch(() => {});
@@ -6313,6 +6500,10 @@
             if (coinFlushTimer >= 30) { coinFlushTimer = 0; flushCoinsIfDirty(); }
 
             if (gameState === 'playing' || gameState === 'title') {
+                // Attract-mode: while the boot screen's tap-to-begin face is still up, drive the
+                // idle title-screen slime around on its own (see updateAttractDemo below) so the
+                // boot overlay has real gameplay visible behind it instead of a static scene.
+                if (gameState === 'title' && attractMode) updateAttractDemo();
                 player.worldX += player.vx; player.worldY += player.vy; player.vx *= friction; player.vy *= friction;
                 if (Math.abs(player.vx) + Math.abs(player.vy) > 0.3) player.facing = Math.atan2(player.vy, player.vx);
                 if (!isDragging) { player.jiggleForceX *= -0.8; player.jiggleForceY *= -0.8; }
@@ -9892,6 +10083,315 @@
 
             requestAnimationFrame(gameLoop);
         }
+
+        /* =========================================================
+           BOOT OVERLAY
+           A one-time splash that plays on first load, on top of the regular (untouched)
+           title screen. Tap fades the boot face to black, swaps in a static "PLASTICINE
+           GAMES" studio splash, blinks once, glitches out, then fades away to reveal the
+           title screen underneath - which has been sitting ready the whole time. The SFX
+           and timing in this section are ported directly and left unaltered; only
+           ensureBootActx() is adapted to reuse this game's own shared audio graph/volume
+           setting instead of a standalone context.
+        ========================================================= */
+        function ensureBootActx(){
+            if (userSettings.sfxVol <= 0) return null;
+            if (!audioGraphReady) setupAudioGraph();
+            return actx;
+        }
+
+        // a soft, rounded "marble keyboard" style thock: filtered sine/triangle body with a
+        // very brief noise-click transient on top for tactility.
+        function bootThock(opts){
+            const freq = opts.freq !== undefined ? opts.freq : 220;
+            const dur = opts.dur !== undefined ? opts.dur : 0.1;
+            const gain = opts.gain !== undefined ? opts.gain : 0.22;
+            const type = opts.type !== undefined ? opts.type : 'sine';
+            const filterFreq = opts.filterFreq !== undefined ? opts.filterFreq : 1800;
+            const click = opts.click !== undefined ? opts.click : true;
+            const glide = opts.glide !== undefined ? opts.glide : 0;
+            const c = ensureBootActx();
+            if(!c) return;
+            const now = c.currentTime;
+
+            const osc = c.createOscillator();
+            osc.type = type;
+            osc.frequency.setValueAtTime(freq, now);
+            if(glide) osc.frequency.exponentialRampToValueAtTime(Math.max(40,freq+glide), now+dur*0.9);
+
+            const filt = c.createBiquadFilter();
+            filt.type = 'lowpass';
+            filt.frequency.value = filterFreq;
+            filt.Q.value = 0.7;
+
+            const g = c.createGain();
+            g.gain.setValueAtTime(0, now);
+            g.gain.linearRampToValueAtTime(gain, now + 0.006);
+            g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+
+            osc.connect(filt); filt.connect(g); g.connect(c.destination);
+            osc.start(now);
+            osc.stop(now + dur + 0.02);
+
+            if(click){
+                // tiny high-passed noise tick for a crisp marble-like attack
+                const bufSize = Math.floor(c.sampleRate * 0.012);
+                const buf = c.createBuffer(1, bufSize, c.sampleRate);
+                const data = buf.getChannelData(0);
+                for(let i=0;i<bufSize;i++){ data[i] = (Math.random()*2-1) * (1 - i/bufSize); }
+                const noise = c.createBufferSource();
+                noise.buffer = buf;
+                const nf = c.createBiquadFilter();
+                nf.type = 'highpass';
+                nf.frequency.value = 3200;
+                const ng = c.createGain();
+                ng.gain.setValueAtTime(gain*0.5, now);
+                ng.gain.exponentialRampToValueAtTime(0.0001, now + 0.02);
+                noise.connect(nf); nf.connect(ng); ng.connect(c.destination);
+                noise.start(now);
+                noise.stop(now + 0.025);
+            }
+        }
+
+        // soft eyelid dip for the studio-splash blink - a low, round thock rather than a
+        // bright click, so it reads as a gentle blink not a UI tap
+        function bootBlink(){
+            bootThock({freq:300, dur:0.09, gain:0.12, type:'sine', filterFreq:1400, glide:-45, click:false});
+        }
+
+        // low, warm bulb-filament hum for the studio splash - two detuned low oscillators
+        // with a slow gain wobble, like a bulb warming up. Returns a handle with .stop() to
+        // fade it out on cue (e.g. when the glitch-out begins).
+        function bootBulbHumStart(){
+            const c = ensureBootActx();
+            if(!c) return null;
+            const now = c.currentTime;
+
+            const osc1 = c.createOscillator();
+            osc1.type = 'sine';
+            osc1.frequency.value = 88;
+            const osc2 = c.createOscillator();
+            osc2.type = 'triangle';
+            osc2.frequency.value = 88 * 1.5;
+
+            const filt = c.createBiquadFilter();
+            filt.type = 'lowpass';
+            filt.frequency.value = 480;
+            filt.Q.value = 0.4;
+
+            const g = c.createGain();
+            g.gain.setValueAtTime(0.0001, now);
+            g.gain.exponentialRampToValueAtTime(0.045, now + 0.5);
+
+            // gentle filament-style wobble
+            const lfo = c.createOscillator();
+            lfo.type = 'sine';
+            lfo.frequency.value = 5.5;
+            const lfoGain = c.createGain();
+            lfoGain.gain.value = 0.01;
+            lfo.connect(lfoGain);
+            lfoGain.connect(g.gain);
+
+            osc1.connect(filt); osc2.connect(filt); filt.connect(g); g.connect(c.destination);
+            osc1.start(now); osc2.start(now); lfo.start(now);
+
+            let stopped = false;
+            return {
+                stop(fadeDur){
+                    if(fadeDur === undefined) fadeDur = 0.25;
+                    if(stopped) return;
+                    stopped = true;
+                    const t = c.currentTime;
+                    g.gain.cancelScheduledValues(t);
+                    g.gain.setValueAtTime(g.gain.value, t);
+                    g.gain.exponentialRampToValueAtTime(0.0001, t + fadeDur);
+                    osc1.stop(t + fadeDur + 0.05);
+                    osc2.stop(t + fadeDur + 0.05);
+                    lfo.stop(t + fadeDur + 0.05);
+                }
+            };
+        }
+
+        // staticky, bug-zapper style burst for the studio-splash glitch-out: a stuttering
+        // noise bed plus a square-wave tone that jumps between erratic frequencies
+        function bootGlitchZap(){
+            const c = ensureBootActx();
+            if(!c) return;
+            const now = c.currentTime;
+            const dur = 0.7;
+
+            const bufSize = Math.floor(c.sampleRate * dur);
+            const buf = c.createBuffer(1, bufSize, c.sampleRate);
+            const data = buf.getChannelData(0);
+            for(let i=0;i<bufSize;i++){ data[i] = Math.random()*2-1; }
+            const noise = c.createBufferSource();
+            noise.buffer = buf;
+            const nf = c.createBiquadFilter();
+            nf.type = 'bandpass';
+            nf.frequency.value = 3200;
+            nf.Q.value = 0.7;
+            const ng = c.createGain();
+            ng.gain.setValueAtTime(0.0001, now);
+            const steps = 14;
+            for(let i=0;i<steps;i++){
+                const t = now + (i/steps)*dur;
+                const on = Math.random() > 0.3;
+                ng.gain.setValueAtTime(on ? (0.06 + Math.random()*0.09) : 0.0001, t);
+            }
+            ng.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+            noise.connect(nf); nf.connect(ng); ng.connect(c.destination);
+            noise.start(now);
+            noise.stop(now + dur + 0.02);
+
+            const osc = c.createOscillator();
+            osc.type = 'square';
+            const of = c.createBiquadFilter();
+            of.type = 'lowpass';
+            of.frequency.value = 2400;
+            const og = c.createGain();
+            og.gain.setValueAtTime(0.0001, now);
+            const freqs = [160, 950, 210, 1300, 120, 700, 90, 480];
+            freqs.forEach((f,i)=>{
+                const t = now + (i/freqs.length)*dur;
+                osc.frequency.setValueAtTime(f, t);
+                og.gain.setValueAtTime(0.08, t);
+                og.gain.exponentialRampToValueAtTime(0.015, t + (dur/freqs.length)*0.8);
+            });
+            og.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+            osc.connect(of); of.connect(og); og.connect(c.destination);
+            osc.start(now);
+            osc.stop(now + dur + 0.02);
+        }
+
+        /* ===================== attract-mode demo — while the boot face is up (before the
+           player taps), the title screen stays hidden (see #title-screen's inline
+           display:none) and this steers the already-idling title-state slime around the
+           already-generated level on its own: homing in on coins, then the goal, then
+           "advancing" to a freshly generated stage once it arrives, so it reads as the
+           real game actually being played rather than a static scene. It's purely cosmetic —
+           it flips items' own .collected flags and nudges the goal's own progress counter
+           directly instead of running them through the real playing-state pickup path, so no
+           currency, achievements, or best-level progress are ever touched. attractLevel is a
+           local counter that only ever feeds generateLevel() for stage variety and is swapped
+           in/out of the real `level` var for the instant of that one call, so the player's
+           actual saved progress (still level 1 at this point) is never altered. ===================== */
+        let attractMode = true;
+        let attractLevel = 1;
+        let attractRegenCooldown = 0;
+
+        function attractPickTarget(){
+            let nearest = null, nearestD = Infinity;
+            for (let i = 0; i < items.length; i++){
+                let it = items[i];
+                if (it.collected) continue;
+                let d = dist(player.worldX, player.worldY, it.x, it.y);
+                if (d < nearestD){ nearestD = d; nearest = it; }
+            }
+            if (nearest && goal.collected < goal.required) return nearest;
+            return goal.active ? goal : null;
+        }
+
+        function updateAttractDemo(){
+            let target = attractPickTarget();
+            if (target){
+                let dx = target.x - player.worldX, dy = target.y - player.worldY;
+                let d = Math.hypot(dx, dy) || 1;
+                let steer = 0.22;
+                player.vx += (dx / d) * steer;
+                player.vy += (dy / d) * steer;
+                let maxSpd = 6.5;
+                let sp = Math.hypot(player.vx, player.vy);
+                if (sp > maxSpd){ player.vx = player.vx / sp * maxSpd; player.vy = player.vy / sp * maxSpd; }
+            }
+
+            // Cosmetic pickup: matches the real collision radius, skips grantGold/markCoinsDirty.
+            for (let i = 0; i < items.length; i++){
+                let it = items[i];
+                if (it.collected) continue;
+                if (dist(player.worldX, player.worldY, it.x, it.y) < player.radius + it.radius){
+                    it.collected = true;
+                    goal.collected = Math.min(goal.required, goal.collected + 1);
+                }
+            }
+
+            if (attractRegenCooldown > 0) attractRegenCooldown--;
+            if (goal.active && goal.collected >= goal.required && attractRegenCooldown <= 0 &&
+                dist(player.worldX, player.worldY, goal.x, goal.y) < player.radius + goal.radius){
+                attractRegenCooldown = 90;
+                attractLevel++;
+                let savedLevel = level;
+                level = attractLevel;
+                player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0;
+                generateLevel();
+                level = savedLevel;
+            }
+        }
+
+        function stopAttractDemo(){
+            attractMode = false;
+            // Hand back a clean, real level-1 world so the now-revealed title screen (and
+            // whatever Play kicks off next) looks exactly like it always did pre-boot-overlay.
+            attractLevel = 1;
+            player.worldX = 0; player.worldY = 0; player.vx = 0; player.vy = 0;
+            generateLevel();
+        }
+
+        const bootScreenEl = document.getElementById('bootScreen');
+        const bootBlackoutEl = document.getElementById('bootBlackout');
+        const bootStudioEyesEl = document.getElementById('studioEyes');
+        const bootStudioCreditEl = document.getElementById('studioCredit');
+
+        function dismissBootScreen(){
+            stopAttractDemo();
+            revealBootMusic();
+            document.getElementById('title-screen').style.display = 'flex';
+            bootScreenEl.classList.add('hide');
+            bootScreenEl.addEventListener('transitionend', function(){
+                bootScreenEl.style.display = 'none';
+            }, { once:true });
+        }
+
+        function playBootIntro(){
+            if(window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+                dismissBootScreen();
+                return;
+            }
+
+            // 1) fade the boot face to black
+            bootBlackoutEl.classList.add('show');
+
+            let hum = null;
+
+            // 2) once black fully covers the screen, swap in the studio splash, fade back up
+            // into it, and start the bulb hum under the eyes
+            setTimeout(function(){
+                bootScreenEl.classList.add('scene-studio');
+                bootBlackoutEl.classList.remove('show');
+                hum = bootBulbHumStart();
+            }, 500);
+
+            // 3) the studio credit fades in below the (already-static) eyes
+            setTimeout(function(){ bootStudioCreditEl.classList.add('show'); }, 1150);
+
+            // 4) blink once
+            setTimeout(function(){
+                bootStudioEyesEl.classList.add('blink-once');
+                setTimeout(function(){ bootBlink(); }, 390);       // first eye closes at ~78% of its 0.5s animation
+                setTimeout(function(){ bootBlink(); }, 150 + 390); // second eye, offset by its 0.15s CSS delay
+            }, 1750);
+
+            // 5) glitch out
+            setTimeout(function(){
+                if(hum) hum.stop(0.15);
+                bootStudioEyesEl.classList.add('glitch-out');
+                bootStudioCreditEl.classList.add('glitch-out');
+                bootGlitchZap();
+            }, 2500);
+
+            // 6) fade into the (already-waiting) title screen
+            setTimeout(dismissBootScreen, 3300);
+        }
+        bootScreenEl.addEventListener('click', playBootIntro, { once:true });
 
         // Generate the  first level immediately so it's fully ready the moment the player taps
         // Play, instead of building it inside the click handler where any delay is felt as

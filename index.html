@@ -4521,8 +4521,23 @@
                 window.addEventListener('deviceorientation', handleDeviceTilt);
             }
         }
+        // PERF: every per-frame "what's visible" scan (computeVisibleLandTiles, drawHazardHoles,
+        // the tree/decoration/enemy culling loops in draw(), isNearScreen checks in update()) does
+        // work roughly proportional to canvas.width * canvas.height, because that's how big a
+        // world-space slice the camera shows. Previously canvas.width/height were set to the raw
+        // window size, so a large desktop monitor (e.g. 1920x1080, ~2.07M px) was forcing several
+        // times more of this per-frame work than a phone screen (e.g. ~390x844, ~0.33M px) - the
+        // same code, just with a much bigger "how much of the world do I need to check" budget.
+        // Capping the logical resolution here keeps that budget bounded on big screens while
+        // leaving small screens (phones) completely untouched, since scale is never > 1. The
+        // on-screen displayCanvas still fills the whole window - the existing renderPixelated()
+        // pipeline already stretches the smaller offscreen buffer up to fill it, exactly the way
+        // it already stretches pixelCanvas up to displayCanvas for the chunky-pixel look.
+        const MAX_LOGICAL_PIXELS = 1280 * 800; // lower this (e.g. 960*600) if it's still heavy
         function resize() {
-            canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+            let w = window.innerWidth, h = window.innerHeight;
+            let scale = Math.min(1, Math.sqrt(MAX_LOGICAL_PIXELS / (w * h)));
+            canvas.width = Math.round(w * scale); canvas.height = Math.round(h * scale);
             displayCanvas.width = window.innerWidth; displayCanvas.height = window.innerHeight;
             pixelCanvas.width = Math.max(1, Math.ceil(canvas.width / PIXEL_SCALE));
             pixelCanvas.height = Math.max(1, Math.ceil(canvas.height / PIXEL_SCALE));
@@ -10027,7 +10042,7 @@
         let lastTime = performance.now();
         let accumulator = 0;
         const timeStep = 1000 / 60;
-        const maxCatchUpSteps = 15;
+        const maxCatchUpSteps = 5; // PERF: was 15 - fewer forced extra update() calls after a slow frame, avoids compounding lag
         // Fraction (0-1) of a timestep left in the accumulator after this frame's fixed updates
         // have run. draw() (SECTION 8) uses this to blend rendered positions between the
         // previous and current physics tick, which is what actually removes the jitter caused by
